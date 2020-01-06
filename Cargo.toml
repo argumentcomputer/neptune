@@ -1,5 +1,6 @@
 [package]
 name = "neptune"
+description = "Rust implementation of Poseidon hash function."
 version = "0.1.0"
 authors = ["porcuquine <porcuquine@users.noreply.github.com>"]
 edition = "2018"
