@@ -1,11 +1,28 @@
 [package]
 name = "neptune"
-description = "Rust implementation of Poseidon hash function."
 version = "0.1.0"
 authors = ["porcuquine <porcuquine@users.noreply.github.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+repository = "https://github.com/porcuquine/poseidon"
 
 [dependencies]
+lazy_static = "1.4.0"
+bincode = { version = "1.2", optional = true }
+paired = "0.16.0"
+ff = "=0.5.0"
+
+[dev-dependencies]
+criterion = "0.3"
+rand = "0.7.0"
+sha2 = "0.8"
+tempdir = "0.3"
+
+[[bench]]
+name = "hash"
+harness = false
+
+[profile.bench]
+lto = true
+incremental = false
+codegen-units = 1
