@@ -5,6 +5,7 @@ authors = ["porcuquine <porcuquine@users.noreply.github.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/porcuquine/poseidon"
+build = "build.rs"
 
 [dependencies]
 lazy_static = "1.4.0"
@@ -17,6 +18,10 @@ criterion = "0.3"
 rand = "0.7.0"
 sha2 = "0.8"
 tempdir = "0.3"
+
+[build-dependencies]
+paired = "0.16.0"
+ff = "0.5.0"
 
 [[bench]]
 name = "hash"

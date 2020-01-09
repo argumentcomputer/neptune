@@ -22,7 +22,7 @@ fn bench_hash(c: &mut Criterion) {
                 let mut h = Sha256::new();
 
                 std::iter::repeat(())
-                    .take(MERKLE_ARITY)
+                    .take(WIDTH)
                     .map(|_| s.choose(&mut OsRng).unwrap())
                     .for_each(|scalar| {
                         for val in scalar.into_repr().as_ref() {
@@ -43,7 +43,7 @@ fn bench_hash(c: &mut Criterion) {
                 let mut h = Sha512::new();
 
                 std::iter::repeat(())
-                    .take(MERKLE_ARITY)
+                    .take(WIDTH)
                     .map(|_| s.choose(&mut OsRng).unwrap())
                     .for_each(|scalar| {
                         for val in scalar.into_repr().as_ref() {
@@ -64,7 +64,7 @@ fn bench_hash(c: &mut Criterion) {
                 let mut h = Poseidon::default();
 
                 std::iter::repeat(())
-                    .take(MERKLE_ARITY)
+                    .take(WIDTH)
                     .map(|_| s.choose(&mut OsRng).unwrap())
                     .for_each(|scalar| {
                         h.push(*scalar).unwrap();

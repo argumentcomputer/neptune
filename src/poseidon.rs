@@ -1,6 +1,5 @@
 use crate::{
-    scalar_from_u64, Error, Scalar, FULL_ROUNDS, MDS_MATRIX, MERKLE_ARITY, PARTIAL_ROUNDS,
-    ROUND_CONSTANTS, WIDTH,
+    scalar_from_u64, Error, Scalar, FULL_ROUNDS, MDS_MATRIX, PARTIAL_ROUNDS, ROUND_CONSTANTS, WIDTH,
 };
 use ff::Field;
 
@@ -11,112 +10,28 @@ use ff::Field;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Poseidon {
     constants_offset: usize,
-    present_elements: u64,
-    pos: usize,
     leaves: [Scalar; WIDTH],
+    pos: usize,
 }
 
 impl Default for Poseidon {
     fn default() -> Self {
         Poseidon {
-            present_elements: 0u64,
             constants_offset: 0,
-            pos: 1,
             leaves: [Scalar::zero(); WIDTH],
+            pos: 0,
         }
     }
 }
 
 impl Poseidon {
-    /// The poseidon width will be defined by `arity + 1`, because the first element will be a set of bitflags defining which element is present or absent. The absent elements will be represented by `0`, and the present ones by `1`, considering inverse order.
-    ///
-    /// For example: given we have an arity of `8`, and  if we have two present elements, three absent, and three present, we will have the first element as `0xe3`, or `(11100011)`.
-    ///
-    /// Every time we push an element, we set the related bitflag with the proper state.
-    ///
-    /// The returned `usize` represents the leaf position for the insert operation
-    pub fn push(&mut self, leaf: Scalar) -> Result<usize, Error> {
-        // Cannot input more elements than the defined arity
-        if self.pos > MERKLE_ARITY {
-            return Err(Error::FullBuffer);
+    /// Create a new Poseidon hasher for `preimage`.
+    pub fn new(preimage: [Scalar; WIDTH]) -> Self {
+        Poseidon {
+            constants_offset: 0,
+            leaves: preimage,
+            pos: WIDTH,
         }
-
-        self.insert_unchecked(self.pos - 1, leaf);
-        self.pos += 1;
-
-        Ok(self.pos - 2)
-    }
-
-    /// Insert the provided leaf in the defined position.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `index` is out of bounds.
-    pub(crate) fn insert_unchecked(&mut self, index: usize, leaf: Scalar) {
-        let mut mask = 1u64;
-        mask <<= index;
-        self.present_elements |= mask;
-
-        // Set current element, and increase the pointer
-        self.leaves[index + 1] = leaf;
-    }
-
-    /// Removes an item that is indexed by `index`.
-    ///
-    /// Internally, the buffer is stored in form of `index + 1`, because of the leading bitflags
-    /// element.
-    ///
-    /// # Example
-    ///
-    /// use dusk_poseidon_merkle::*;
-    ///
-    /// let mut h = Poseidon::default();
-    ///
-    /// assert!(h.remove(0).is_err());
-    ///
-    /// let idx = h.push(Scalar::one()).unwrap();
-    /// assert_eq!(0, idx);
-    ///
-    /// h.remove(0).unwrap();
-    ///
-    pub fn remove(&mut self, index: usize) -> Result<Scalar, Error> {
-        let index = index + 1;
-        if index >= self.pos {
-            return Err(Error::IndexOutOfBounds);
-        }
-
-        Ok(self.remove_unchecked(index))
-    }
-
-    /// Removes the first equivalence of the item from the leafs set and returns it.
-    pub fn remove_item(&mut self, item: &Scalar) -> Option<Scalar> {
-        self.leaves
-            .iter()
-            .enumerate()
-            .fold(None, |mut acc, (i, s)| {
-                if acc.is_none() && i > 0 && s == item {
-                    acc.replace(i);
-                }
-
-                acc
-            })
-            .map(|idx| self.remove_unchecked(idx))
-    }
-
-    /// Set the provided index as absent for the hash calculation.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `index` is out of bounds.
-    pub fn remove_unchecked(&mut self, index: usize) -> Scalar {
-        let leaf = self.leaves[index];
-        self.leaves[index] = scalar_from_u64(0u64);
-
-        let mut mask = 1u64;
-        mask <<= index;
-        self.present_elements &= !mask;
-
-        leaf
     }
 
     /// Replace the leaves with the provided optional items.
@@ -124,23 +39,31 @@ impl Poseidon {
     /// # Panics
     ///
     /// Panics if the provided slice is bigger than the arity.
-    pub fn replace(&mut self, buf: &[Option<Scalar>]) {
+    pub fn set_preimage(&mut self, preimage: [Scalar; WIDTH]) {
         self.reset();
-        buf.iter().enumerate().for_each(|(i, scalar)| {
-            if let Some(s) = scalar {
-                self.insert_unchecked(i, *s);
-            }
-        });
+        self.leaves = preimage
     }
 
     /// Restore the initial state
     pub fn reset(&mut self) {
-        self.present_elements = 0;
         self.constants_offset = 0;
-        self.pos = 1;
         self.leaves
             .iter_mut()
             .for_each(|l| *l = scalar_from_u64(0u64));
+    }
+
+    /// The returned `usize` represents the leaf position for the insert operation
+    pub fn push(&mut self, leaf: Scalar) -> Result<usize, Error> {
+        // Cannot input more elements than the defined arity
+        if self.pos > WIDTH {
+            return Err(Error::FullBuffer);
+        }
+
+        // Set current element, and increase the pointer
+        self.leaves[self.pos] = leaf;
+        self.pos += 1;
+
+        Ok(self.pos - 1)
     }
 
     /// The absent elements will be considered as zeroes in the permutation.
@@ -149,12 +72,6 @@ impl Poseidon {
     ///
     /// The returned element is the second poseidon leaf, for the first is initially the bitflags scheme.
     pub fn hash(&mut self) -> Scalar {
-        // The first element is a set of bitflags to differentiate zeroed leaves from absent
-        // ones
-        //
-        // This avoids collisions
-        self.leaves[0] = scalar_from_u64(self.present_elements);
-
         // This counter is incremented when a round constants is read. Therefore, the round constants never
         // repeat
         for _ in 0..FULL_ROUNDS / 2 {
@@ -178,7 +95,7 @@ impl Poseidon {
     ///
     /// After that, the poseidon elements will be set to the result of the product between the poseidon leaves and the constant MDS matrix.
     pub fn full_round(&mut self) {
-        // Every element of the merkle tree, plus the bitflag, is incremented by the round constants
+        // Every element of the hash buffer is incremented by the round constants
         self.add_round_constants();
 
         // Apply the quintic S-Box to all elements
@@ -190,7 +107,7 @@ impl Poseidon {
 
     /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
     pub fn partial_round(&mut self) {
-        // Every element of the merkle tree, plus the bitflag, is incremented by the round constants
+        // Every element of the hash buffer is incremented by the round constants
         self.add_round_constants();
 
         // Apply the quintic S-Box to the bitflags element
@@ -245,10 +162,8 @@ mod tests {
 
     #[test]
     fn reset() {
-        let mut h = Poseidon::default();
-        for _ in 0..MERKLE_ARITY {
-            h.push(Scalar::one()).unwrap();
-        }
+        let preimage: [Scalar; WIDTH] = [Scalar::one(); WIDTH];
+        let mut h = Poseidon::new(preimage);
         h.hash();
         h.reset();
 
@@ -257,8 +172,10 @@ mod tests {
 
     #[test]
     fn hash_det() {
-        let mut h = Poseidon::default();
-        h.push(Scalar::one()).unwrap();
+        let mut preimage: [Scalar; WIDTH] = [Scalar::zero(); WIDTH];
+        preimage[0] = Scalar::one();
+
+        let mut h = Poseidon::new(preimage);
 
         let mut h2 = h.clone();
         let result = h.hash();
