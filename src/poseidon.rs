@@ -83,6 +83,7 @@ impl Poseidon {
         }
 
         for _ in 0..FULL_ROUNDS / 2 {
+            // FIXME: Reference implemention doesn't use linear layer after last full round. Should we also omit it?
             self.full_round();
         }
 

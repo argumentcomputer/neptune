@@ -18,7 +18,7 @@ fn main() {
 
     let partial_rounds = env::var("POSEIDON_PARTIAL_ROUNDS")
         .map(|s| s.parse().expect("Failed to parse POSEIDON_PARTIAL_ROUNDS"))
-        .unwrap_or(59);
+        .unwrap_or(56);
 
     write!(
         &mut f,
