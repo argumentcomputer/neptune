@@ -50,6 +50,7 @@ impl Poseidon {
         self.leaves
             .iter_mut()
             .for_each(|l| *l = scalar_from_u64(0u64));
+        self.pos = 0;
     }
 
     /// The returned `usize` represents the leaf position for the insert operation
