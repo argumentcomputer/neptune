@@ -67,7 +67,7 @@ fn bench_hash(c: &mut Criterion) {
                     .take(WIDTH)
                     .map(|_| s.choose(&mut OsRng).unwrap())
                     .for_each(|scalar| {
-                        h.push(*scalar).unwrap();
+                        h.input(*scalar).unwrap();
                     });
 
                 h.hash();

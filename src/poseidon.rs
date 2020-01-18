@@ -54,7 +54,7 @@ impl Poseidon {
     }
 
     /// The returned `usize` represents the leaf position for the insert operation
-    pub fn push(&mut self, leaf: Scalar) -> Result<usize, Error> {
+    pub fn input(&mut self, leaf: Scalar) -> Result<usize, Error> {
         // Cannot input more elements than the defined arity
         if self.pos > WIDTH {
             return Err(Error::FullBuffer);

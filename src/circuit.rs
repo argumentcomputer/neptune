@@ -1,8 +1,5 @@
 use bellperson::gadgets::{boolean::Boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::{circuit::pedersen_hash, jubjub::JubjubEngine};
-
-use crate::crypto::pedersen::PEDERSEN_BLOCK_SIZE;
 
 /// Pedersen hashing for inputs with length multiple of the block size. Based on a Merkle-Damgard construction.
 pub fn pedersen_md_no_padding<E, CS>(

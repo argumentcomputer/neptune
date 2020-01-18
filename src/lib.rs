@@ -2,8 +2,6 @@
 #![deny(missing_docs)]
 #![doc(include = "../README.md")]
 
-use std::ops;
-
 use lazy_static::*;
 
 pub use crate::poseidon::Poseidon;
@@ -29,12 +27,6 @@ lazy_static! {
         }
         matrix
     };
-}
-
-/// The items for [`Poseidon`] must implement this trait
-pub trait PoseidonLeaf:
-    Copy + From<u64> + From<Scalar> + PartialEq + ops::MulAssign + ops::AddAssign
-{
 }
 
 /// convert
