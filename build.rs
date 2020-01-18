@@ -10,7 +10,7 @@ fn main() {
 
     let width = env::var("POSEIDON_WIDTH")
         .map(|s| s.parse().expect("Failed to parse POSEIDON_WIDTH"))
-        .unwrap_or(4);
+        .unwrap_or(2);
 
     let full_rounds = env::var("POSEIDON_FULL_ROUNDS")
         .map(|s| s.parse().expect("Failed to parse POSEIDON_FULL_ROUNDS"))
@@ -18,7 +18,7 @@ fn main() {
 
     let partial_rounds = env::var("POSEIDON_PARTIAL_ROUNDS")
         .map(|s| s.parse().expect("Failed to parse POSEIDON_PARTIAL_ROUNDS"))
-        .unwrap_or(56);
+        .unwrap_or(55);
 
     write!(
         &mut f,
