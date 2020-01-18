@@ -9,6 +9,7 @@ pub use error::Error;
 use ff::{Field, PrimeField};
 pub use paired::bls12_381::Fr as Scalar;
 
+mod circuit;
 mod error;
 mod poseidon;
 
@@ -17,6 +18,8 @@ include!("constants.rs");
 lazy_static! {
     static ref ROUND_CONSTANTS: [Scalar; 960] = {
         // FIXME: These ark constants will not be correct, since we have changed curves. We need to figure out how to generate them ourselves.
+        // UPDATE: Note that the paper says, ' Note that cryptographically strong randomness is not needed for the round constants, and other methods can also be used.'
+        // So this may not matter for correctness, though we should still formally define these rather than use the initial magic binary still present now.
         let bytes = include_bytes!("../assets/ark.bin");
         unsafe { std::ptr::read(bytes.as_ptr() as *const _) }
     };
