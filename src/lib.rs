@@ -12,8 +12,16 @@ pub use paired::bls12_381::Fr as Scalar;
 mod circuit;
 mod error;
 mod poseidon;
+mod test;
 
 include!("constants.rs");
+
+pub(crate) const TEST_SEED: [u8; 16] = [
+    0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
+];
+
+/// Maximum width for which we will pre-generate MDS matrices.
+pub const MAX_SUPPORTED_WIDTH: usize = 9;
 
 lazy_static! {
     static ref ROUND_CONSTANTS: [Scalar; 960] = {
@@ -30,6 +38,18 @@ lazy_static! {
         }
         matrix
     };
+
+    static ref MDS_MATRIXES: [[[Scalar; WIDTH]; WIDTH]; MAX_SUPPORTED_WIDTH] = {
+        let matrices: [[[Scalar; WIDTH]; WIDTH]; MAX_SUPPORTED_WIDTH] = [[[Scalar::zero(); WIDTH]; WIDTH];MAX_SUPPORTED_WIDTH];
+        for n in (0..MAX_SUPPORTED_WIDTH) {
+        for (i, row) in generate_mds(WIDTH).iter_mut().enumerate() {
+            row[..].copy_from_slice(&matrices[n][i]);
+        }
+}
+            matrices
+
+    };
+
 }
 
 /// convert

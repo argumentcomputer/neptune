@@ -84,13 +84,10 @@ impl Poseidon {
         }
 
         for _ in 0..FULL_ROUNDS / 2 {
-            // FIXME: Reference implemention doesn't use linear layer after last full round. Should we also omit it?
             self.full_round();
         }
 
-        // The first bitflags element is discarded, so we can use the first actual leaf as a result
-        // of the hash
-        self.leaves[1]
+        self.leaves[0]
     }
 
     /// The full round function will add the round constants and apply the S-Box to all poseidon leaves, including the bitflags first element.
@@ -112,7 +109,7 @@ impl Poseidon {
         // Every element of the hash buffer is incremented by the round constants
         self.add_round_constants();
 
-        // Apply the quintic S-Box to the bitflags element
+        // Apply the quintic S-Box to the first element
         quintic_s_box(&mut self.leaves[0]);
 
         // Multiply the elements by the constant MDS matrix
