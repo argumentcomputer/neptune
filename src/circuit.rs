@@ -114,27 +114,39 @@ impl<E: Engine> PoseidonCircuit<E> {
     }
 
     fn product_mds<CS: ConstraintSystem<E>>(&mut self, mut cs: CS) -> Result<(), SynthesisError> {
+        let mut result: Vec<AllocatedNum<E>> = Vec::with_capacity(WIDTH);
         for j in 0..WIDTH {
-            for k in 0..WIDTH {
-                // TODO: Allocate these once and reuse across rounds (and even between hashes).
-                let v = &self.mds_matrix[j][k];
+            // TODO: Initialize with previous round keys and skip the adds.
+            result.push(AllocatedNum::alloc(
+                cs.namespace(|| format!("intial sum {}", j)),
+                || Ok(E::Fr::zero()),
+            )?);
 
-                let product = v.mul(
+            for k in 0..WIDTH {
+                let tmp = &self.mds_matrix[j][k];
+
+                let product = tmp.mul(
                     cs.namespace(|| format!("multiply matrix element ({}, {})", j, k)),
                     &self.elements[k],
                 )?;
 
                 // TODO: this adds a constraint for every addition.
                 // At least coalesce each inner product's sum into one constraint.
-                self.elements[j] = add(
+                result[j] = add(
                     cs.namespace(|| format!("add to sum ({},{})", j, k)),
-                    &self.elements[j],
+                    &result[j],
                     &product,
                 )?;
             }
         }
+        self.elements = result;
 
         Ok(())
+    }
+
+    fn debug(&self) {
+        let element_frs: Vec<_> = self.elements.iter().map(|n| n.get_value()).collect();
+        dbg!(element_frs);
     }
 }
 
@@ -263,11 +275,12 @@ mod tests {
         for (_, constraints) in &cases {
             let mut cs = TestConstraintSystem::<Bls12>::new();
             let mut i = 0;
-            let fr_data = [Fr::zero(); WIDTH];
+            let mut fr_data = [Fr::zero(); WIDTH];
             let data: Vec<AllocatedNum<Bls12>> = (0..t)
                 .enumerate()
                 .map(|_| {
                     let fr = Fr::random(&mut rng);
+                    fr_data[i] = fr;
                     i += 1;
                     AllocatedNum::alloc(cs.namespace(|| format!("data {}", i)), || Ok(fr)).unwrap()
                 })
