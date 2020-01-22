@@ -1,4 +1,4 @@
-use crate::{FULL_ROUNDS, MDS_MATRIX, PARTIAL_ROUNDS, WIDTH};
+use crate::{FULL_ROUNDS, MDS_MATRIX, PARTIAL_ROUNDS, ROUND_CONSTANTS, WIDTH};
 
 use bellperson::gadgets::num;
 use bellperson::gadgets::num::AllocatedNum;
@@ -10,7 +10,7 @@ use paired::Engine;
 #[derive(Clone)]
 pub struct PoseidonCircuit<E: Engine> {
     constants_offset: usize,
-    round_constants: Vec<E::Fr>, // &'a [E::Fr],
+    round_constants: Vec<AllocatedNum<E>>, // &'a [E::Fr],
     width: usize,
     elements: Vec<AllocatedNum<E>>,
     pos: usize,
@@ -21,11 +21,15 @@ pub struct PoseidonCircuit<E: Engine> {
 
 impl<E: Engine> PoseidonCircuit<E> {
     /// Create a new Poseidon hasher for `preimage`.
-    pub fn new(preimage: Vec<AllocatedNum<E>>, matrix: Vec<Vec<AllocatedNum<E>>>) -> Self {
+    pub fn new(
+        preimage: Vec<AllocatedNum<E>>,
+        matrix: Vec<Vec<AllocatedNum<E>>>,
+        round_constants: Vec<AllocatedNum<E>>,
+    ) -> Self {
         let width = WIDTH;
         PoseidonCircuit {
             constants_offset: 0,
-            round_constants: (0..1000).map(|_| E::Fr::zero()).collect::<Vec<_>>(), // FIXME
+            round_constants,
             width,
             elements: preimage,
             pos: width,
@@ -60,18 +64,13 @@ impl<E: Engine> PoseidonCircuit<E> {
         // Every element of the hash buffer is incremented by the round constants
         self.add_round_constants(cs.namespace(|| "add r"))?;
 
-        let mut i = 0;
         // Apply the quintic S-Box to all elements
-        self.elements = self
-            .elements
-            .iter()
-            .map(|l| {
-                let res =
-                    quintic_s_box(cs.namespace(|| format!("quintic s-box {}", i)), &l).unwrap();
-                i += 1;
-                res
-            }) // FIXME: Don't unwrap.
-            .collect::<Vec<_>>();
+        for i in 0..self.elements.len() {
+            self.elements[i] = quintic_s_box(
+                cs.namespace(|| format!("quintic s-box {}", i)),
+                &self.elements[i],
+            )?
+        }
 
         // Multiply the elements by the constant MDS matrix
         self.product_mds(cs.namespace(|| "mds matrix product"))?;
@@ -98,24 +97,16 @@ impl<E: Engine> PoseidonCircuit<E> {
     ) -> Result<(), SynthesisError> {
         let mut constants_offset = self.constants_offset;
 
-        let mut i = 0;
-        self.elements = self
-            .elements
-            .iter()
-            .map(|l| {
-                // TODO: include indexes in namespace names.
-                let num =
-                    AllocatedNum::alloc(cs.namespace(|| format!("round constraint {}", i)), || {
-                        Ok(self.round_constants[constants_offset])
-                    })
-                    .unwrap();
-                constants_offset += 1;
-                let res = add(cs.namespace(|| format!("add round key {}", i)), l, &num).unwrap();
-                i += 1;
+        for i in 0..self.elements.len() {
+            let constant = &self.round_constants[constants_offset];
+            constants_offset += 1;
 
-                res
-            })
-            .collect();
+            self.elements[i] = add(
+                cs.namespace(|| format!("add round key {}", i)),
+                &self.elements[i],
+                &constant,
+            )?;
+        }
 
         self.constants_offset = constants_offset;
 
@@ -123,33 +114,26 @@ impl<E: Engine> PoseidonCircuit<E> {
     }
 
     fn product_mds<CS: ConstraintSystem<E>>(&mut self, mut cs: CS) -> Result<(), SynthesisError> {
-        let mut res: Vec<AllocatedNum<E>> = Vec::with_capacity(self.width);
-
         for j in 0..WIDTH {
-            res.push(
-                AllocatedNum::alloc(cs.namespace(|| format!("initial sum {}", j)), || {
-                    Ok(E::Fr::zero())
-                })
-                .unwrap(),
-            );
             for k in 0..WIDTH {
                 // TODO: Allocate these once and reuse across rounds (and even between hashes).
                 let v = &self.mds_matrix[j][k];
 
-                v.mul(
+                let product = v.mul(
                     cs.namespace(|| format!("multiply matrix element ({}, {})", j, k)),
                     &self.elements[k],
                 )?;
 
-                add(
+                // TODO: this adds a constraint for every addition.
+                // At least coalesce each inner product's sum into one constraint.
+                self.elements[j] = add(
                     cs.namespace(|| format!("add to sum ({},{})", j, k)),
-                    &res[j],
-                    &v,
+                    &self.elements[j],
+                    &product,
                 )?;
             }
         }
 
-        self.elements = res;
         Ok(())
     }
 }
@@ -158,32 +142,47 @@ fn poseidon_hash<CS: ConstraintSystem<Bls12>>(
     mut cs: CS,
     preimage: Vec<AllocatedNum<Bls12>>,
 ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
-    let matrix = allocated_matrix(*MDS_MATRIX, &mut cs);
-    let mut p = PoseidonCircuit::new(preimage, matrix);
+    let matrix = allocated_matrix(cs.namespace(|| "allocated matrix"), *MDS_MATRIX)?;
+    let round_constants = allocated_round_constants(
+        cs.namespace(|| "allocated round constants"),
+        &*ROUND_CONSTANTS,
+    )?;
+    let mut p = PoseidonCircuit::new(preimage, matrix, round_constants);
     p.hash(cs)
 }
 
 fn allocated_matrix<CS: ConstraintSystem<Bls12>>(
+    mut cs: CS,
     fr_matrix: [[<paired::bls12_381::Bls12 as ScalarEngine>::Fr; WIDTH]; WIDTH],
-    cs: &mut CS,
-) -> Vec<Vec<AllocatedNum<Bls12>>> {
+) -> Result<Vec<Vec<AllocatedNum<Bls12>>>, SynthesisError> {
     let mut mat: Vec<Vec<AllocatedNum<Bls12>>> = Vec::new();
     for (i, row) in fr_matrix.iter().enumerate() {
         mat.push({
             let mut allocated_row = Vec::new();
             for (j, val) in row.iter().enumerate() {
-                allocated_row.push(
-                    AllocatedNum::alloc(
-                        cs.namespace(|| format!("mds matrix element ({},{})", i, j)),
-                        || Ok(*val),
-                    )
-                    .unwrap(),
-                )
+                allocated_row.push(AllocatedNum::alloc(
+                    cs.namespace(|| format!("mds matrix element ({},{})", i, j)),
+                    || Ok(*val),
+                )?)
             }
             allocated_row
         });
     }
-    mat
+    Ok(mat)
+}
+
+fn allocated_round_constants<CS: ConstraintSystem<Bls12>>(
+    mut cs: CS,
+    fr_constants: &[<paired::bls12_381::Bls12 as ScalarEngine>::Fr],
+) -> Result<Vec<AllocatedNum<Bls12>>, SynthesisError> {
+    let mut allocated_constants: Vec<AllocatedNum<Bls12>> = Vec::new();
+    for (i, val) in fr_constants.iter().enumerate() {
+        allocated_constants.push(AllocatedNum::alloc(
+            cs.namespace(|| format!("round constant {}", i)),
+            || Ok(*val),
+        )?)
+    }
+    Ok(allocated_constants)
 }
 
 fn quintic_s_box<CS: ConstraintSystem<E>, E: Engine>(
@@ -285,8 +284,7 @@ mod tests {
 
             let mut p = Poseidon::new(fr_data);
             let expected = p.hash();
-            dbg!(expected, out.get_value().unwrap(), p.elements);
-            panic!("dbg-break");
+
             assert_eq!(
                 expected,
                 out.get_value().unwrap(),
