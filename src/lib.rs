@@ -32,24 +32,12 @@ lazy_static! {
         unsafe { std::ptr::read(bytes.as_ptr() as *const _) }
     };
     static ref MDS_MATRIX: [[Scalar; WIDTH]; WIDTH] = {
-        let matrix: [[Scalar; WIDTH]; WIDTH] = [[Scalar::zero(); WIDTH]; WIDTH];
+        let mut matrix: [[Scalar; WIDTH]; WIDTH] = [[Scalar::one(); WIDTH]; WIDTH];
         for (i, row) in generate_mds(WIDTH).iter_mut().enumerate() {
-            row[..].copy_from_slice(&matrix[i]);
+            matrix[i].copy_from_slice(&row[..]);
         }
         matrix
     };
-
-    static ref MDS_MATRIXES: [[[Scalar; WIDTH]; WIDTH]; MAX_SUPPORTED_WIDTH] = {
-        let matrices: [[[Scalar; WIDTH]; WIDTH]; MAX_SUPPORTED_WIDTH] = [[[Scalar::zero(); WIDTH]; WIDTH];MAX_SUPPORTED_WIDTH];
-        for n in (0..MAX_SUPPORTED_WIDTH) {
-        for (i, row) in generate_mds(WIDTH).iter_mut().enumerate() {
-            row[..].copy_from_slice(&matrices[n][i]);
-        }
-}
-            matrices
-
-    };
-
 }
 
 /// convert
