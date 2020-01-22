@@ -5,12 +5,13 @@ use ff::Field;
 
 /// The `Poseidon` structure will accept a number of inputs equal to the arity.
 ///
-/// The leaves must implement [`ops::Mul`] against a [`Scalar`], because the MDS matrix and the
+/// The elements must implement [`ops::Mul`] against a [`Scalar`], because the MDS matrix and the
 /// round constants are set, by default, as scalars.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Poseidon {
     constants_offset: usize,
-    leaves: [Scalar; WIDTH],
+    /// the elements to permute
+    pub elements: [Scalar; WIDTH],
     pos: usize,
 }
 
@@ -18,7 +19,7 @@ impl Default for Poseidon {
     fn default() -> Self {
         Poseidon {
             constants_offset: 0,
-            leaves: [Scalar::zero(); WIDTH],
+            elements: [Scalar::zero(); WIDTH],
             pos: 0,
         }
     }
@@ -29,25 +30,25 @@ impl Poseidon {
     pub fn new(preimage: [Scalar; WIDTH]) -> Self {
         Poseidon {
             constants_offset: 0,
-            leaves: preimage,
+            elements: preimage,
             pos: WIDTH,
         }
     }
 
-    /// Replace the leaves with the provided optional items.
+    /// Replace the elements with the provided optional items.
     ///
     /// # Panics
     ///
     /// Panics if the provided slice is bigger than the arity.
     pub fn set_preimage(&mut self, preimage: [Scalar; WIDTH]) {
         self.reset();
-        self.leaves = preimage
+        self.elements = preimage
     }
 
     /// Restore the initial state
     pub fn reset(&mut self) {
         self.constants_offset = 0;
-        self.leaves
+        self.elements
             .iter_mut()
             .for_each(|l| *l = scalar_from_u64(0u64));
         self.pos = 0;
@@ -61,7 +62,7 @@ impl Poseidon {
         }
 
         // Set current element, and increase the pointer
-        self.leaves[self.pos] = leaf;
+        self.elements[self.pos] = leaf;
         self.pos += 1;
 
         Ok(self.pos - 1)
@@ -87,18 +88,18 @@ impl Poseidon {
             self.full_round();
         }
 
-        self.leaves[0]
+        self.elements[0]
     }
 
-    /// The full round function will add the round constants and apply the S-Box to all poseidon leaves, including the bitflags first element.
+    /// The full round function will add the round constants and apply the S-Box to all poseidon elements, including the bitflags first element.
     ///
-    /// After that, the poseidon elements will be set to the result of the product between the poseidon leaves and the constant MDS matrix.
+    /// After that, the poseidon elements will be set to the result of the product between the poseidon elements and the constant MDS matrix.
     pub fn full_round(&mut self) {
         // Every element of the hash buffer is incremented by the round constants
         self.add_round_constants();
 
         // Apply the quintic S-Box to all elements
-        self.leaves.iter_mut().for_each(|l| quintic_s_box(l));
+        self.elements.iter_mut().for_each(|l| quintic_s_box(l));
 
         // Multiply the elements by the constant MDS matrix
         self.product_mds();
@@ -110,7 +111,7 @@ impl Poseidon {
         self.add_round_constants();
 
         // Apply the quintic S-Box to the first element
-        quintic_s_box(&mut self.leaves[0]);
+        quintic_s_box(&mut self.elements[0]);
 
         // Multiply the elements by the constant MDS matrix
         self.product_mds();
@@ -121,7 +122,7 @@ impl Poseidon {
     fn add_round_constants(&mut self) {
         let mut constants_offset = self.constants_offset;
 
-        self.leaves.iter_mut().for_each(|l| {
+        self.elements.iter_mut().for_each(|l| {
             l.add_assign(&ROUND_CONSTANTS[constants_offset]);
             constants_offset += 1;
         });
@@ -129,7 +130,7 @@ impl Poseidon {
         self.constants_offset = constants_offset;
     }
 
-    /// Set the provided leaves with the result of the product between the leaves and the constant
+    /// Set the provided elements with the result of the product between the elements and the constant
     /// MDS matrix
     fn product_mds(&mut self) {
         let mut result = [scalar_from_u64(0u64); WIDTH];
@@ -137,12 +138,12 @@ impl Poseidon {
         for j in 0..WIDTH {
             for k in 0..WIDTH {
                 let mut tmp = MDS_MATRIX[j][k];
-                tmp.mul_assign(&self.leaves[k]);
+                tmp.mul_assign(&self.elements[k]);
                 result[j].add_assign(&tmp);
             }
         }
 
-        self.leaves.copy_from_slice(&result);
+        self.elements.copy_from_slice(&result);
     }
 }
 
