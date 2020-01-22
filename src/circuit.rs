@@ -1,9 +1,9 @@
-use crate::{FULL_ROUNDS, PARTIAL_ROUNDS, WIDTH};
+use crate::{FULL_ROUNDS, MDS_MATRIX, PARTIAL_ROUNDS, WIDTH};
 
 use bellperson::gadgets::num;
 use bellperson::gadgets::num::AllocatedNum;
 use bellperson::{ConstraintSystem, SynthesisError};
-use ff::Field;
+use ff::{Field, ScalarEngine};
 use paired::bls12_381::Bls12;
 use paired::Engine;
 
@@ -12,22 +12,23 @@ pub struct PoseidonCircuit<E: Engine> {
     constants_offset: usize,
     round_constants: Vec<E::Fr>, // &'a [E::Fr],
     width: usize,
-    leaves: Vec<AllocatedNum<E>>,
+    elements: Vec<AllocatedNum<E>>,
     pos: usize,
     full_rounds: usize,
     partial_rounds: usize,
-    mds_matrix: Vec<Vec<E::Fr>>,
+    mds_matrix: Vec<Vec<AllocatedNum<E>>>,
 }
 
 impl<E: Engine> PoseidonCircuit<E> {
     /// Create a new Poseidon hasher for `preimage`.
-    pub fn new(preimage: Vec<AllocatedNum<E>>, matrix: Vec<Vec<E::Fr>>) -> Self {
+    pub fn new(preimage: Vec<AllocatedNum<E>>, matrix: Vec<Vec<AllocatedNum<E>>>) -> Self {
+        let width = WIDTH;
         PoseidonCircuit {
             constants_offset: 0,
             round_constants: (0..1000).map(|_| E::Fr::zero()).collect::<Vec<_>>(), // FIXME
-            width: WIDTH,
-            leaves: preimage,
-            pos: WIDTH,
+            width,
+            elements: preimage,
+            pos: width,
             full_rounds: FULL_ROUNDS,
             partial_rounds: PARTIAL_ROUNDS,
             mds_matrix: matrix,
@@ -52,7 +53,7 @@ impl<E: Engine> PoseidonCircuit<E> {
             self.full_round(cs.namespace(|| format!("final full round {}", i)))?;
         }
 
-        Ok(self.leaves[0].clone())
+        Ok(self.elements[0].clone())
     }
 
     fn full_round<CS: ConstraintSystem<E>>(&mut self, mut cs: CS) -> Result<(), SynthesisError> {
@@ -61,8 +62,8 @@ impl<E: Engine> PoseidonCircuit<E> {
 
         let mut i = 0;
         // Apply the quintic S-Box to all elements
-        self.leaves = self
-            .leaves
+        self.elements = self
+            .elements
             .iter()
             .map(|l| {
                 let res =
@@ -83,7 +84,7 @@ impl<E: Engine> PoseidonCircuit<E> {
         self.add_round_constants(cs.namespace(|| "add r"))?;
 
         // Apply the quintic S-Box to the first element.
-        self.leaves[0] = quintic_s_box(cs.namespace(|| "quintic s-box"), &self.leaves[0])?;
+        self.elements[0] = quintic_s_box(cs.namespace(|| "quintic s-box"), &self.elements[0])?;
 
         // Multiply the elements by the constant MDS matrix
         self.product_mds(cs.namespace(|| "mds matrix product"))?;
@@ -98,8 +99,8 @@ impl<E: Engine> PoseidonCircuit<E> {
         let mut constants_offset = self.constants_offset;
 
         let mut i = 0;
-        self.leaves = self
-            .leaves
+        self.elements = self
+            .elements
             .iter()
             .map(|l| {
                 // TODO: include indexes in namespace names.
@@ -133,14 +134,11 @@ impl<E: Engine> PoseidonCircuit<E> {
             );
             for k in 0..WIDTH {
                 // TODO: Allocate these once and reuse across rounds (and even between hashes).
-                let v = AllocatedNum::alloc(
-                    cs.namespace(|| format!("matrix tmp ({}, {})", j, k)),
-                    || Ok(self.mds_matrix[j][k]),
-                )?;
+                let v = &self.mds_matrix[j][k];
 
                 v.mul(
                     cs.namespace(|| format!("multiply matrix element ({}, {})", j, k)),
-                    &self.leaves[k],
+                    &self.elements[k],
                 )?;
 
                 add(
@@ -151,17 +149,41 @@ impl<E: Engine> PoseidonCircuit<E> {
             }
         }
 
-        self.leaves = res;
+        self.elements = res;
         Ok(())
     }
+}
 
-    fn allocated_matrix<CS: ConstraintSystem<E>>(
-        &mut self,
-        mut _cs: CS,
-    ) -> Vec<Vec<AllocatedNum<E>>> {
-        let _mat: Vec<Vec<AllocatedNum<E>>>;
-        unimplemented!()
+fn poseidon_hash<CS: ConstraintSystem<Bls12>>(
+    mut cs: CS,
+    preimage: Vec<AllocatedNum<Bls12>>,
+) -> Result<AllocatedNum<Bls12>, SynthesisError> {
+    let matrix = allocated_matrix(*MDS_MATRIX, &mut cs);
+    let mut p = PoseidonCircuit::new(preimage, matrix);
+    p.hash(cs)
+}
+
+fn allocated_matrix<CS: ConstraintSystem<Bls12>>(
+    fr_matrix: [[<paired::bls12_381::Bls12 as ScalarEngine>::Fr; WIDTH]; WIDTH],
+    cs: &mut CS,
+) -> Vec<Vec<AllocatedNum<Bls12>>> {
+    let mut mat: Vec<Vec<AllocatedNum<Bls12>>> = Vec::new();
+    for (i, row) in fr_matrix.iter().enumerate() {
+        mat.push({
+            let mut allocated_row = Vec::new();
+            for (j, val) in row.iter().enumerate() {
+                allocated_row.push(
+                    AllocatedNum::alloc(
+                        cs.namespace(|| format!("mds matrix element ({},{})", i, j)),
+                        || Ok(*val),
+                    )
+                    .unwrap(),
+                )
+            }
+            allocated_row
+        });
     }
+    mat
 }
 
 fn quintic_s_box<CS: ConstraintSystem<E>, E: Engine>(
@@ -220,21 +242,11 @@ pub fn add<E: Engine, CS: ConstraintSystem<E>>(
     Ok(res)
 }
 
-fn poseidon_hash<CS: ConstraintSystem<Bls12>>(
-    cs: CS,
-    preimage: Vec<AllocatedNum<Bls12>>,
-    matrix: Vec<Vec<<paired::bls12_381::Bls12 as ff::ScalarEngine>::Fr>>,
-) -> Result<AllocatedNum<Bls12>, SynthesisError> {
-    let mut p = PoseidonCircuit::new(preimage, matrix);
-    p.hash(cs)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{generate_mds, WIDTH};
-
     use crate::test::TestConstraintSystem;
+    use crate::{generate_mds, Poseidon, WIDTH};
     use bellperson::ConstraintSystem;
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
@@ -252,6 +264,7 @@ mod tests {
         for (_, constraints) in &cases {
             let mut cs = TestConstraintSystem::<Bls12>::new();
             let mut i = 0;
+            let fr_data = [Fr::zero(); WIDTH];
             let data: Vec<AllocatedNum<Bls12>> = (0..t)
                 .enumerate()
                 .map(|_| {
@@ -261,24 +274,24 @@ mod tests {
                 })
                 .collect::<Vec<_>>();
 
-            let out =
-                poseidon_hash(&mut cs, data, matrix.clone()).expect("poseidon hashing failed");
+            let out = poseidon_hash(&mut cs, data).expect("poseidon hashing failed");
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
-            dbg!(cs.num_constraints());
             assert_eq!(
                 cs.num_constraints(),
                 *constraints,
                 "constraint size changed",
             );
 
-            // let expected: Fr;
-
-            // assert_eq!(
-            //     expected,
-            //     out.get_value().unwrap(),
-            //     "circuit and non circuit do not match"
-            // );
+            let mut p = Poseidon::new(fr_data);
+            let expected = p.hash();
+            dbg!(expected, out.get_value().unwrap(), p.elements);
+            panic!("dbg-break");
+            assert_eq!(
+                expected,
+                out.get_value().unwrap(),
+                "circuit and non circuit do not match"
+            );
         }
     }
 }
