@@ -118,11 +118,13 @@ impl<E: Engine> PoseidonCircuit<E> {
     fn product_mds<CS: ConstraintSystem<E>>(&mut self, mut cs: CS) -> Result<(), SynthesisError> {
         let mut result: Vec<AllocatedNum<E>> = Vec::with_capacity(WIDTH);
         for j in 0..WIDTH {
-            // TODO: Initialize with previous round keys and skip the adds.
+            // TODO: Can we initialize with previous round keys and skip the adds?
             result.push(AllocatedNum::alloc(
                 cs.namespace(|| format!("intial sum {}", j)),
                 || Ok(E::Fr::zero()),
             )?);
+
+            let mut to_add = Vec::new();
 
             for k in 0..WIDTH {
                 let tmp = &self.mds_matrix[j][k];
@@ -132,14 +134,13 @@ impl<E: Engine> PoseidonCircuit<E> {
                     &self.elements[k],
                 )?;
 
-                // TODO: this adds a constraint for every addition.
-                // At least coalesce each inner product's sum into one constraint.
-                result[j] = add(
-                    cs.namespace(|| format!("add to sum ({},{})", j, k)),
-                    &result[j],
-                    &product,
-                )?;
+                to_add.push(product);
             }
+
+            result[j] = multi_add(
+                cs.namespace(|| format!("sum row ({})", j)),
+                to_add.as_slice(),
+            )?;
         }
         self.elements = result;
 
@@ -241,12 +242,33 @@ pub fn sum<E: Engine, A, AR, CS: ConstraintSystem<E>>(
     );
 }
 
+/// Adds a constraint to CS, enforcing a add relationship between the allocated numbers a, b, and sum.
+///
+/// a + b = sum
+pub fn multi_sum<E: Engine, A, AR, CS: ConstraintSystem<E>>(
+    cs: &mut CS,
+    annotation: A,
+    nums: &[num::AllocatedNum<E>],
+    sum: &num::AllocatedNum<E>,
+) where
+    A: FnOnce() -> AR,
+    AR: Into<String>,
+{
+    // (num[0] + num[1] + … + num[n]) * 1 = sum
+    cs.enforce(
+        annotation,
+        |lc| nums.iter().fold(lc, |acc, num| acc + num.get_variable()),
+        |lc| lc + CS::one(),
+        |lc| lc + sum.get_variable(),
+    );
+}
+
 pub fn add<E: Engine, CS: ConstraintSystem<E>>(
     mut cs: CS,
     a: &num::AllocatedNum<E>,
     b: &num::AllocatedNum<E>,
 ) -> Result<num::AllocatedNum<E>, SynthesisError> {
-    let res = num::AllocatedNum::alloc(cs.namespace(|| "add_num"), || {
+    let res = num::AllocatedNum::alloc(cs.namespace(|| "add"), || {
         let mut tmp = a
             .get_value()
             .ok_or_else(|| SynthesisError::AssignmentMissing)?;
@@ -260,6 +282,27 @@ pub fn add<E: Engine, CS: ConstraintSystem<E>>(
 
     // a + b = res
     sum(&mut cs, || "sum constraint", &a, &b, &res);
+
+    Ok(res)
+}
+
+pub fn multi_add<E: Engine, CS: ConstraintSystem<E>>(
+    mut cs: CS,
+    nums: &[num::AllocatedNum<E>],
+) -> Result<num::AllocatedNum<E>, SynthesisError> {
+    let res = num::AllocatedNum::alloc(cs.namespace(|| "multi_add"), || {
+        Ok(nums.iter().fold(E::Fr::zero(), |mut acc, num| {
+            acc.add_assign(
+                &num.get_value()
+                    .ok_or_else(|| SynthesisError::AssignmentMissing)
+                    .unwrap(),
+            );
+            acc
+        }))
+    })?;
+
+    // a + b = res
+    multi_sum(&mut cs, || "sum constraint", nums, &res);
 
     Ok(res)
 }
@@ -279,7 +322,7 @@ mod tests {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
         let t = WIDTH;
-        let cases = [(2, 1560)];
+        let cases = [(2, 1182)];
 
         let matrix = generate_mds(WIDTH);
 
