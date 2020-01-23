@@ -118,12 +118,6 @@ impl<E: Engine> PoseidonCircuit<E> {
     fn product_mds<CS: ConstraintSystem<E>>(&mut self, mut cs: CS) -> Result<(), SynthesisError> {
         let mut result: Vec<AllocatedNum<E>> = Vec::with_capacity(WIDTH);
         for j in 0..WIDTH {
-            // TODO: Can we initialize with previous round keys and skip the adds?
-            result.push(AllocatedNum::alloc(
-                cs.namespace(|| format!("intial sum {}", j)),
-                || Ok(E::Fr::zero()),
-            )?);
-
             let mut to_add = Vec::new();
 
             for k in 0..WIDTH {
@@ -137,10 +131,10 @@ impl<E: Engine> PoseidonCircuit<E> {
                 to_add.push(product);
             }
 
-            result[j] = multi_add(
+            result.push(multi_add(
                 cs.namespace(|| format!("sum row ({})", j)),
                 to_add.as_slice(),
-            )?;
+            )?);
         }
         self.elements = result;
 
