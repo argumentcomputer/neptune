@@ -12,7 +12,7 @@ fn bench_hash(c: &mut Criterion) {
         .map(|(i, _)| scalar_from_u64(i as u64))
         .collect();
 
-    let mut group = c.benchmark_group("hash");
+    let mut group = c.benchmark_group(format!("hash-{}", ARITY * 32));
 
     group.bench_with_input(
         BenchmarkId::new("Sha2 256", "Generated scalars"),
@@ -22,7 +22,7 @@ fn bench_hash(c: &mut Criterion) {
                 let mut h = Sha256::new();
 
                 std::iter::repeat(())
-                    .take(WIDTH)
+                    .take(ARITY)
                     .map(|_| s.choose(&mut OsRng).unwrap())
                     .for_each(|scalar| {
                         for val in scalar.into_repr().as_ref() {
@@ -43,7 +43,7 @@ fn bench_hash(c: &mut Criterion) {
                 let mut h = Sha512::new();
 
                 std::iter::repeat(())
-                    .take(WIDTH)
+                    .take(ARITY)
                     .map(|_| s.choose(&mut OsRng).unwrap())
                     .for_each(|scalar| {
                         for val in scalar.into_repr().as_ref() {
@@ -64,7 +64,7 @@ fn bench_hash(c: &mut Criterion) {
                 let mut h = Poseidon::default();
 
                 std::iter::repeat(())
-                    .take(WIDTH)
+                    .take(ARITY)
                     .map(|_| s.choose(&mut OsRng).unwrap())
                     .for_each(|scalar| {
                         h.input(*scalar).unwrap();

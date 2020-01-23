@@ -8,12 +8,21 @@ pub use crate::poseidon::Poseidon;
 pub use error::Error;
 use ff::{Field, PrimeField};
 pub use paired::bls12_381::Fr as Scalar;
+use paired::bls12_381::FrRepr;
 
 mod circuit;
 mod error;
 mod poseidon;
+mod test;
 
 include!("constants.rs");
+
+pub(crate) const TEST_SEED: [u8; 16] = [
+    0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
+];
+
+/// Maximum width for which we will pre-generate MDS matrices.
+pub const MAX_SUPPORTED_WIDTH: usize = 9;
 
 lazy_static! {
     static ref ROUND_CONSTANTS: [Scalar; 960] = {
@@ -24,9 +33,9 @@ lazy_static! {
         unsafe { std::ptr::read(bytes.as_ptr() as *const _) }
     };
     static ref MDS_MATRIX: [[Scalar; WIDTH]; WIDTH] = {
-        let matrix: [[Scalar; WIDTH]; WIDTH] = [[Scalar::zero(); WIDTH]; WIDTH];
+        let mut matrix: [[Scalar; WIDTH]; WIDTH] = [[Scalar::one(); WIDTH]; WIDTH];
         for (i, row) in generate_mds(WIDTH).iter_mut().enumerate() {
-            row[..].copy_from_slice(&matrix[i]);
+            matrix[i].copy_from_slice(&row[..]);
         }
         matrix
     };
@@ -35,6 +44,11 @@ lazy_static! {
 /// convert
 pub fn scalar_from_u64(i: u64) -> Scalar {
     Scalar::from_repr(paired::bls12_381::FrRepr::from(i)).unwrap()
+}
+
+/// create field element from four u64
+pub fn scalar_from_u64s(parts: [u64; 4]) -> Scalar {
+    Scalar::from_repr(FrRepr(parts)).unwrap()
 }
 
 fn generate_mds(t: usize) -> Vec<Vec<Scalar>> {
