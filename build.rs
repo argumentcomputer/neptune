@@ -12,6 +12,8 @@ fn main() {
         .map(|s| s.parse().expect("Failed to parse POSEIDON_WIDTH"))
         .unwrap_or(3);
 
+    let arity = width - 1;
+
     let full_rounds = env::var("POSEIDON_FULL_ROUNDS")
         .map(|s| s.parse().expect("Failed to parse POSEIDON_FULL_ROUNDS"))
         .unwrap_or(8);
@@ -23,13 +25,15 @@ fn main() {
     write!(
         &mut f,
         r#"// Poseidon constants
-/// Width of a Poseidon hash, in elemen
+/// Width of a Poseidon permutation, in elements
 pub const WIDTH: usize = {};
+/// Arity of a Poseidon hash, in elements
+pub const ARITY: usize = {};
 pub(crate) const FULL_ROUNDS: usize = {};
 pub(crate) const PARTIAL_ROUNDS: usize = {};
 
 "#,
-        width, full_rounds, partial_rounds
+        width, arity, full_rounds, partial_rounds
     )
     .expect("Could not write file");
 }

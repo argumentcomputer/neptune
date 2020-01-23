@@ -1,4 +1,5 @@
-use crate::{FULL_ROUNDS, MDS_MATRIX, PARTIAL_ROUNDS, ROUND_CONSTANTS, WIDTH};
+use crate::poseidon::ARITY_TAG;
+use crate::{ARITY, FULL_ROUNDS, MDS_MATRIX, PARTIAL_ROUNDS, ROUND_CONSTANTS, WIDTH};
 
 use bellperson::gadgets::num;
 use bellperson::gadgets::num::AllocatedNum;
@@ -22,16 +23,17 @@ pub struct PoseidonCircuit<E: Engine> {
 impl<E: Engine> PoseidonCircuit<E> {
     /// Create a new Poseidon hasher for `preimage`.
     pub fn new(
-        preimage: Vec<AllocatedNum<E>>,
+        elements: Vec<AllocatedNum<E>>,
         matrix: Vec<Vec<AllocatedNum<E>>>,
         round_constants: Vec<AllocatedNum<E>>,
     ) -> Self {
         let width = WIDTH;
+
         PoseidonCircuit {
             constants_offset: 0,
             round_constants,
             width,
-            elements: preimage,
+            elements,
             pos: width,
             full_rounds: FULL_ROUNDS,
             partial_rounds: PARTIAL_ROUNDS,
@@ -57,7 +59,7 @@ impl<E: Engine> PoseidonCircuit<E> {
             self.full_round(cs.namespace(|| format!("final full round {}", i)))?;
         }
 
-        Ok(self.elements[0].clone())
+        Ok(self.elements[1].clone())
     }
 
     fn full_round<CS: ConstraintSystem<E>>(&mut self, mut cs: CS) -> Result<(), SynthesisError> {
@@ -145,20 +147,29 @@ impl<E: Engine> PoseidonCircuit<E> {
     }
 
     fn debug(&self) {
-        let element_frs: Vec<_> = self.elements.iter().map(|n| n.get_value()).collect();
+        let element_frs: Vec<_> = self
+            .elements
+            .iter()
+            .map(|n| n.get_value().unwrap())
+            .collect();
         dbg!(element_frs);
     }
 }
 
 fn poseidon_hash<CS: ConstraintSystem<Bls12>>(
     mut cs: CS,
-    preimage: Vec<AllocatedNum<Bls12>>,
+    mut preimage: Vec<AllocatedNum<Bls12>>,
 ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
     let matrix = allocated_matrix(cs.namespace(|| "allocated matrix"), *MDS_MATRIX)?;
     let round_constants = allocated_round_constants(
         cs.namespace(|| "allocated round constants"),
         &*ROUND_CONSTANTS,
     )?;
+    // Add the arity tag to the front of the preimage.
+    let arity_tag = AllocatedNum::alloc(cs.namespace(|| "arity tag"), || Ok(*ARITY_TAG))?;
+    preimage.push(arity_tag);
+    preimage.rotate_right(1);
+
     let mut p = PoseidonCircuit::new(preimage, matrix, round_constants);
     p.hash(cs)
 }
@@ -275,8 +286,8 @@ mod tests {
         for (_, constraints) in &cases {
             let mut cs = TestConstraintSystem::<Bls12>::new();
             let mut i = 0;
-            let mut fr_data = [Fr::zero(); WIDTH];
-            let data: Vec<AllocatedNum<Bls12>> = (0..t)
+            let mut fr_data = [Fr::zero(); ARITY];
+            let data: Vec<AllocatedNum<Bls12>> = (0..ARITY)
                 .enumerate()
                 .map(|_| {
                     let fr = Fr::random(&mut rng);
@@ -301,7 +312,7 @@ mod tests {
             assert_eq!(
                 expected,
                 out.get_value().unwrap(),
-                "circuit and non circuit do not match"
+                "circuit and non-circuit do not match"
             );
         }
     }

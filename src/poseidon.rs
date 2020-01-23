@@ -1,7 +1,20 @@
+use lazy_static::*;
+
 use crate::{
-    scalar_from_u64, Error, Scalar, FULL_ROUNDS, MDS_MATRIX, PARTIAL_ROUNDS, ROUND_CONSTANTS, WIDTH,
+    scalar_from_u64, Error, Scalar, ARITY, FULL_ROUNDS, MDS_MATRIX, PARTIAL_ROUNDS,
+    ROUND_CONSTANTS, WIDTH,
 };
 use ff::Field;
+
+lazy_static! {
+    pub static ref ARITY_TAG: Scalar = arity_tag(ARITY);
+}
+
+/// The arity tag is the first element of a Poseidon permutation.
+/// This extra element is necessary for 128-bit security.
+pub fn arity_tag(arity: usize) -> Scalar {
+    scalar_from_u64((1 << arity) - 1)
+}
 
 /// The `Poseidon` structure will accept a number of inputs equal to the arity.
 ///
@@ -17,22 +30,23 @@ pub struct Poseidon {
 
 impl Default for Poseidon {
     fn default() -> Self {
+        let mut elements = [Scalar::zero(); WIDTH];
+        elements[0] = *ARITY_TAG;
         Poseidon {
             constants_offset: 0,
-            elements: [Scalar::zero(); WIDTH],
-            pos: 0,
+            elements,
+            pos: 1,
         }
     }
 }
 
 impl Poseidon {
     /// Create a new Poseidon hasher for `preimage`.
-    pub fn new(preimage: [Scalar; WIDTH]) -> Self {
-        Poseidon {
-            constants_offset: 0,
-            elements: preimage,
-            pos: WIDTH,
-        }
+    pub fn new(preimage: [Scalar; ARITY]) -> Self {
+        let mut p = Poseidon::default();
+
+        p.set_preimage(preimage);
+        p
     }
 
     /// Replace the elements with the provided optional items.
@@ -40,39 +54,38 @@ impl Poseidon {
     /// # Panics
     ///
     /// Panics if the provided slice is bigger than the arity.
-    pub fn set_preimage(&mut self, preimage: [Scalar; WIDTH]) {
+    pub fn set_preimage(&mut self, preimage: [Scalar; ARITY]) {
         self.reset();
-        self.elements = preimage
+        self.elements[1..].copy_from_slice(&preimage);
     }
 
     /// Restore the initial state
     pub fn reset(&mut self) {
         self.constants_offset = 0;
-        self.elements
+        self.elements[1..]
             .iter_mut()
             .for_each(|l| *l = scalar_from_u64(0u64));
-        self.pos = 0;
+        self.elements[0] = *ARITY_TAG;
+        self.pos = 1;
     }
 
-    /// The returned `usize` represents the leaf position for the insert operation
-    pub fn input(&mut self, leaf: Scalar) -> Result<usize, Error> {
+    /// The returned `usize` represents the element position for the insert operation
+    pub fn input(&mut self, element: Scalar) -> Result<usize, Error> {
         // Cannot input more elements than the defined arity
         if self.pos > WIDTH {
             return Err(Error::FullBuffer);
         }
 
         // Set current element, and increase the pointer
-        self.elements[self.pos] = leaf;
+        self.elements[self.pos] = element;
         self.pos += 1;
 
         Ok(self.pos - 1)
     }
 
-    /// The absent elements will be considered as zeroes in the permutation.
-    ///
     /// The number of rounds is divided into two equal parts for the full rounds, plus the partial rounds.
     ///
-    /// The returned element is the second poseidon leaf, for the first is initially the bitflags scheme.
+    /// The returned element is the second poseidon element, the first is the arity tag.
     pub fn hash(&mut self) -> Scalar {
         // This counter is incremented when a round constants is read. Therefore, the round constants never
         // repeat
@@ -88,7 +101,7 @@ impl Poseidon {
             self.full_round();
         }
 
-        self.elements[0]
+        self.elements[1]
     }
 
     /// The full round function will add the round constants and apply the S-Box to all poseidon elements, including the bitflags first element.
@@ -162,7 +175,7 @@ mod tests {
 
     #[test]
     fn reset() {
-        let preimage: [Scalar; WIDTH] = [Scalar::one(); WIDTH];
+        let preimage: [Scalar; ARITY] = [Scalar::one(); ARITY];
         let mut h = Poseidon::new(preimage);
         h.hash();
         h.reset();
@@ -172,7 +185,7 @@ mod tests {
 
     #[test]
     fn hash_det() {
-        let mut preimage: [Scalar; WIDTH] = [Scalar::zero(); WIDTH];
+        let mut preimage: [Scalar; ARITY] = [Scalar::zero(); ARITY];
         preimage[0] = Scalar::one();
 
         let mut h = Poseidon::new(preimage);
