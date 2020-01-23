@@ -8,8 +8,6 @@ pub enum Error {
     /// Attempt to reference an index element that is out of bounds
     IndexOutOfBounds,
     /// The provided leaf was not found in the tree
-    LeafNotFound,
-    /// Other errors
     Other(String),
 }
 
@@ -20,10 +18,9 @@ impl fmt::Display for Error {
         match self {
             Error::FullBuffer => write!(
                 f,
-                "The size of the buffer cannot be greater than the arity of the merkle tree."
+                "The size of the buffer cannot be greater than the hash arity."
             ),
             Error::IndexOutOfBounds => write!(f, "The referenced index is outs of bounds."),
-            Error::LeafNotFound => write!(f, "The provided leaf is not present in the tree."),
             Error::Other(s) => write!(f, "{}", s),
         }
     }

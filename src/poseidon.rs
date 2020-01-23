@@ -72,7 +72,7 @@ impl Poseidon {
     /// The returned `usize` represents the element position for the insert operation
     pub fn input(&mut self, element: Scalar) -> Result<usize, Error> {
         // Cannot input more elements than the defined arity
-        if self.pos > WIDTH {
+        if self.pos >= WIDTH {
             return Err(Error::FullBuffer);
         }
 
@@ -168,6 +168,13 @@ fn quintic_s_box(l: &mut Scalar) {
     }
 }
 
+/// Hash a string by chunking into 31-byte input to simply test vectors in development.
+pub(crate) fn simple_hash_string(s: &str) -> String {
+    let frs = s.as_bytes().chunks(31).map(|chunk| chunk);
+
+    unimplemented!();
+}
+
 #[cfg(test)]
 mod tests {
     use crate::*;
@@ -194,5 +201,26 @@ mod tests {
         let result = h.hash();
 
         assert_eq!(result, h2.hash());
+    }
+
+    #[test]
+    /// Simple test vectors to ensure results don't change unintentionally in development.
+    fn hash_values() {
+        let mut p = Poseidon::default();
+        let preimage = for n in 0..ARITY {
+            p.input(scalar_from_u64(n as u64)).unwrap();
+        };
+
+        let digest = p.hash();
+        let expected = match ARITY {
+            2 => scalar_from_u64s([
+                0x883386e89b61a399,
+                0x13115ec0c4fba96e,
+                0x92570f6e6bcddaab,
+                0x3b075e6db55140a6,
+            ]),
+            _ => panic!("Arity lacks test vector: {}", ARITY),
+        };
+        assert_eq!(digest, expected);
     }
 }

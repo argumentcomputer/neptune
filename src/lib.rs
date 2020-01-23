@@ -8,6 +8,7 @@ pub use crate::poseidon::Poseidon;
 pub use error::Error;
 use ff::{Field, PrimeField};
 pub use paired::bls12_381::Fr as Scalar;
+use paired::bls12_381::FrRepr;
 
 mod circuit;
 mod error;
@@ -43,6 +44,11 @@ lazy_static! {
 /// convert
 pub fn scalar_from_u64(i: u64) -> Scalar {
     Scalar::from_repr(paired::bls12_381::FrRepr::from(i)).unwrap()
+}
+
+/// create field element from four u64
+pub fn scalar_from_u64s(parts: [u64; 4]) -> Scalar {
+    Scalar::from_repr(FrRepr(parts)).unwrap()
 }
 
 fn generate_mds(t: usize) -> Vec<Vec<Scalar>> {
