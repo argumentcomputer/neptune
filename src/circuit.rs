@@ -279,11 +279,14 @@ mod tests {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
         let t = WIDTH;
-        let cases = [(3, 1560)];
+        let cases = [(2, 1560)];
 
         let matrix = generate_mds(WIDTH);
 
-        for (_, constraints) in &cases {
+        for (arity, constraints) in &cases {
+            if *arity != ARITY {
+                continue;
+            }
             let mut cs = TestConstraintSystem::<Bls12>::new();
             let mut i = 0;
             let mut fr_data = [Fr::zero(); ARITY];
