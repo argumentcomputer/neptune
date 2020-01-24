@@ -219,16 +219,16 @@ mod tests {
                 0x439ba37cacd37ed0,
             ]),
             8 => scalar_from_u64s([
-                0xf9b3db559010f71f,
-                0x5a69b10daff97e0e,
-                0x74d8ee2fc76efc6e,
-                0x653b27f7635bd0e4,
+                0x40102da78e5a77d6,
+                0xb6643939bc5d09da,
+                0xf20dbb277f04b2b6,
+                0x08968bea7ecb8160,
             ]),
             _ => {
                 dbg!(digest);
                 panic!("Arity lacks test vector: {}", ARITY)
             }
         };
-        assert_eq!(digest, expected);
+        assert_eq!(expected, digest);
     }
 }

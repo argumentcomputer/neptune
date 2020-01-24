@@ -413,7 +413,7 @@ mod tests {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
         let t = WIDTH;
-        let cases = [(2, 536), (4, 820), (8, 1388)];
+        let cases = [(2, 536), (4, 820), (8, 1428)];
 
         let matrix = generate_mds(WIDTH);
 

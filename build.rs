@@ -10,7 +10,7 @@ fn main() {
 
     let width = env::var("POSEIDON_WIDTH")
         .map(|s| s.parse().expect("Failed to parse POSEIDON_WIDTH"))
-        .unwrap_or(3);
+        .unwrap_or(9);
 
     let arity = width - 1;
 
@@ -20,7 +20,7 @@ fn main() {
 
     let partial_rounds = env::var("POSEIDON_PARTIAL_ROUNDS")
         .map(|s| s.parse().expect("Failed to parse POSEIDON_PARTIAL_ROUNDS"))
-        .unwrap_or(55);
+        .unwrap_or(57);
 
     write!(
         &mut f,
