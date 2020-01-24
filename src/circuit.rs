@@ -11,7 +11,7 @@ use paired::Engine;
 #[derive(Clone)]
 pub struct PoseidonCircuit<E: Engine> {
     constants_offset: usize,
-    round_constants: Vec<AllocatedNum<E>>, // &'a [E::Fr],
+    round_constants: Vec<E::Fr>,
     width: usize,
     elements: Vec<AllocatedNum<E>>,
     pos: usize,
@@ -25,7 +25,7 @@ impl<E: Engine> PoseidonCircuit<E> {
     pub fn new(
         elements: Vec<AllocatedNum<E>>,
         matrix: Vec<Vec<AllocatedNum<E>>>,
-        round_constants: Vec<AllocatedNum<E>>,
+        round_constants: Vec<E::Fr>,
     ) -> Self {
         let width = WIDTH;
 
@@ -68,13 +68,13 @@ impl<E: Engine> PoseidonCircuit<E> {
 
         // Apply the quintic S-Box to all elements
         for i in 0..self.elements.len() {
-            let round_key = self.round_constants[constants_offset].get_value();
+            let round_key = self.round_constants[constants_offset];
             constants_offset += 1;
 
             self.elements[i] = quintic_s_box(
                 cs.namespace(|| format!("quintic s-box {}", i)),
                 &self.elements[i],
-                round_key,
+                Some(round_key),
             )?
         }
         self.constants_offset = constants_offset;
@@ -85,81 +85,17 @@ impl<E: Engine> PoseidonCircuit<E> {
     }
 
     fn partial_round<CS: ConstraintSystem<E>>(&mut self, mut cs: CS) -> Result<(), SynthesisError> {
-        let round_key = self.round_constants[self.constants_offset].get_value();
+        let round_key = self.round_constants[self.constants_offset];
         self.constants_offset += 1;
         // Apply the quintic S-Box to the first element.
         self.elements[0] = quintic_s_box(
             cs.namespace(|| "solitary quintic s-box"),
             &self.elements[0],
-            round_key,
+            Some(round_key),
         )?;
 
         // Multiply the elements by the constant MDS matrix
         self.product_mds(cs.namespace(|| "mds matrix product"), true)?;
-
-        Ok(())
-    }
-
-    // This generates more constraints but is clearer, so keep for documentation.
-    #[allow(dead_code)]
-    fn full_round_old<CS: ConstraintSystem<E>>(
-        &mut self,
-        mut cs: CS,
-    ) -> Result<(), SynthesisError> {
-        // Every element of the hash buffer is incremented by the round constants
-        self.add_round_constants(cs.namespace(|| "add r"))?;
-
-        // Apply the quintic S-Box to all elements
-        for i in 0..self.elements.len() {
-            self.elements[i] = quintic_s_box(
-                cs.namespace(|| format!("quintic s-box {}", i)),
-                &self.elements[i],
-                None,
-            )?
-        }
-
-        // Multiply the elements by the constant MDS matrix
-        self.product_mds(cs.namespace(|| "mds matrix product"), false)?;
-        Ok(())
-    }
-
-    // This generates more constraints but is clearer, so keep for documentation.
-    #[allow(dead_code)]
-    fn partial_round_old<CS: ConstraintSystem<E>>(
-        &mut self,
-        mut cs: CS,
-    ) -> Result<(), SynthesisError> {
-        // Every element of the hash buffer is incremented by the round constants
-        self.add_round_constants(cs.namespace(|| "add r"))?;
-
-        // Apply the quintic S-Box to the first element.
-        self.elements[0] =
-            quintic_s_box(cs.namespace(|| "quintic s-box"), &self.elements[0], None)?;
-
-        // Multiply the elements by the constant MDS matrix
-        self.product_mds(cs.namespace(|| "mds matrix product"), false)?;
-
-        Ok(())
-    }
-
-    fn add_round_constants<CS: ConstraintSystem<E>>(
-        &mut self,
-        mut cs: CS,
-    ) -> Result<(), SynthesisError> {
-        let mut constants_offset = self.constants_offset;
-
-        for i in 0..self.elements.len() {
-            let constant = &self.round_constants[constants_offset];
-            constants_offset += 1;
-
-            self.elements[i] = add(
-                cs.namespace(|| format!("add round key {}", i)),
-                &self.elements[i],
-                &constant,
-            )?;
-        }
-
-        self.constants_offset = constants_offset;
 
         Ok(())
     }
@@ -185,7 +121,7 @@ impl<E: Engine> PoseidonCircuit<E> {
                         }),
                         &tmp,
                         &self.elements[k],
-                        self.round_constants[round_offset + k].get_value().unwrap(), // FIXME: Just make the constants be scalars.
+                        self.round_constants[round_offset + k],
                     )?
                 } else {
                     tmp.mul(
@@ -224,16 +160,13 @@ fn poseidon_hash<CS: ConstraintSystem<Bls12>>(
     mut preimage: Vec<AllocatedNum<Bls12>>,
 ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
     let matrix = allocated_matrix(cs.namespace(|| "allocated matrix"), *MDS_MATRIX)?;
-    let round_constants = allocated_round_constants(
-        cs.namespace(|| "allocated round constants"),
-        &*ROUND_CONSTANTS,
-    )?;
+
     // Add the arity tag to the front of the preimage.
     let arity_tag = AllocatedNum::alloc(cs.namespace(|| "arity tag"), || Ok(*ARITY_TAG))?;
     preimage.push(arity_tag);
     preimage.rotate_right(1);
 
-    let mut p = PoseidonCircuit::new(preimage, matrix, round_constants);
+    let mut p = PoseidonCircuit::new(preimage, matrix, (&*ROUND_CONSTANTS).to_vec());
     p.hash(cs)
 }
 
@@ -256,20 +189,6 @@ fn allocated_matrix<CS: ConstraintSystem<Bls12>>(
         });
     }
     Ok(mat)
-}
-
-fn allocated_round_constants<CS: ConstraintSystem<Bls12>>(
-    mut cs: CS,
-    fr_constants: &[<paired::bls12_381::Bls12 as ScalarEngine>::Fr],
-) -> Result<Vec<AllocatedNum<Bls12>>, SynthesisError> {
-    let mut allocated_constants: Vec<AllocatedNum<Bls12>> = Vec::new();
-    for (i, val) in fr_constants.iter().enumerate() {
-        allocated_constants.push(AllocatedNum::alloc(
-            cs.namespace(|| format!("round constant {}", i)),
-            || Ok(*val),
-        )?)
-    }
-    Ok(allocated_constants)
 }
 
 /// Compute l^5 and enforce constraint. If round_key is supplied, add it to l first.
