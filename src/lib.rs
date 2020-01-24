@@ -29,6 +29,7 @@ lazy_static! {
         // FIXME: These ark constants will not be correct, since we have changed curves. We need to figure out how to generate them ourselves.
         // UPDATE: Note that the paper says, ' Note that cryptographically strong randomness is not needed for the round constants, and other methods can also be used.'
         // So this may not matter for correctness, though we should still formally define these rather than use the initial magic binary still present now.
+        #![cfg_attr(feature = "cargo-clippy", allow(cast_ptr_alignment))]
         let bytes = include_bytes!("../assets/ark.bin");
         unsafe { std::ptr::read(bytes.as_ptr() as *const _) }
     };

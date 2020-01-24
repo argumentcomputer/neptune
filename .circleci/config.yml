@@ -1,0 +1,135 @@
+version: 2.1
+
+executors:
+  default:
+    docker:
+      - image: filecoin/rust:latest
+    working_directory: /mnt/crate
+
+restore-workspace: &restore-workspace
+  attach_workspace:
+    at: /mnt
+
+restore-cache: &restore-cache
+  restore_cache:
+    keys:
+      - cargo-v0-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - repo-source-{{ .Branch }}-{{ .Revision }}
+
+commands:
+  test_target:
+    parameters:
+      target:
+        type: string
+    steps:
+      - *restore-workspace
+      - *restore-cache
+      - run:
+          name: Test (<< parameters.target >>)
+          command: TARGET=<< parameters.target >> cargo test --release
+          no_output_timeout: 5m
+
+jobs:
+  cargo_fetch:
+    executor: default
+    steps:
+      - checkout
+      - run:
+          name: Calculate dependencies
+          command: cargo generate-lockfile
+      - restore_cache:
+          keys:
+            - cargo-v0-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - run: cargo update
+      - run: cargo fetch
+      - run: rustup install $(cat rust-toolchain)
+      - run: rustup default $(cat rust-toolchain)
+      - run: rustup component add rustfmt-preview
+      - run: rustup component add clippy-preview
+      - run: rustc --version
+      - run: rm -rf .git
+      - persist_to_workspace:
+          root: /mnt
+          paths:
+            - crate
+      - save_cache:
+          key: cargo-v0-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+          paths:
+            - "~/.cargo"
+            - "~/.rustup"
+
+  test_x86_64-unknown-linux-gnu:
+    executor: default
+    steps:
+      - test_target:
+          target: "x86_64-unknown-linux-gnu"
+
+  rustfmt:
+    executor: default
+    steps:
+      - *restore-workspace
+      - *restore-cache
+      - run:
+          name: Run cargo fmt
+          command: cargo fmt --all -- --check
+
+  clippy:
+    executor: default
+    steps:
+      - *restore-workspace
+      - *restore-cache
+      - run:
+          name: Run cargo clippy
+          command: cargo clippy --all-features
+
+  build:
+    executor: default
+    steps:
+      - *restore-workspace
+      - *restore-cache
+      - run:
+          name: Run cargo release build
+          command: cargo build --release
+
+  benches:
+    executor: default
+    steps:
+      - *restore-workspace
+      - *restore-cache
+      - run:
+          name: Run cargo build --benches
+          command: cargo build --benches --all-features --all --release
+
+  doc:
+    executor: default
+    steps:
+      - *restore-workspace
+      - *restore-cache
+      - run:
+          name: Run cargo doc
+          command: cargo doc --all-features --no-deps
+
+workflows:
+  version: 2.1
+
+  test:
+    jobs:
+      - cargo_fetch
+      - rustfmt:
+          requires:
+            - cargo_fetch
+      - clippy:
+          requires:
+            - cargo_fetch
+      - test_x86_64-unknown-linux-gnu:
+          requires:
+            - cargo_fetch
+      - build:
+          requires:
+            - cargo_fetch
+      - benches:
+          requires:
+            - cargo_fetch
+      - doc:
+          requires:
+            - cargo_fetch
