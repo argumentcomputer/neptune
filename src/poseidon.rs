@@ -168,13 +168,6 @@ fn quintic_s_box(l: &mut Scalar) {
     }
 }
 
-/// Hash a string by chunking into 31-byte input to simply test vectors in development.
-pub(crate) fn simple_hash_string(s: &str) -> String {
-    let frs = s.as_bytes().chunks(31).map(|chunk| chunk);
-
-    unimplemented!();
-}
-
 #[cfg(test)]
 mod tests {
     use crate::*;

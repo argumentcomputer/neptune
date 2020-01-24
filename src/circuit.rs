@@ -1,5 +1,5 @@
 use crate::poseidon::ARITY_TAG;
-use crate::{ARITY, FULL_ROUNDS, MDS_MATRIX, PARTIAL_ROUNDS, ROUND_CONSTANTS, WIDTH};
+use crate::{FULL_ROUNDS, MDS_MATRIX, PARTIAL_ROUNDS, ROUND_CONSTANTS, WIDTH};
 
 use bellperson::gadgets::num;
 use bellperson::gadgets::num::AllocatedNum;
@@ -62,7 +62,10 @@ impl<E: Engine> PoseidonCircuit<E> {
         Ok(self.elements[1].clone())
     }
 
-    fn full_round<CS: ConstraintSystem<E>>(&mut self, mut cs: CS) -> Result<(), SynthesisError> {
+    fn full_round_old<CS: ConstraintSystem<E>>(
+        &mut self,
+        mut cs: CS,
+    ) -> Result<(), SynthesisError> {
         // Every element of the hash buffer is incremented by the round constants
         self.add_round_constants(cs.namespace(|| "add r"))?;
 
@@ -71,12 +74,33 @@ impl<E: Engine> PoseidonCircuit<E> {
             self.elements[i] = quintic_s_box(
                 cs.namespace(|| format!("quintic s-box {}", i)),
                 &self.elements[i],
+                None,
             )?
         }
 
         // Multiply the elements by the constant MDS matrix
         self.product_mds(cs.namespace(|| "mds matrix product"))?;
+        Ok(())
+    }
 
+    fn full_round<CS: ConstraintSystem<E>>(&mut self, mut cs: CS) -> Result<(), SynthesisError> {
+        let mut constants_offset = self.constants_offset;
+
+        // Apply the quintic S-Box to all elements
+        for i in 0..self.elements.len() {
+            let round_key = self.round_constants[constants_offset].get_value();
+            constants_offset += 1;
+
+            self.elements[i] = quintic_s_box(
+                cs.namespace(|| format!("quintic s-box {}", i)),
+                &self.elements[i],
+                round_key,
+            )?
+        }
+        self.constants_offset = constants_offset;
+
+        // Multiply the elements by the constant MDS matrix
+        self.product_mds(cs.namespace(|| "mds matrix product"))?;
         Ok(())
     }
 
@@ -85,7 +109,8 @@ impl<E: Engine> PoseidonCircuit<E> {
         self.add_round_constants(cs.namespace(|| "add r"))?;
 
         // Apply the quintic S-Box to the first element.
-        self.elements[0] = quintic_s_box(cs.namespace(|| "quintic s-box"), &self.elements[0])?;
+        self.elements[0] =
+            quintic_s_box(cs.namespace(|| "quintic s-box"), &self.elements[0], None)?;
 
         // Multiply the elements by the constant MDS matrix
         self.product_mds(cs.namespace(|| "mds matrix product"))?;
@@ -147,7 +172,7 @@ impl<E: Engine> PoseidonCircuit<E> {
             .iter()
             .map(|n| n.get_value().unwrap())
             .collect();
-        dbg!(element_frs);
+        dbg!(element_frs, self.constants_offset);
     }
 }
 
@@ -203,15 +228,86 @@ fn allocated_round_constants<CS: ConstraintSystem<Bls12>>(
     Ok(allocated_constants)
 }
 
+/// Compute l^5 and enforce constraint. If round_key is supplied, add it to l first.
 fn quintic_s_box<CS: ConstraintSystem<E>, E: Engine>(
     mut cs: CS,
     l: &AllocatedNum<E>,
+    round_key: Option<E::Fr>,
 ) -> Result<AllocatedNum<E>, SynthesisError> {
-    let l2 = l.square(cs.namespace(|| "l^2"))?;
+    // If round_key was supplied, add it to l before squaring.
+    let l2 = if let Some(rk) = round_key {
+        square_sum(cs.namespace(|| "(l+rk)^2"), rk, l)?
+    } else {
+        l.square(cs.namespace(|| "l^2"))?
+    };
     let l4 = l2.square(cs.namespace(|| "l^4"))?;
-    let l5 = l4.mul(cs.namespace(|| "l^5"), &l);
+    let l5 = if let Some(rk) = round_key {
+        mul_sum(cs.namespace(|| "l4 * (l + rk)"), &l4, &l, rk)
+    } else {
+        l4.mul(cs.namespace(|| "l^5"), &l)
+    };
 
     l5
+}
+
+/// Calculates square of sum and enforces that constraint.
+pub fn square_sum<CS: ConstraintSystem<E>, E: Engine>(
+    mut cs: CS,
+    to_add: E::Fr,
+    num: &AllocatedNum<E>,
+) -> Result<AllocatedNum<E>, SynthesisError>
+where
+    CS: ConstraintSystem<E>,
+{
+    let res = AllocatedNum::alloc(cs.namespace(|| "squared sum"), || {
+        let mut tmp = num
+            .get_value()
+            .ok_or_else(|| SynthesisError::AssignmentMissing)?;
+        tmp.add_assign(&to_add);
+        tmp.square();
+
+        Ok(tmp)
+    })?;
+
+    cs.enforce(
+        || "squared sum constraint",
+        |lc| lc + num.get_variable() + (to_add, CS::one()),
+        |lc| lc + num.get_variable() + (to_add, CS::one()),
+        |lc| lc + res.get_variable(),
+    );
+    Ok(res)
+}
+
+/// Calculates product of a and (b + to_add) — and enforces that constraint.
+pub fn mul_sum<CS: ConstraintSystem<E>, E: Engine>(
+    mut cs: CS,
+    a: &AllocatedNum<E>,
+    b: &AllocatedNum<E>,
+    to_add: E::Fr,
+) -> Result<AllocatedNum<E>, SynthesisError>
+where
+    CS: ConstraintSystem<E>,
+{
+    let res = AllocatedNum::alloc(cs.namespace(|| "mul_sum"), || {
+        let mut tmp = b
+            .get_value()
+            .ok_or_else(|| SynthesisError::AssignmentMissing)?;
+        tmp.add_assign(&to_add);
+        tmp.mul_assign(
+            &a.get_value()
+                .ok_or_else(|| SynthesisError::AssignmentMissing)?,
+        );
+
+        Ok(tmp)
+    })?;
+
+    cs.enforce(
+        || "mul sum constraint",
+        |lc| lc + b.get_variable() + (to_add, CS::one()),
+        |lc| lc + a.get_variable(),
+        |lc| lc + res.get_variable(),
+    );
+    Ok(res)
 }
 
 /// Adds a constraint to CS, enforcing a add relationship between the allocated numbers a, b, and sum.
@@ -305,7 +401,7 @@ pub fn multi_add<E: Engine, CS: ConstraintSystem<E>>(
 mod tests {
     use super::*;
     use crate::test::TestConstraintSystem;
-    use crate::{generate_mds, Poseidon, WIDTH};
+    use crate::{generate_mds, scalar_from_u64, Poseidon, ARITY, WIDTH};
     use bellperson::ConstraintSystem;
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
@@ -316,7 +412,7 @@ mod tests {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
         let t = WIDTH;
-        let cases = [(2, 1182), (4, 2490), (8, 6618)];
+        let cases = [(2, 1158), (4, 2490), (8, 6618)];
 
         let matrix = generate_mds(WIDTH);
 
@@ -339,13 +435,6 @@ mod tests {
 
             let out = poseidon_hash(&mut cs, data).expect("poseidon hashing failed");
 
-            assert!(cs.is_satisfied(), "constraints not satisfied");
-            assert_eq!(
-                cs.num_constraints(),
-                *constraints,
-                "constraint size changed",
-            );
-
             let mut p = Poseidon::new(fr_data);
             let expected = p.hash();
 
@@ -354,6 +443,26 @@ mod tests {
                 out.get_value().unwrap(),
                 "circuit and non-circuit do not match"
             );
+
+            assert!(cs.is_satisfied(), "constraints not satisfied");
+            assert_eq!(
+                cs.num_constraints(),
+                *constraints,
+                "constraint size changed",
+            );
         }
+    }
+    #[test]
+    fn test_square_sum() {
+        let mut cs = TestConstraintSystem::<Bls12>::new();
+
+        let mut cs1 = cs.namespace(|| "square_sum");
+        let two = scalar_from_u64(2);
+        let three =
+            AllocatedNum::alloc(cs1.namespace(|| "three"), || Ok(scalar_from_u64(3))).unwrap();
+        let res = square_sum(cs1, two, &three).unwrap();
+
+        let twenty_five = scalar_from_u64(25);
+        assert_eq!(twenty_five, res.get_value().unwrap());
     }
 }
