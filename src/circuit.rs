@@ -54,33 +54,13 @@ impl<E: Engine> PoseidonCircuit<E> {
         for i in 0..self.partial_rounds {
             self.partial_round(cs.namespace(|| format!("partial round {}", i)))?;
         }
+        //panic!("xxx");
 
         for i in 0..self.full_rounds / 2 {
             self.full_round(cs.namespace(|| format!("final full round {}", i)))?;
         }
 
         Ok(self.elements[1].clone())
-    }
-
-    fn full_round_old<CS: ConstraintSystem<E>>(
-        &mut self,
-        mut cs: CS,
-    ) -> Result<(), SynthesisError> {
-        // Every element of the hash buffer is incremented by the round constants
-        self.add_round_constants(cs.namespace(|| "add r"))?;
-
-        // Apply the quintic S-Box to all elements
-        for i in 0..self.elements.len() {
-            self.elements[i] = quintic_s_box(
-                cs.namespace(|| format!("quintic s-box {}", i)),
-                &self.elements[i],
-                None,
-            )?
-        }
-
-        // Multiply the elements by the constant MDS matrix
-        self.product_mds(cs.namespace(|| "mds matrix product"))?;
-        Ok(())
     }
 
     fn full_round<CS: ConstraintSystem<E>>(&mut self, mut cs: CS) -> Result<(), SynthesisError> {
@@ -100,11 +80,55 @@ impl<E: Engine> PoseidonCircuit<E> {
         self.constants_offset = constants_offset;
 
         // Multiply the elements by the constant MDS matrix
-        self.product_mds(cs.namespace(|| "mds matrix product"))?;
+        self.product_mds(cs.namespace(|| "mds matrix product"), false)?;
         Ok(())
     }
 
     fn partial_round<CS: ConstraintSystem<E>>(&mut self, mut cs: CS) -> Result<(), SynthesisError> {
+        let round_key = self.round_constants[self.constants_offset].get_value();
+        self.constants_offset += 1;
+        // Apply the quintic S-Box to the first element.
+        self.elements[0] = quintic_s_box(
+            cs.namespace(|| "solitary quintic s-box"),
+            &self.elements[0],
+            round_key,
+        )?;
+
+        // Multiply the elements by the constant MDS matrix
+        self.product_mds(cs.namespace(|| "mds matrix product"), true)?;
+
+        Ok(())
+    }
+
+    // This generates more constraints but is clearer, so keep for documentation.
+    #[allow(dead_code)]
+    fn full_round_old<CS: ConstraintSystem<E>>(
+        &mut self,
+        mut cs: CS,
+    ) -> Result<(), SynthesisError> {
+        // Every element of the hash buffer is incremented by the round constants
+        self.add_round_constants(cs.namespace(|| "add r"))?;
+
+        // Apply the quintic S-Box to all elements
+        for i in 0..self.elements.len() {
+            self.elements[i] = quintic_s_box(
+                cs.namespace(|| format!("quintic s-box {}", i)),
+                &self.elements[i],
+                None,
+            )?
+        }
+
+        // Multiply the elements by the constant MDS matrix
+        self.product_mds(cs.namespace(|| "mds matrix product"), false)?;
+        Ok(())
+    }
+
+    // This generates more constraints but is clearer, so keep for documentation.
+    #[allow(dead_code)]
+    fn partial_round_old<CS: ConstraintSystem<E>>(
+        &mut self,
+        mut cs: CS,
+    ) -> Result<(), SynthesisError> {
         // Every element of the hash buffer is incremented by the round constants
         self.add_round_constants(cs.namespace(|| "add r"))?;
 
@@ -113,7 +137,7 @@ impl<E: Engine> PoseidonCircuit<E> {
             quintic_s_box(cs.namespace(|| "quintic s-box"), &self.elements[0], None)?;
 
         // Multiply the elements by the constant MDS matrix
-        self.product_mds(cs.namespace(|| "mds matrix product"))?;
+        self.product_mds(cs.namespace(|| "mds matrix product"), false)?;
 
         Ok(())
     }
@@ -140,28 +164,47 @@ impl<E: Engine> PoseidonCircuit<E> {
         Ok(())
     }
 
-    fn product_mds<CS: ConstraintSystem<E>>(&mut self, mut cs: CS) -> Result<(), SynthesisError> {
+    fn product_mds<CS: ConstraintSystem<E>>(
+        &mut self,
+        mut cs: CS,
+        add_round_keys: bool,
+    ) -> Result<(), SynthesisError> {
         let mut result: Vec<AllocatedNum<E>> = Vec::with_capacity(WIDTH);
+        let round_offset = self.constants_offset - 1; // Account for the constant already used.
+
         for j in 0..WIDTH {
             let mut to_add = Vec::new();
 
             for k in 0..WIDTH {
                 let tmp = &self.mds_matrix[j][k];
 
-                let product = tmp.mul(
-                    cs.namespace(|| format!("multiply matrix element ({}, {})", j, k)),
-                    &self.elements[k],
-                )?;
+                let product = if add_round_keys && k > 0 {
+                    mul_sum(
+                        cs.namespace(|| {
+                            format!("multiply matrix element ({}, {}), adding round key", j, k)
+                        }),
+                        &tmp,
+                        &self.elements[k],
+                        self.round_constants[round_offset + k].get_value().unwrap(), // FIXME: Just make the constants be scalars.
+                    )?
+                } else {
+                    tmp.mul(
+                        cs.namespace(|| format!("multiply matrix element ({}, {})", j, k)),
+                        &self.elements[k],
+                    )?
+                };
 
                 to_add.push(product);
             }
-
             result.push(multi_add(
                 cs.namespace(|| format!("sum row ({})", j)),
                 to_add.as_slice(),
             )?);
         }
         self.elements = result;
+        if add_round_keys {
+            self.constants_offset += WIDTH - 1;
+        }
 
         Ok(())
     }
@@ -199,6 +242,7 @@ fn allocated_matrix<CS: ConstraintSystem<Bls12>>(
     fr_matrix: [[<paired::bls12_381::Bls12 as ScalarEngine>::Fr; WIDTH]; WIDTH],
 ) -> Result<Vec<Vec<AllocatedNum<Bls12>>>, SynthesisError> {
     let mut mat: Vec<Vec<AllocatedNum<Bls12>>> = Vec::new();
+    // Should probably call these columns.
     for (i, row) in fr_matrix.iter().enumerate() {
         mat.push({
             let mut allocated_row = Vec::new();
@@ -278,7 +322,7 @@ where
     Ok(res)
 }
 
-/// Calculates product of a and (b + to_add) — and enforces that constraint.
+/// Calculates a * (b + to_add) — and enforces that constraint.
 pub fn mul_sum<CS: ConstraintSystem<E>, E: Engine>(
     mut cs: CS,
     a: &AllocatedNum<E>,
@@ -310,7 +354,7 @@ where
     Ok(res)
 }
 
-/// Adds a constraint to CS, enforcing a add relationship between the allocated numbers a, b, and sum.
+/// Adds a constraint to CS, enforcing that a + b = sum.
 ///
 /// a + b = sum
 pub fn sum<E: Engine, A, AR, CS: ConstraintSystem<E>>(
@@ -332,9 +376,7 @@ pub fn sum<E: Engine, A, AR, CS: ConstraintSystem<E>>(
     );
 }
 
-/// Adds a constraint to CS, enforcing a add relationship between the allocated numbers a, b, and sum.
-///
-/// a + b = sum
+/// Adds a constraint to CS, enforcing that sum is the sum of nums.
 pub fn multi_sum<E: Engine, A, AR, CS: ConstraintSystem<E>>(
     cs: &mut CS,
     annotation: A,
@@ -412,7 +454,7 @@ mod tests {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
         let t = WIDTH;
-        let cases = [(2, 1158), (4, 2490), (8, 6618)];
+        let cases = [(2, 993), (4, 2175), (8, 6051)];
 
         let matrix = generate_mds(WIDTH);
 
