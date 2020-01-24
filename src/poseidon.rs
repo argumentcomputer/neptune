@@ -168,13 +168,6 @@ fn quintic_s_box(l: &mut Scalar) {
     }
 }
 
-/// Hash a string by chunking into 31-byte input to simply test vectors in development.
-pub(crate) fn simple_hash_string(s: &str) -> String {
-    let frs = s.as_bytes().chunks(31).map(|chunk| chunk);
-
-    unimplemented!();
-}
-
 #[cfg(test)]
 mod tests {
     use crate::*;
@@ -219,7 +212,22 @@ mod tests {
                 0x92570f6e6bcddaab,
                 0x3b075e6db55140a6,
             ]),
-            _ => panic!("Arity lacks test vector: {}", ARITY),
+            4 => scalar_from_u64s([
+                0xc1969fefd83163c7,
+                0x61928bd404ae61fd,
+                0xd88e682deb03a93b,
+                0x439ba37cacd37ed0,
+            ]),
+            8 => scalar_from_u64s([
+                0xf9b3db559010f71f,
+                0x5a69b10daff97e0e,
+                0x74d8ee2fc76efc6e,
+                0x653b27f7635bd0e4,
+            ]),
+            _ => {
+                dbg!(digest);
+                panic!("Arity lacks test vector: {}", ARITY)
+            }
         };
         assert_eq!(digest, expected);
     }
