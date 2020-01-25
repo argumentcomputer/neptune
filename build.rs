@@ -10,7 +10,7 @@ fn main() {
 
     let width = env::var("POSEIDON_WIDTH")
         .map(|s| s.parse().expect("Failed to parse POSEIDON_WIDTH"))
-        .unwrap_or(3);
+        .unwrap_or(9);
 
     let arity = width - 1;
 

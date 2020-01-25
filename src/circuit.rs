@@ -82,10 +82,7 @@ impl<E: Engine> PoseidonCircuit<E> {
         Ok(())
     }
 
-    fn partial_round_alt<CS: ConstraintSystem<E>>(
-        &mut self,
-        mut cs: CS,
-    ) -> Result<(), SynthesisError> {
+    fn partial_round<CS: ConstraintSystem<E>>(&mut self, mut cs: CS) -> Result<(), SynthesisError> {
         let round_key = self.round_constants[self.constants_offset];
         self.constants_offset += 1;
         // Apply the quintic S-Box to the first element.
@@ -95,15 +92,62 @@ impl<E: Engine> PoseidonCircuit<E> {
             Some(round_key),
         )?;
 
-        //self.add_round_constants(cs.namespace(|| "add round keys"), true)?;
-
         // Multiply the elements by the constant MDS matrix
         self.product_mds(cs.namespace(|| "mds matrix product"), true)?;
 
         Ok(())
     }
 
-    // This works.
+    fn product_mds<CS: ConstraintSystem<E>>(
+        &mut self,
+        mut cs: CS,
+        add_round_keys: bool,
+    ) -> Result<(), SynthesisError> {
+        let mut result: Vec<AllocatedNum<E>> = Vec::with_capacity(WIDTH);
+
+        for j in 0..WIDTH {
+            let column = self.mds_matrix[j].to_vec();
+            // TODO: This could be cached per round to save synthesis time.
+            let constant_term = if add_round_keys {
+                let mut acc = E::Fr::zero();
+                // Dot product of column and this round's keys.
+                for k in 1..WIDTH {
+                    let mut tmp = column[k];
+                    let rk = self.round_constants[self.constants_offset + k - 1];
+                    tmp.mul_assign(&rk);
+                    acc.add_assign(&tmp);
+                }
+                Some(acc)
+            } else {
+                None
+            };
+
+            let product = scalar_product(
+                cs.namespace(|| format!("scalar product {}", j)),
+                self.elements.as_slice(),
+                &column,
+                constant_term,
+            )?;
+            result.push(product);
+        }
+        if add_round_keys {
+            self.constants_offset += WIDTH - 1;
+        }
+        self.elements = result;
+
+        Ok(())
+    }
+
+    fn debug(&self) {
+        let element_frs: Vec<_> = self
+            .elements
+            .iter()
+            .map(|n| n.get_value().unwrap())
+            .collect();
+        dbg!(element_frs, self.constants_offset);
+    }
+
+    /// This works but is inefficient. Retained for reference.
     fn partial_round_old<CS: ConstraintSystem<E>>(
         &mut self,
         mut cs: CS,
@@ -147,69 +191,6 @@ impl<E: Engine> PoseidonCircuit<E> {
         self.constants_offset = constants_offset;
 
         Ok(())
-    }
-
-    fn partial_round<CS: ConstraintSystem<E>>(&mut self, mut cs: CS) -> Result<(), SynthesisError> {
-        // Apply the quintic S-Box to the first element.
-        self.elements[0] = quintic_s_box(
-            cs.namespace(|| "solitary quintic s-box"),
-            &self.elements[0],
-            None,
-        )?;
-
-        // Multiply the elements by the constant MDS matrix
-        self.product_mds(cs.namespace(|| "mds matrix product"), true)?;
-
-        Ok(())
-    }
-
-    fn product_mds<CS: ConstraintSystem<E>>(
-        &mut self,
-        mut cs: CS,
-        add_round_keys: bool,
-    ) -> Result<(), SynthesisError> {
-        let mut result: Vec<AllocatedNum<E>> = Vec::with_capacity(WIDTH);
-
-        for j in 0..WIDTH {
-            let column = self.mds_matrix[j].to_vec();
-            // TODO: This could be cached per round to save synthesis time.
-            let constant_term = if add_round_keys {
-                let mut acc = E::Fr::zero();
-                // Dot product of column and this round's keys.
-                for k in 0..WIDTH {
-                    let mut tmp = column[k];
-                    let rk = self.round_constants[self.constants_offset + k];
-                    tmp.mul_assign(&rk);
-                    acc.add_assign(&tmp);
-                }
-                Some(acc)
-            } else {
-                None
-            };
-
-            let product = scalar_product(
-                cs.namespace(|| format!("scalar product {}", j)),
-                self.elements.as_slice(),
-                &column,
-                constant_term,
-            )?;
-            result.push(product);
-        }
-        if add_round_keys {
-            self.constants_offset += WIDTH;
-        }
-        self.elements = result;
-
-        Ok(())
-    }
-
-    fn debug(&self) {
-        let element_frs: Vec<_> = self
-            .elements
-            .iter()
-            .map(|n| n.get_value().unwrap())
-            .collect();
-        dbg!(element_frs, self.constants_offset);
     }
 }
 
@@ -462,8 +443,8 @@ mod tests {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
         let t = WIDTH;
-        // (2, 426) (8, 948)
-        let cases = [(2, 552), (4, 844), (8, 1428)];
+        // With fp = 55; (2, 426) (8, 948)
+        let cases = [(2, 438), (4, 616), (8, 972)];
 
         let matrix = generate_mds(WIDTH);
 
