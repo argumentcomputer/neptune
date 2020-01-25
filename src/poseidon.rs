@@ -203,32 +203,35 @@ mod tests {
         let preimage = for n in 0..ARITY {
             p.input(scalar_from_u64(n as u64)).unwrap();
         };
-
+        for i in 0..10 {
+            dbg!(ROUND_CONSTANTS[i]);
+        }
         let digest = p.hash();
         let expected = match ARITY {
             2 => scalar_from_u64s([
-                0x883386e89b61a399,
-                0x13115ec0c4fba96e,
-                0x92570f6e6bcddaab,
-                0x3b075e6db55140a6,
+                0xa40b50fbd526e3d8,
+                0x602e561dec0276f1,
+                0x876c16938745414a,
+                0x586402df1f7245a6,
             ]),
             4 => scalar_from_u64s([
-                0xc1969fefd83163c7,
-                0x61928bd404ae61fd,
-                0xd88e682deb03a93b,
-                0x439ba37cacd37ed0,
+                0x7d24050357d9da75,
+                0x0a983161fe8bcc6f,
+                0xacec00e9669c838c,
+                0x5563d0a74e95a99f,
             ]),
             8 => scalar_from_u64s([
-                0x40102da78e5a77d6,
-                0xb6643939bc5d09da,
-                0xf20dbb277f04b2b6,
-                0x08968bea7ecb8160,
+                0x3a261c43c7d513f1,
+                0xd90573f76693c368,
+                0x94f197e804c99da8,
+                0x02ff178318692402,
             ]),
             _ => {
                 dbg!(digest);
                 panic!("Arity lacks test vector: {}", ARITY)
             }
         };
+        dbg!(ARITY);
         assert_eq!(expected, digest);
     }
 }
