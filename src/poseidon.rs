@@ -209,16 +209,16 @@ mod tests {
         let digest = p.hash();
         let expected = match ARITY {
             2 => scalar_from_u64s([
-                0xa40b50fbd526e3d8,
-                0x602e561dec0276f1,
-                0x876c16938745414a,
-                0x586402df1f7245a6,
+                0x611a441e9e4a973c,
+                0x578e0f72da838698,
+                0x4dd701e0b45d07e0,
+                0x5610bed47fb4ca1e,
             ]),
             4 => scalar_from_u64s([
-                0x7d24050357d9da75,
-                0x0a983161fe8bcc6f,
-                0xacec00e9669c838c,
-                0x5563d0a74e95a99f,
+                0x9a2c84c72ff4029e,
+                0x74909cb435fe2159,
+                0xe6266f8b9cbb3570,
+                0x4af1ff49f2076ac4,
             ]),
             8 => scalar_from_u64s([
                 0x3a261c43c7d513f1,

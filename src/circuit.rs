@@ -148,7 +148,7 @@ impl<E: Engine> PoseidonCircuit<E> {
     }
 
     /// This works but is inefficient. Retained for reference.
-    fn partial_round_old<CS: ConstraintSystem<E>>(
+    fn partial_round_with_explicit_round_constants<CS: ConstraintSystem<E>>(
         &mut self,
         mut cs: CS,
     ) -> Result<(), SynthesisError> {
@@ -443,8 +443,7 @@ mod tests {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
         let t = WIDTH;
-        // With fp = 55; (2, 426) (8, 948)
-        let cases = [(2, 438), (4, 616), (8, 972)];
+        let cases = [(2, 426), (4, 608), (8, 972)];
 
         let matrix = generate_mds(WIDTH);
 
