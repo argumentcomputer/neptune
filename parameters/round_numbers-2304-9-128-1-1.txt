@@ -1,16 +1,16 @@
 # Using https://extgit.iaik.tugraz.at/krypto/hadeshash/blob/master/code/scripts/calc_round_numbers.py
-# python calc_round_numbers.py 1024 4 128 1 1 > ~/filecoin-project/neptune/parameters/round_numbers-1024-4-128-1-1.txt
+# python calc_round_numbers.py 2304 9 128 1 1 > ~/filecoin-project/neptune/parameters/round_numbers-2304-9-128-1-1.txt
 # Text below this line is output.
-N: 1024
+N: 2304
 Security level M: 128
 Field: Prime
 S-box: f(x) = x^5
-[8, 56, 88, 22528]
-Recommendation for N=1024, t=4:
+[8, 57, 129, 33024]
+Recommendation for N=2304, t=9:
 R_F = 8
-R_P = 56
-S-box cost = 88
-Size cost = 22528
+R_P = 57
+S-box cost = 129
+Size cost = 33024
 --- Round numbers (with security margin) ---
 Format: [Security Level, Field Size, # Elements, Field, S-Box, R_F, R_P]
 ['45', '45', '3', 'GF(2^n)', 'x^3', '8', '28']

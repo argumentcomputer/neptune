@@ -1,3 +1,6 @@
+# Using https://extgit.iaik.tugraz.at/krypto/hadeshash/blob/master/code/scripts/calc_round_numbers.py
+# python calc_round_numbers.py 768 3 128 1 1 > ~/filecoin-project/neptune/parameters/round_numbers-768-3-128-1-1.txt
+# Text below this line is output.
 N: 768
 Security level M: 128
 Field: Prime

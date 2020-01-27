@@ -8,19 +8,29 @@ fn main() {
     let dest_path = Path::new(&out_dir).join("src").join("constants.rs");
     let mut f = File::create(&dest_path).expect("Could not create file");
 
-    let width = env::var("POSEIDON_WIDTH")
-        .map(|s| s.parse().expect("Failed to parse POSEIDON_WIDTH"))
-        .unwrap_or(3);
+    let default_arity = 8;
 
-    let arity = width - 1;
+    let arity = env::var("POSEIDON_ARITY")
+        .map(|s| s.parse().expect("Failed to parse POSEIDON_ARITY"))
+        .unwrap_or(default_arity);
+
+    let width = arity + 1;
+
+    let default_full_rounds = 8;
+    let default_partial_rounds = match width {
+        2 | 3 => 55,
+        4 | 5 | 6 | 7 => 56,
+        8 | 9 => 57,
+        _ => panic!("unsupoorted arity"),
+    };
 
     let full_rounds = env::var("POSEIDON_FULL_ROUNDS")
         .map(|s| s.parse().expect("Failed to parse POSEIDON_FULL_ROUNDS"))
-        .unwrap_or(8);
+        .unwrap_or(default_full_rounds);
 
     let partial_rounds = env::var("POSEIDON_PARTIAL_ROUNDS")
         .map(|s| s.parse().expect("Failed to parse POSEIDON_PARTIAL_ROUNDS"))
-        .unwrap_or(55);
+        .unwrap_or(default_partial_rounds); // Conservative value (for arity 8) until this adapts to arity.
 
     write!(
         &mut f,

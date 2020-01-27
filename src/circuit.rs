@@ -1,10 +1,9 @@
 use crate::poseidon::ARITY_TAG;
 use crate::{FULL_ROUNDS, MDS_MATRIX, PARTIAL_ROUNDS, ROUND_CONSTANTS, WIDTH};
 
-use bellperson::gadgets::num;
 use bellperson::gadgets::num::AllocatedNum;
 use bellperson::{ConstraintSystem, SynthesisError};
-use ff::{Field, ScalarEngine};
+use ff::Field;
 use paired::bls12_381::Bls12;
 use paired::Engine;
 
@@ -93,26 +92,76 @@ impl<E: Engine> PoseidonCircuit<E> {
             Some(round_key),
         )?;
 
-        self.add_round_constants(cs.namespace(|| "add round keys"), true)?;
-
         // Multiply the elements by the constant MDS matrix
-        self.product_mds(cs.namespace(|| "mds matrix product"), false)?;
+        self.product_mds(cs.namespace(|| "mds matrix product"), true)?;
 
         Ok(())
     }
 
-    fn partial_round_x<CS: ConstraintSystem<E>>(
+    fn product_mds<CS: ConstraintSystem<E>>(
+        &mut self,
+        mut cs: CS,
+        add_round_keys: bool,
+    ) -> Result<(), SynthesisError> {
+        let mut result: Vec<AllocatedNum<E>> = Vec::with_capacity(WIDTH);
+
+        for j in 0..WIDTH {
+            let column = self.mds_matrix[j].to_vec();
+            // TODO: This could be cached per round to save synthesis time.
+            let constant_term = if add_round_keys {
+                let mut acc = E::Fr::zero();
+                // Dot product of column and this round's keys.
+                for k in 1..WIDTH {
+                    let mut tmp = column[k];
+                    let rk = self.round_constants[self.constants_offset + k - 1];
+                    tmp.mul_assign(&rk);
+                    acc.add_assign(&tmp);
+                }
+                Some(acc)
+            } else {
+                None
+            };
+
+            let product = scalar_product(
+                cs.namespace(|| format!("scalar product {}", j)),
+                self.elements.as_slice(),
+                &column,
+                constant_term,
+            )?;
+            result.push(product);
+        }
+        if add_round_keys {
+            self.constants_offset += WIDTH - 1;
+        }
+        self.elements = result;
+
+        Ok(())
+    }
+
+    fn debug(&self) {
+        let element_frs: Vec<_> = self
+            .elements
+            .iter()
+            .map(|n| n.get_value().unwrap())
+            .collect();
+        dbg!(element_frs, self.constants_offset);
+    }
+
+    /// This works but is inefficient. Retained for reference.
+    fn partial_round_with_explicit_round_constants<CS: ConstraintSystem<E>>(
         &mut self,
         mut cs: CS,
     ) -> Result<(), SynthesisError> {
-        self.add_round_constants(cs.namespace(|| "add round keys"), false)?;
-
+        let round_key = self.round_constants[self.constants_offset];
+        self.constants_offset += 1;
         // Apply the quintic S-Box to the first element.
         self.elements[0] = quintic_s_box(
             cs.namespace(|| "solitary quintic s-box"),
             &self.elements[0],
-            None,
+            Some(round_key),
         )?;
+
+        self.add_round_constants(cs.namespace(|| "add round keys"), true)?;
 
         // Multiply the elements by the constant MDS matrix
         self.product_mds(cs.namespace(|| "mds matrix product"), false)?;
@@ -142,36 +191,6 @@ impl<E: Engine> PoseidonCircuit<E> {
         self.constants_offset = constants_offset;
 
         Ok(())
-    }
-
-    fn product_mds<CS: ConstraintSystem<E>>(
-        &mut self,
-        mut cs: CS,
-        add_round_keys: bool,
-    ) -> Result<(), SynthesisError> {
-        let mut result: Vec<AllocatedNum<E>> = Vec::with_capacity(WIDTH);
-
-        for j in 0..WIDTH {
-            let column = self.mds_matrix[j].to_vec();
-            let product = scalar_product(
-                cs.namespace(|| format!("scalar product {}", j)),
-                self.elements.as_slice(),
-                &column,
-            )?;
-            result.push(product);
-        }
-        self.elements = result;
-
-        Ok(())
-    }
-
-    fn debug(&self) {
-        let element_frs: Vec<_> = self
-            .elements
-            .iter()
-            .map(|n| n.get_value().unwrap())
-            .collect();
-        dbg!(element_frs, self.constants_offset);
     }
 }
 
@@ -367,9 +386,10 @@ pub fn scalar_product<E: Engine, CS: ConstraintSystem<E>>(
     mut cs: CS,
     nums: &[AllocatedNum<E>],
     scalars: &[E::Fr],
+    to_add: Option<E::Fr>,
 ) -> Result<AllocatedNum<E>, SynthesisError> {
     let product = AllocatedNum::alloc(cs.namespace(|| "scalar product"), || {
-        Ok(nums
+        let mut tmp = nums
             .iter()
             .zip(scalars)
             .fold(E::Fr::zero(), |mut acc, (num, scalar)| {
@@ -380,16 +400,26 @@ pub fn scalar_product<E: Engine, CS: ConstraintSystem<E>>(
                 x.mul_assign(scalar);
                 acc.add_assign(&x);
                 acc
-            }))
+            });
+        if let Some(a) = to_add {
+            tmp.add_assign(&a);
+        }
+        Ok(tmp)
     })?;
 
     cs.enforce(
         || "scalar product constraint",
         |lc| {
-            scalars
+            let base = scalars
                 .iter()
                 .zip(nums)
-                .fold(lc, |acc, (scalar, num)| acc + (*scalar, num.get_variable()))
+                .fold(lc, |acc, (scalar, num)| acc + (*scalar, num.get_variable()));
+
+            if let Some(a) = to_add {
+                base + (a, CS::one())
+            } else {
+                base
+            }
         },
         |lc| lc + CS::one(),
         |lc| lc + product.get_variable(),
@@ -402,7 +432,7 @@ pub fn scalar_product<E: Engine, CS: ConstraintSystem<E>>(
 mod tests {
     use super::*;
     use crate::test::TestConstraintSystem;
-    use crate::{generate_mds, scalar_from_u64, Poseidon, ARITY, WIDTH};
+    use crate::{scalar_from_u64, Poseidon, ARITY};
     use bellperson::ConstraintSystem;
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
@@ -412,10 +442,7 @@ mod tests {
     fn test_poseidon_hash() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let t = WIDTH;
-        let cases = [(2, 536), (4, 820), (8, 1388)];
-
-        let matrix = generate_mds(WIDTH);
+        let cases = [(2, 426), (4, 608), (8, 972)];
 
         for (arity, constraints) in &cases {
             if *arity != ARITY {
@@ -471,7 +498,6 @@ mod tests {
     #[test]
     fn test_scalar_product() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
-
         let two = AllocatedNum::alloc(cs.namespace(|| "two"), || Ok(scalar_from_u64(2))).unwrap();
         let three =
             AllocatedNum::alloc(cs.namespace(|| "three"), || Ok(scalar_from_u64(3))).unwrap();
@@ -481,9 +507,28 @@ mod tests {
             cs,
             &[two, three, four],
             &[scalar_from_u64(5), scalar_from_u64(6), scalar_from_u64(7)],
+            None,
         )
         .unwrap();
 
         assert_eq!(scalar_from_u64(56), res.get_value().unwrap());
+    }
+    #[test]
+    fn test_scalar_product_with_add() {
+        let mut cs = TestConstraintSystem::<Bls12>::new();
+        let two = AllocatedNum::alloc(cs.namespace(|| "two"), || Ok(scalar_from_u64(2))).unwrap();
+        let three =
+            AllocatedNum::alloc(cs.namespace(|| "three"), || Ok(scalar_from_u64(3))).unwrap();
+        let four = AllocatedNum::alloc(cs.namespace(|| "four"), || Ok(scalar_from_u64(4))).unwrap();
+
+        let res = scalar_product(
+            cs,
+            &[two, three, four],
+            &[scalar_from_u64(5), scalar_from_u64(6), scalar_from_u64(7)],
+            Some(scalar_from_u64(3)),
+        )
+        .unwrap();
+
+        assert_eq!(scalar_from_u64(59), res.get_value().unwrap());
     }
 }

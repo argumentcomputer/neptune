@@ -1,10 +1,12 @@
 #![feature(external_doc)]
 #![deny(missing_docs)]
+#![allow(dead_code)]
 #![doc(include = "../README.md")]
 
 use lazy_static::*;
 
 pub use crate::poseidon::Poseidon;
+use crate::round_constants::generate_constants;
 pub use error::Error;
 use ff::{Field, PrimeField};
 pub use paired::bls12_381::Fr as Scalar;
@@ -13,6 +15,7 @@ use paired::bls12_381::FrRepr;
 mod circuit;
 mod error;
 mod poseidon;
+mod round_constants;
 mod test;
 
 include!("constants.rs");
@@ -26,11 +29,7 @@ pub const MAX_SUPPORTED_WIDTH: usize = 9;
 
 lazy_static! {
     static ref ROUND_CONSTANTS: [Scalar; 960] = {
-        // FIXME: These ark constants will not be correct, since we have changed curves. We need to figure out how to generate them ourselves.
-        // UPDATE: Note that the paper says, ' Note that cryptographically strong randomness is not needed for the round constants, and other methods can also be used.'
-        // So this may not matter for correctness, though we should still formally define these rather than use the initial magic binary still present now.
-        #![cfg_attr(feature = "cargo-clippy", allow(cast_ptr_alignment))]
-        let bytes = include_bytes!("../assets/ark.bin");
+        let bytes = round_constants(WIDTH);
         unsafe { std::ptr::read(bytes.as_ptr() as *const _) }
     };
     static ref MDS_MATRIX: [[Scalar; WIDTH]; WIDTH] = {
@@ -84,6 +83,45 @@ fn generate_mds(t: usize) -> Vec<Vec<Scalar>> {
     }
 
     matrix
+}
+
+/// From the paper ():
+/// The round constants are generated using the Grain LFSR [23] in a self-shrinking
+/// mode:
+/// 1. Initialize the state with 80 bits b0, b1, . . . , b79, where
+/// (a) b0, b1 describe the field,
+/// (b) bi for 2 ≤ i ≤ 5 describe the S-Box,
+/// (c) bi for 6 ≤ i ≤ 17 are the binary representation of n,
+/// (d) bi for 18 ≤ i ≤ 29 are the binary representation of t,
+/// (e) bi for 30 ≤ i ≤ 39 are the binary representation of RF ,
+/// (f) bi for 40 ≤ i ≤ 49 are the binary representation of RP , and
+/// (g) bi for 50 ≤ i ≤ 79 are set to 1.
+/// 2. Update the bits using bi+80 = bi+62 ⊕ bi+51 ⊕ bi+38 ⊕ bi+23 ⊕ bi+13 ⊕ bi
+/// .
+/// 3. Discard the first 160 bits.
+/// 4. Evaluate bits in pairs: If the first bit is a 1, output the second bit. If it is a
+/// 0, discard the second bit.
+/// Using this method, the generation of round constants depends on the specific
+/// instance, and thus different round constants are used even if some of the chosen
+/// parameters (e.g., n and t) are the same.
+/// If a randomly sampled integer is not in Fp, we discard this value and take the
+/// next one. Note that cryptographically strong randomness is not needed for the
+/// round constants, and other methods can also be used.
+
+const SBOX: u8 = 1; // x^5
+const FIELD: u8 = 1; // Gf(p)
+const FIELD_SIZE: usize = 255; // n  Maybe Get this from Scalar.
+const R_F_FIXED: u16 = FULL_ROUNDS as u16;
+const R_P_FIXED: u16 = PARTIAL_ROUNDS as u16;
+
+fn round_constants(arity: usize) -> Vec<Scalar> {
+    let t = arity + 1;
+    let n = t * FIELD_SIZE;
+
+    // TODO: These need to be derived from t
+    let r_f = R_F_FIXED;
+    let r_p = R_P_FIXED;
+    generate_constants(FIELD, SBOX, n as u16, t as u16, r_f, r_p)
 }
 
 #[cfg(test)]

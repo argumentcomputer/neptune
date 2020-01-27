@@ -200,35 +200,35 @@ mod tests {
     /// Simple test vectors to ensure results don't change unintentionally in development.
     fn hash_values() {
         let mut p = Poseidon::default();
-        let preimage = for n in 0..ARITY {
+        for n in 0..ARITY {
             p.input(scalar_from_u64(n as u64)).unwrap();
-        };
-
+        }
         let digest = p.hash();
         let expected = match ARITY {
             2 => scalar_from_u64s([
-                0x883386e89b61a399,
-                0x13115ec0c4fba96e,
-                0x92570f6e6bcddaab,
-                0x3b075e6db55140a6,
+                0x611a441e9e4a973c,
+                0x578e0f72da838698,
+                0x4dd701e0b45d07e0,
+                0x5610bed47fb4ca1e,
             ]),
             4 => scalar_from_u64s([
-                0xc1969fefd83163c7,
-                0x61928bd404ae61fd,
-                0xd88e682deb03a93b,
-                0x439ba37cacd37ed0,
+                0x9a2c84c72ff4029e,
+                0x74909cb435fe2159,
+                0xe6266f8b9cbb3570,
+                0x4af1ff49f2076ac4,
             ]),
             8 => scalar_from_u64s([
-                0xf9b3db559010f71f,
-                0x5a69b10daff97e0e,
-                0x74d8ee2fc76efc6e,
-                0x653b27f7635bd0e4,
+                0x3a261c43c7d513f1,
+                0xd90573f76693c368,
+                0x94f197e804c99da8,
+                0x02ff178318692402,
             ]),
             _ => {
                 dbg!(digest);
                 panic!("Arity lacks test vector: {}", ARITY)
             }
         };
-        assert_eq!(digest, expected);
+        dbg!(ARITY);
+        assert_eq!(expected, digest);
     }
 }
