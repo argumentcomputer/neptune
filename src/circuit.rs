@@ -432,7 +432,7 @@ pub fn scalar_product<E: Engine, CS: ConstraintSystem<E>>(
 mod tests {
     use super::*;
     use crate::test::TestConstraintSystem;
-    use crate::{generate_mds, scalar_from_u64, Poseidon, ARITY, WIDTH};
+    use crate::{scalar_from_u64, Poseidon, ARITY};
     use bellperson::ConstraintSystem;
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
@@ -442,10 +442,7 @@ mod tests {
     fn test_poseidon_hash() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let t = WIDTH;
         let cases = [(2, 426), (4, 608), (8, 972)];
-
-        let matrix = generate_mds(WIDTH);
 
         for (arity, constraints) in &cases {
             if *arity != ARITY {

@@ -1,5 +1,6 @@
 #![feature(external_doc)]
 #![deny(missing_docs)]
+#![allow(dead_code)]
 #![doc(include = "../README.md")]
 
 use lazy_static::*;
@@ -220,7 +221,7 @@ impl Iterator for Grain {
     fn next(&mut self) -> Option<Self::Item> {
         let mut new_bit = self.generate_new_bit();
         while !new_bit {
-            new_bit = self.generate_new_bit();
+            let _new_bit = self.generate_new_bit();
             new_bit = self.generate_new_bit();
         }
         new_bit = self.generate_new_bit();

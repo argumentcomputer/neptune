@@ -200,11 +200,8 @@ mod tests {
     /// Simple test vectors to ensure results don't change unintentionally in development.
     fn hash_values() {
         let mut p = Poseidon::default();
-        let preimage = for n in 0..ARITY {
+        for n in 0..ARITY {
             p.input(scalar_from_u64(n as u64)).unwrap();
-        };
-        for i in 0..10 {
-            dbg!(ROUND_CONSTANTS[i]);
         }
         let digest = p.hash();
         let expected = match ARITY {
