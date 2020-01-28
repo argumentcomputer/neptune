@@ -33,8 +33,8 @@ pub struct Poseidon<E: ScalarEngine> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PoseidonConstants<E: ScalarEngine> {
-    mds_matrix: Vec<Vec<E::Fr>>,
-    round_constants: Vec<E::Fr>,
+    pub mds_matrix: Vec<Vec<E::Fr>>,
+    pub round_constants: Vec<E::Fr>,
 }
 
 impl<E: ScalarEngine> PoseidonConstants<E> {
