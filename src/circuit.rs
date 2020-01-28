@@ -234,6 +234,7 @@ pub fn poseidon_hash<CS: ConstraintSystem<E>, E: Engine>(
     preimage.rotate_right(1);
 
     let mut p = PoseidonCircuit::new(preimage, matrix, round_constants::<E>(WIDTH));
+
     p.hash(cs)
 }
 

@@ -39,9 +39,10 @@ pub struct PoseidonConstants<E: ScalarEngine> {
 
 impl<E: ScalarEngine> PoseidonConstants<E> {
     fn new(arity: usize) -> Self {
+        let width = arity + 1;
         Self {
-            mds_matrix: generate_mds::<E>(arity + 1),
-            round_constants: round_constants::<E>(arity),
+            mds_matrix: generate_mds::<E>(width),
+            round_constants: round_constants::<E>(width),
         }
     }
 }
