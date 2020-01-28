@@ -1,6 +1,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ff::PrimeField;
 use neptune::*;
+use paired::bls12_381::Bls12;
 use rand::rngs::OsRng;
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256, Sha512};
@@ -9,7 +10,7 @@ fn bench_hash(c: &mut Criterion) {
     let scalars: Vec<Scalar> = std::iter::repeat(())
         .take(1000)
         .enumerate()
-        .map(|(i, _)| scalar_from_u64(i as u64))
+        .map(|(i, _)| scalar_from_u64::<Bls12>(i as u64))
         .collect();
 
     let mut group = c.benchmark_group(format!("hash-{}", ARITY * 32));
@@ -60,9 +61,9 @@ fn bench_hash(c: &mut Criterion) {
         BenchmarkId::new("Poseidon hash", "Generated scalars"),
         &scalars,
         |b, s| {
+            let mut h = Poseidon::<Bls12>::default();
             b.iter(|| {
-                let mut h = Poseidon::default();
-
+                h.reset();
                 std::iter::repeat(())
                     .take(ARITY)
                     .map(|_| s.choose(&mut OsRng).unwrap())
