@@ -9,7 +9,7 @@ build = "build.rs"
 
 [dependencies]
 lazy_static = "1.4.0"
-bellperson = "0.4.1"
+bellperson = "0.5.3"
 bincode = { version = "1.2", optional = true }
 paired = "0.16.0"
 ff = "=0.5.0"
