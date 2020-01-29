@@ -1,5 +1,6 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ff::PrimeField;
+use neptune::poseidon::PoseidonConstants;
 use neptune::*;
 use paired::bls12_381::Bls12;
 use rand::rngs::OsRng;
@@ -61,7 +62,8 @@ fn bench_hash(c: &mut Criterion) {
         BenchmarkId::new("Poseidon hash", "Generated scalars"),
         &scalars,
         |b, s| {
-            let mut h = Poseidon::<Bls12>::default();
+            let constants = PoseidonConstants::new(ARITY);
+            let mut h = Poseidon::<Bls12>::new(&constants);
             b.iter(|| {
                 h.reset();
                 std::iter::repeat(())

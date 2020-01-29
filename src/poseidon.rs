@@ -22,12 +22,12 @@ pub fn arity_tag<E: ScalarEngine>(arity: usize) -> E::Fr {
 /// The elements must implement [`ops::Mul`] against a [`Scalar`], because the MDS matrix and the
 /// round constants are set, by default, as scalars.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Poseidon<E: ScalarEngine> {
+pub struct Poseidon<'a, E: ScalarEngine> {
     constants_offset: usize,
     /// the elements to permute
     pub elements: [E::Fr; WIDTH],
     pos: usize,
-    constants: PoseidonConstants<E>,
+    constants: &'a PoseidonConstants<E>,
     _e: PhantomData<E>,
 }
 
@@ -38,7 +38,7 @@ pub struct PoseidonConstants<E: ScalarEngine> {
 }
 
 impl<E: ScalarEngine> PoseidonConstants<E> {
-    fn new(arity: usize) -> Self {
+    pub fn new(arity: usize) -> Self {
         let width = arity + 1;
         Self {
             mds_matrix: generate_mds::<E>(width),
@@ -47,27 +47,33 @@ impl<E: ScalarEngine> PoseidonConstants<E> {
     }
 }
 
-impl<E: ScalarEngine> Default for Poseidon<E> {
-    fn default() -> Self {
+impl<'a, E: ScalarEngine> Poseidon<'a, E> {
+    pub fn new(constants: &'a PoseidonConstants<E>) -> Self {
+        let arity_tag = arity_tag::<E>(ARITY); // TODO: Put this in constants.;
         let mut elements = [E::Fr::zero(); WIDTH];
-        elements[0] = arity_tag::<E>(ARITY);
+        elements[0] = arity_tag;
+
         Poseidon {
             constants_offset: 0,
-            elements,
+            elements: elements,
             pos: 1,
-            constants: PoseidonConstants::new(ARITY),
+            constants,
             _e: PhantomData::<E>,
         }
     }
-}
-
-impl<E: ScalarEngine> Poseidon<E> {
-    /// Create a new Poseidon hasher for `preimage`.
-    pub fn new(preimage: &[E::Fr]) -> Self {
-        let mut p = Poseidon::default();
-
-        p.set_preimage(preimage);
-        p
+    pub fn new_with_preimage(preimage: &[E::Fr], constants: &'a PoseidonConstants<E>) -> Self {
+        let arity_tag = arity_tag::<E>(ARITY); // TODO: Put this in constants.;
+        let mut elements = [arity_tag; WIDTH];
+        for i in 1..WIDTH {
+            elements[i] = preimage[i - 1];
+        }
+        Poseidon {
+            constants_offset: 0,
+            elements: elements,
+            pos: WIDTH,
+            constants,
+            _e: PhantomData::<E>,
+        }
     }
 
     /// Replace the elements with the provided optional items.
@@ -189,7 +195,8 @@ fn quintic_s_box<E: ScalarEngine>(l: &mut E::Fr) {
     l.mul_assign(&tmp);
 }
 
-/// Poseidon hash function
+/// Poseidon convenience hash function.
+/// NOTE: this is expensive, since it computes all constants when initializing hasher struct.
 pub fn poseidon<E: ScalarEngine>(preimage: &[E::Fr]) -> E::Fr {
     assert_eq!(
         ARITY,
@@ -198,7 +205,8 @@ pub fn poseidon<E: ScalarEngine>(preimage: &[E::Fr]) -> E::Fr {
         ARITY,
         preimage.len()
     );
-    Poseidon::<E>::new(preimage).hash()
+    let constants = PoseidonConstants::new(ARITY);
+    Poseidon::<E>::new_with_preimage(preimage, &constants).hash()
 }
 
 #[cfg(test)]
@@ -210,11 +218,12 @@ mod tests {
     #[test]
     fn reset() {
         let preimage: [Scalar; ARITY] = [Scalar::one(); ARITY];
-        let mut h = Poseidon::<Bls12>::new(&preimage);
+        let constants = PoseidonConstants::new(ARITY);
+        let mut h = Poseidon::<Bls12>::new_with_preimage(&preimage, &constants);
         h.hash();
         h.reset();
 
-        let default = Poseidon::<Bls12>::default();
+        let default = Poseidon::<Bls12>::new(&constants);
         assert_eq!(default.pos, h.pos);
         assert_eq!(default.elements, h.elements);
         assert_eq!(default.constants_offset, h.constants_offset);
@@ -223,9 +232,10 @@ mod tests {
     #[test]
     fn hash_det() {
         let mut preimage: [Scalar; ARITY] = [Scalar::zero(); ARITY];
+        let constants = PoseidonConstants::new(ARITY);
         preimage[0] = Scalar::one();
 
-        let mut h = Poseidon::<Bls12>::new(&preimage);
+        let mut h = Poseidon::<Bls12>::new_with_preimage(&preimage, &constants);
 
         let mut h2 = h.clone();
         let result: <Bls12 as ScalarEngine>::Fr = h.hash();
@@ -236,7 +246,8 @@ mod tests {
     #[test]
     /// Simple test vectors to ensure results don't change unintentionally in development.
     fn hash_values() {
-        let mut p = Poseidon::<Bls12>::default();
+        let constants = PoseidonConstants::new(ARITY);
+        let mut p = Poseidon::<Bls12>::new(&constants);
         let mut preimage = [Scalar::zero(); ARITY];
         for n in 0..ARITY {
             let scalar = scalar_from_u64::<Bls12>(n as u64);
