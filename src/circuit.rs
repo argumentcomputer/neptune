@@ -1,27 +1,27 @@
-use crate::poseidon::{arity_tag, PoseidonConstants};
-use crate::{generate_mds, round_constants, ARITY, FULL_ROUNDS, PARTIAL_ROUNDS, WIDTH};
+use crate::poseidon::PoseidonConstants;
+use crate::{ARITY, FULL_ROUNDS, PARTIAL_ROUNDS, WIDTH};
 
 use bellperson::gadgets::num::AllocatedNum;
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::Field;
-use paired::Engine;
+use ff::ScalarEngine as Engine;
 
 #[derive(Clone)]
 /// Circuit for Poseidon hash.
-pub struct PoseidonCircuit<E: Engine> {
+pub struct PoseidonCircuit<'a, E: Engine> {
     constants_offset: usize,
     width: usize,
     elements: Vec<AllocatedNum<E>>,
     pos: usize,
     full_rounds: usize,
     partial_rounds: usize,
-    constants: PoseidonConstants<E>,
+    constants: &'a PoseidonConstants<E>,
 }
 
 /// PoseidonCircuit implementation.
-impl<E: Engine> PoseidonCircuit<E> {
+impl<'a, E: Engine> PoseidonCircuit<'a, E> {
     /// Create a new Poseidon hasher for `preimage`.
-    pub fn new(elements: Vec<AllocatedNum<E>>, constants: PoseidonConstants<E>) -> Self {
+    pub fn new(elements: Vec<AllocatedNum<E>>, constants: &'a PoseidonConstants<E>) -> Self {
         let width = WIDTH;
 
         PoseidonCircuit {
@@ -193,10 +193,10 @@ impl<E: Engine> PoseidonCircuit<E> {
 pub fn poseidon_hash<CS: ConstraintSystem<E>, E: Engine>(
     mut cs: CS,
     mut preimage: Vec<AllocatedNum<E>>,
-    constants: PoseidonConstants<E>,
+    constants: &PoseidonConstants<E>,
 ) -> Result<AllocatedNum<E>, SynthesisError> {
     // Add the arity tag to the front of the preimage.
-    let tag = arity_tag::<E>(ARITY);
+    let tag = constants.arity_tag; // This could be shared across hash invocations within a circuit. TODO: add a mechanism for any such shared allocations.
     let tag_num = AllocatedNum::alloc(cs.namespace(|| "arity tag"), || Ok(tag))?;
     preimage.push(tag_num);
     preimage.rotate_right(1);
@@ -206,20 +206,14 @@ pub fn poseidon_hash<CS: ConstraintSystem<E>, E: Engine>(
 }
 
 pub fn create_poseidon_parameters<E: Engine>() -> PoseidonConstants<E> {
-    let round_constants = round_constants::<E>(WIDTH);
-    let mds_matrix: Vec<Vec<_>> = generate_mds::<E>(WIDTH);
-
-    PoseidonConstants::<E> {
-        round_constants,
-        mds_matrix,
-    }
+    PoseidonConstants::new(ARITY)
 }
 
 pub fn poseidon_hash_simple<CS: ConstraintSystem<E>, E: Engine>(
     cs: CS,
     preimage: Vec<AllocatedNum<E>>,
 ) -> Result<AllocatedNum<E>, SynthesisError> {
-    poseidon_hash(cs, preimage, create_poseidon_parameters::<E>())
+    poseidon_hash(cs, preimage, &create_poseidon_parameters::<E>())
 }
 
 /// Compute l^5 and enforce constraint. If round_key is supplied, add it to l first.
@@ -470,9 +464,10 @@ mod tests {
                 })
                 .collect::<Vec<_>>();
 
-            let out = poseidon_hash_simple(&mut cs, data).expect("poseidon hashing failed");
+            let constants = PoseidonConstants::new(ARITY);
+            let out = poseidon_hash(&mut cs, data, &constants).expect("poseidon hashing failed");
 
-            let mut p = Poseidon::<Bls12>::new(&fr_data);
+            let mut p = Poseidon::<Bls12>::new_with_preimage(&fr_data, &constants);
             let expected: Fr = p.hash();
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
