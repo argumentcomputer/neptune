@@ -8,7 +8,7 @@ fn main() {
     let dest_path = Path::new(&out_dir).join("src").join("constants.rs");
     let mut f = File::create(&dest_path).expect("Could not create file");
 
-    let default_arity = 8;
+    let default_arity = 2;
 
     let arity = env::var("POSEIDON_ARITY")
         .map(|s| s.parse().expect("Failed to parse POSEIDON_ARITY"))

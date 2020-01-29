@@ -1,5 +1,4 @@
 #![feature(external_doc)]
-#![deny(missing_docs)]
 #![allow(dead_code)]
 #![doc(include = "../README.md")]
 
@@ -8,13 +7,16 @@ use lazy_static::*;
 pub use crate::poseidon::Poseidon;
 use crate::round_constants::generate_constants;
 pub use error::Error;
-use ff::{Field, PrimeField};
+use ff::ScalarEngine as Engine;
+use ff::{Field, PrimeField, ScalarEngine};
 pub use paired::bls12_381::Fr as Scalar;
-use paired::bls12_381::FrRepr;
+use paired::bls12_381::{Bls12, FrRepr};
 
-mod circuit;
+/// Poseidon circuit
+pub mod circuit;
 mod error;
-mod poseidon;
+/// Poseidon hash
+pub mod poseidon;
 mod round_constants;
 mod test;
 
@@ -29,12 +31,12 @@ pub const MAX_SUPPORTED_WIDTH: usize = 9;
 
 lazy_static! {
     static ref ROUND_CONSTANTS: [Scalar; 960] = {
-        let bytes = round_constants(WIDTH);
+        let bytes = round_constants::<Bls12>(WIDTH);
         unsafe { std::ptr::read(bytes.as_ptr() as *const _) }
     };
     static ref MDS_MATRIX: [[Scalar; WIDTH]; WIDTH] = {
         let mut matrix: [[Scalar; WIDTH]; WIDTH] = [[Scalar::one(); WIDTH]; WIDTH];
-        for (i, row) in generate_mds(WIDTH).iter_mut().enumerate() {
+        for (i, row) in generate_mds::<Bls12>(WIDTH).iter_mut().enumerate() {
             matrix[i].copy_from_slice(&row[..]);
         }
         matrix
@@ -42,8 +44,8 @@ lazy_static! {
 }
 
 /// convert
-pub fn scalar_from_u64(i: u64) -> Scalar {
-    Scalar::from_repr(paired::bls12_381::FrRepr::from(i)).unwrap()
+pub fn scalar_from_u64<E: ScalarEngine>(i: u64) -> E::Fr {
+    <E::Fr as PrimeField>::from_repr(<<E::Fr as PrimeField>::Repr as From<u64>>::from(i)).unwrap()
 }
 
 /// create field element from four u64
@@ -51,10 +53,10 @@ pub fn scalar_from_u64s(parts: [u64; 4]) -> Scalar {
     Scalar::from_repr(FrRepr(parts)).unwrap()
 }
 
-fn generate_mds(t: usize) -> Vec<Vec<Scalar>> {
-    let mut matrix: Vec<Vec<Scalar>> = Vec::with_capacity(t);
-    let mut xs: Vec<Scalar> = Vec::with_capacity(t);
-    let mut ys: Vec<Scalar> = Vec::with_capacity(t);
+fn generate_mds<E: Engine>(t: usize) -> Vec<Vec<E::Fr>> {
+    let mut matrix: Vec<Vec<E::Fr>> = Vec::with_capacity(t);
+    let mut xs: Vec<E::Fr> = Vec::with_capacity(t);
+    let mut ys: Vec<E::Fr> = Vec::with_capacity(t);
 
     // Generate x and y values deterministically for the cauchy matrix
     // where x[i] != y[i] to allow the values to be inverted
@@ -64,14 +66,14 @@ fn generate_mds(t: usize) -> Vec<Vec<Scalar>> {
     // det(M) = (ad - bc) ; if a == b and c == d => det(M) =0
     // For an MDS matrix, every possible mxm submatrix, must have det(M) != 0
     for i in 0..t {
-        let x = scalar_from_u64((i) as u64);
-        let y = scalar_from_u64((i + t) as u64);
+        let x = scalar_from_u64::<E>((i) as u64);
+        let y = scalar_from_u64::<E>((i + t) as u64);
         xs.push(x);
         ys.push(y);
     }
 
     for i in 0..t {
-        let mut row: Vec<Scalar> = Vec::with_capacity(t);
+        let mut row: Vec<E::Fr> = Vec::with_capacity(t);
         for j in 0..t {
             // Generate the entry at (i,j)
             let mut entry = xs[i];
@@ -114,14 +116,14 @@ const FIELD_SIZE: usize = 255; // n  Maybe Get this from Scalar.
 const R_F_FIXED: u16 = FULL_ROUNDS as u16;
 const R_P_FIXED: u16 = PARTIAL_ROUNDS as u16;
 
-fn round_constants(arity: usize) -> Vec<Scalar> {
+fn round_constants<E: ScalarEngine>(arity: usize) -> Vec<E::Fr> {
     let t = arity + 1;
     let n = t * FIELD_SIZE;
 
     // TODO: These need to be derived from t
     let r_f = R_F_FIXED;
     let r_p = R_P_FIXED;
-    generate_constants(FIELD, SBOX, n as u16, t as u16, r_f, r_p)
+    generate_constants::<E>(FIELD, SBOX, n as u16, t as u16, r_f, r_p)
 }
 
 #[cfg(test)]

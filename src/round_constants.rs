@@ -1,12 +1,16 @@
-pub use crate::poseidon::Poseidon;
 pub use crate::Error;
 use ff::{PrimeField, PrimeFieldDecodingError, PrimeFieldRepr, ScalarEngine};
-use paired::bls12_381::Bls12;
 pub use paired::bls12_381::Fr as Scalar;
-use paired::Engine;
 
 /// Following https://extgit.iaik.tugraz.at/krypto/hadeshash/blob/master/code/scripts/create_rcs_grain.sage
-pub fn generate_constants(field: u8, sbox: u8, n: u16, t: u16, r_f: u16, r_p: u16) -> Vec<Scalar> {
+pub fn generate_constants<E: ScalarEngine>(
+    field: u8,
+    sbox: u8,
+    n: u16,
+    t: u16,
+    r_f: u16,
+    r_p: u16,
+) -> Vec<E::Fr> {
     let num_constants = (r_f + r_p) * t;
     let bit_list_field: u128 = (field & 0b11).into(); // Bits 0-1
     let bit_list_sbox: u128 = ((sbox & 0b1111) << 2).into(); // Bits 2-5
@@ -24,14 +28,14 @@ pub fn generate_constants(field: u8, sbox: u8, n: u16, t: u16, r_f: u16, r_p: u1
         + bit_list_1;
 
     let mut grain = Grain::new(init_sequence);
-    let mut round_constants: Vec<Scalar> = Vec::new();
+    let mut round_constants: Vec<E::Fr> = Vec::new();
     match field {
         1 => {
             for _ in 0..num_constants {
                 while {
                     let mut bytes = [0u8; 32];
                     grain.get_next_bytes(&mut bytes);
-                    if let Ok(f) = bytes_into_fr::<Bls12>(&mut bytes) {
+                    if let Ok(f) = bytes_into_fr::<E>(&mut bytes) {
                         round_constants.push(f);
                         false
                     } else {
@@ -140,7 +144,7 @@ pub fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
 
 // Takes a slice of bytes and returns an Fr if byte slice is exactly 32 bytes and does not overflow.
 // Otherwise, returns a BadFrBytesError.
-fn bytes_into_fr<E: Engine>(bytes: &[u8]) -> Result<E::Fr, PrimeFieldDecodingError> {
+fn bytes_into_fr<E: ScalarEngine>(bytes: &[u8]) -> Result<E::Fr, PrimeFieldDecodingError> {
     assert_eq!(bytes.len(), 32);
 
     let mut fr_repr = <<<E as ScalarEngine>::Fr as PrimeField>::Repr as Default>::default();

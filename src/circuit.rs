@@ -1,42 +1,37 @@
-use crate::poseidon::ARITY_TAG;
-use crate::{FULL_ROUNDS, MDS_MATRIX, PARTIAL_ROUNDS, ROUND_CONSTANTS, WIDTH};
+use crate::poseidon::{arity_tag, PoseidonConstants};
+use crate::{generate_mds, round_constants, ARITY, FULL_ROUNDS, PARTIAL_ROUNDS, WIDTH};
 
 use bellperson::gadgets::num::AllocatedNum;
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::Field;
-use paired::bls12_381::Bls12;
 use paired::Engine;
 
 #[derive(Clone)]
+/// Circuit for Poseidon hash.
 pub struct PoseidonCircuit<E: Engine> {
     constants_offset: usize,
-    round_constants: Vec<E::Fr>,
     width: usize,
     elements: Vec<AllocatedNum<E>>,
     pos: usize,
     full_rounds: usize,
     partial_rounds: usize,
-    mds_matrix: Vec<Vec<E::Fr>>,
+    constants: PoseidonConstants<E>,
 }
 
+/// PoseidonCircuit implementation.
 impl<E: Engine> PoseidonCircuit<E> {
     /// Create a new Poseidon hasher for `preimage`.
-    pub fn new(
-        elements: Vec<AllocatedNum<E>>,
-        matrix: Vec<Vec<E::Fr>>,
-        round_constants: Vec<E::Fr>,
-    ) -> Self {
+    pub fn new(elements: Vec<AllocatedNum<E>>, constants: PoseidonConstants<E>) -> Self {
         let width = WIDTH;
 
         PoseidonCircuit {
             constants_offset: 0,
-            round_constants,
             width,
             elements,
             pos: width,
             full_rounds: FULL_ROUNDS,
             partial_rounds: PARTIAL_ROUNDS,
-            mds_matrix: matrix,
+            constants,
         }
     }
 
@@ -66,7 +61,7 @@ impl<E: Engine> PoseidonCircuit<E> {
 
         // Apply the quintic S-Box to all elements
         for i in 0..self.elements.len() {
-            let round_key = self.round_constants[constants_offset];
+            let round_key = self.constants.round_constants[constants_offset];
             constants_offset += 1;
 
             self.elements[i] = quintic_s_box(
@@ -83,7 +78,7 @@ impl<E: Engine> PoseidonCircuit<E> {
     }
 
     fn partial_round<CS: ConstraintSystem<E>>(&mut self, mut cs: CS) -> Result<(), SynthesisError> {
-        let round_key = self.round_constants[self.constants_offset];
+        let round_key = self.constants.round_constants[self.constants_offset];
         self.constants_offset += 1;
         // Apply the quintic S-Box to the first element.
         self.elements[0] = quintic_s_box(
@@ -106,14 +101,14 @@ impl<E: Engine> PoseidonCircuit<E> {
         let mut result: Vec<AllocatedNum<E>> = Vec::with_capacity(WIDTH);
 
         for j in 0..WIDTH {
-            let column = self.mds_matrix[j].to_vec();
+            let column = self.constants.mds_matrix[j].to_vec();
             // TODO: This could be cached per round to save synthesis time.
             let constant_term = if add_round_keys {
                 let mut acc = E::Fr::zero();
                 // Dot product of column and this round's keys.
                 for k in 1..WIDTH {
                     let mut tmp = column[k];
-                    let rk = self.round_constants[self.constants_offset + k - 1];
+                    let rk = self.constants.round_constants[self.constants_offset + k - 1];
                     tmp.mul_assign(&rk);
                     acc.add_assign(&tmp);
                 }
@@ -152,7 +147,7 @@ impl<E: Engine> PoseidonCircuit<E> {
         &mut self,
         mut cs: CS,
     ) -> Result<(), SynthesisError> {
-        let round_key = self.round_constants[self.constants_offset];
+        let round_key = self.constants.round_constants[self.constants_offset];
         self.constants_offset += 1;
         // Apply the quintic S-Box to the first element.
         self.elements[0] = quintic_s_box(
@@ -178,7 +173,7 @@ impl<E: Engine> PoseidonCircuit<E> {
         let start = if skip_first { 1 } else { 0 };
 
         for i in start..self.elements.len() {
-            let constant = &self.round_constants[constants_offset];
+            let constant = &self.constants.round_constants[constants_offset];
             constants_offset += 1;
 
             self.elements[i] = add(
@@ -194,23 +189,37 @@ impl<E: Engine> PoseidonCircuit<E> {
     }
 }
 
-fn poseidon_hash<CS: ConstraintSystem<Bls12>>(
+/// Create circuit for Poseidon hash.
+pub fn poseidon_hash<CS: ConstraintSystem<E>, E: Engine>(
     mut cs: CS,
-    mut preimage: Vec<AllocatedNum<Bls12>>,
-) -> Result<AllocatedNum<Bls12>, SynthesisError> {
-    let mut matrix: Vec<Vec<_>> = Vec::new();
-
-    for column in &*MDS_MATRIX {
-        matrix.push(column.to_vec());
-    }
-
+    mut preimage: Vec<AllocatedNum<E>>,
+    constants: PoseidonConstants<E>,
+) -> Result<AllocatedNum<E>, SynthesisError> {
     // Add the arity tag to the front of the preimage.
-    let arity_tag = AllocatedNum::alloc(cs.namespace(|| "arity tag"), || Ok(*ARITY_TAG))?;
-    preimage.push(arity_tag);
+    let tag = arity_tag::<E>(ARITY);
+    let tag_num = AllocatedNum::alloc(cs.namespace(|| "arity tag"), || Ok(tag))?;
+    preimage.push(tag_num);
     preimage.rotate_right(1);
+    let mut p = PoseidonCircuit::new(preimage, constants);
 
-    let mut p = PoseidonCircuit::new(preimage, matrix, (&*ROUND_CONSTANTS).to_vec());
     p.hash(cs)
+}
+
+pub fn create_poseidon_parameters<E: Engine>() -> PoseidonConstants<E> {
+    let round_constants = round_constants::<E>(WIDTH);
+    let mds_matrix: Vec<Vec<_>> = generate_mds::<E>(WIDTH);
+
+    PoseidonConstants::<E> {
+        round_constants,
+        mds_matrix,
+    }
+}
+
+pub fn poseidon_hash_simple<CS: ConstraintSystem<E>, E: Engine>(
+    cs: CS,
+    preimage: Vec<AllocatedNum<E>>,
+) -> Result<AllocatedNum<E>, SynthesisError> {
+    poseidon_hash(cs, preimage, create_poseidon_parameters::<E>())
 }
 
 /// Compute l^5 and enforce constraint. If round_key is supplied, add it to l first.
@@ -298,7 +307,7 @@ where
 /// Adds a constraint to CS, enforcing that a + b = sum.
 ///
 /// a + b = sum
-pub fn sum<E: Engine, A, AR, CS: ConstraintSystem<E>>(
+fn sum<E: Engine, A, AR, CS: ConstraintSystem<E>>(
     cs: &mut CS,
     annotation: A,
     a: &AllocatedNum<E>,
@@ -318,7 +327,7 @@ pub fn sum<E: Engine, A, AR, CS: ConstraintSystem<E>>(
 }
 
 /// Adds a constraint to CS, enforcing that sum is the sum of nums.
-pub fn multi_sum<E: Engine, A, AR, CS: ConstraintSystem<E>>(
+fn multi_sum<E: Engine, A, AR, CS: ConstraintSystem<E>>(
     cs: &mut CS,
     annotation: A,
     nums: &[AllocatedNum<E>],
@@ -336,7 +345,7 @@ pub fn multi_sum<E: Engine, A, AR, CS: ConstraintSystem<E>>(
     );
 }
 
-pub fn add<E: Engine, CS: ConstraintSystem<E>>(
+fn add<E: Engine, CS: ConstraintSystem<E>>(
     mut cs: CS,
     a: &AllocatedNum<E>,
     b: &E::Fr,
@@ -361,7 +370,7 @@ pub fn add<E: Engine, CS: ConstraintSystem<E>>(
     Ok(sum)
 }
 
-pub fn multi_add<E: Engine, CS: ConstraintSystem<E>>(
+fn multi_add<E: Engine, CS: ConstraintSystem<E>>(
     mut cs: CS,
     nums: &[AllocatedNum<E>],
 ) -> Result<AllocatedNum<E>, SynthesisError> {
@@ -382,7 +391,7 @@ pub fn multi_add<E: Engine, CS: ConstraintSystem<E>>(
     Ok(res)
 }
 
-pub fn scalar_product<E: Engine, CS: ConstraintSystem<E>>(
+fn scalar_product<E: Engine, CS: ConstraintSystem<E>>(
     mut cs: CS,
     nums: &[AllocatedNum<E>],
     scalars: &[E::Fr],
@@ -461,10 +470,10 @@ mod tests {
                 })
                 .collect::<Vec<_>>();
 
-            let out = poseidon_hash(&mut cs, data).expect("poseidon hashing failed");
+            let out = poseidon_hash_simple(&mut cs, data).expect("poseidon hashing failed");
 
-            let mut p = Poseidon::new(fr_data);
-            let expected = p.hash();
+            let mut p = Poseidon::<Bls12>::new(&fr_data);
+            let expected: Fr = p.hash();
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
@@ -486,49 +495,65 @@ mod tests {
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
         let mut cs1 = cs.namespace(|| "square_sum");
-        let two = scalar_from_u64(2);
-        let three =
-            AllocatedNum::alloc(cs1.namespace(|| "three"), || Ok(scalar_from_u64(3))).unwrap();
+        let two = scalar_from_u64::<Bls12>(2);
+        let three = AllocatedNum::alloc(cs1.namespace(|| "three"), || {
+            Ok(scalar_from_u64::<Bls12>(3))
+        })
+        .unwrap();
         let res = square_sum(cs1, two, &three).unwrap();
 
-        let twenty_five = scalar_from_u64(25);
+        let twenty_five: Fr = scalar_from_u64::<Bls12>(25);
         assert_eq!(twenty_five, res.get_value().unwrap());
     }
 
     #[test]
     fn test_scalar_product() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        let two = AllocatedNum::alloc(cs.namespace(|| "two"), || Ok(scalar_from_u64(2))).unwrap();
+        let two = AllocatedNum::alloc(cs.namespace(|| "two"), || Ok(scalar_from_u64::<Bls12>(2)))
+            .unwrap();
         let three =
-            AllocatedNum::alloc(cs.namespace(|| "three"), || Ok(scalar_from_u64(3))).unwrap();
-        let four = AllocatedNum::alloc(cs.namespace(|| "four"), || Ok(scalar_from_u64(4))).unwrap();
+            AllocatedNum::alloc(cs.namespace(|| "three"), || Ok(scalar_from_u64::<Bls12>(3)))
+                .unwrap();
+        let four = AllocatedNum::alloc(cs.namespace(|| "four"), || Ok(scalar_from_u64::<Bls12>(4)))
+            .unwrap();
 
         let res = scalar_product(
             cs,
             &[two, three, four],
-            &[scalar_from_u64(5), scalar_from_u64(6), scalar_from_u64(7)],
+            &[
+                scalar_from_u64::<Bls12>(5),
+                scalar_from_u64::<Bls12>(6),
+                scalar_from_u64::<Bls12>(7),
+            ],
             None,
         )
         .unwrap();
 
-        assert_eq!(scalar_from_u64(56), res.get_value().unwrap());
+        assert_eq!(scalar_from_u64::<Bls12>(56), res.get_value().unwrap());
     }
     #[test]
     fn test_scalar_product_with_add() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        let two = AllocatedNum::alloc(cs.namespace(|| "two"), || Ok(scalar_from_u64(2))).unwrap();
+        let two = AllocatedNum::alloc(cs.namespace(|| "two"), || Ok(scalar_from_u64::<Bls12>(2)))
+            .unwrap();
         let three =
-            AllocatedNum::alloc(cs.namespace(|| "three"), || Ok(scalar_from_u64(3))).unwrap();
-        let four = AllocatedNum::alloc(cs.namespace(|| "four"), || Ok(scalar_from_u64(4))).unwrap();
+            AllocatedNum::alloc(cs.namespace(|| "three"), || Ok(scalar_from_u64::<Bls12>(3)))
+                .unwrap();
+        let four = AllocatedNum::alloc(cs.namespace(|| "four"), || Ok(scalar_from_u64::<Bls12>(4)))
+            .unwrap();
 
         let res = scalar_product(
             cs,
             &[two, three, four],
-            &[scalar_from_u64(5), scalar_from_u64(6), scalar_from_u64(7)],
-            Some(scalar_from_u64(3)),
+            &[
+                scalar_from_u64::<Bls12>(5),
+                scalar_from_u64::<Bls12>(6),
+                scalar_from_u64::<Bls12>(7),
+            ],
+            Some(scalar_from_u64::<Bls12>(3)),
         )
         .unwrap();
 
-        assert_eq!(scalar_from_u64(59), res.get_value().unwrap());
+        assert_eq!(scalar_from_u64::<Bls12>(59), res.get_value().unwrap());
     }
 }
