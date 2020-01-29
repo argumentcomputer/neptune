@@ -189,27 +189,6 @@ impl<E: Engine> PoseidonCircuit<E> {
     }
 }
 
-// /// Create circuit for Poseidon hash.
-// pub fn poseidon_hash_x<CS: ConstraintSystem<paired::bls12_381::Bls12>>(
-//     mut cs: CS,
-//     mut preimage: Vec<AllocatedNum<paired::bls12_381::Bls12>>,
-// ) -> Result<AllocatedNum<paired::bls12_381::Bls12>, SynthesisError> {
-//     let mut matrix: Vec<Vec<_>> = Vec::new();
-//     for column in &*MDS_MATRIX {
-//         matrix.push(column.to_vec());
-//     }
-
-//     // Add the arity tag to the front of the preimage.
-//     let tag = *ARITY_TAG;
-//     let tag_num = AllocatedNum::alloc(cs.namespace(|| "arity tag"), || Ok(tag))?;
-//     preimage.push(tag_num);
-//     preimage.rotate_right(1);
-
-//     let mut p = PoseidonCircuit::new(preimage, matrix, (&*ROUND_CONSTANTS).to_vec());
-
-//     p.hash(cs)
-// }
-
 /// Create circuit for Poseidon hash.
 pub fn poseidon_hash<CS: ConstraintSystem<E>, E: Engine>(
     mut cs: CS,
@@ -226,19 +205,21 @@ pub fn poseidon_hash<CS: ConstraintSystem<E>, E: Engine>(
     p.hash(cs)
 }
 
+pub fn create_poseidon_parameters<E: Engine>() -> PoseidonConstants<E> {
+    let round_constants = round_constants::<E>(WIDTH);
+    let mds_matrix: Vec<Vec<_>> = generate_mds::<E>(WIDTH);
+
+    PoseidonConstants::<E> {
+        round_constants,
+        mds_matrix,
+    }
+}
+
 pub fn poseidon_hash_simple<CS: ConstraintSystem<E>, E: Engine>(
     cs: CS,
     preimage: Vec<AllocatedNum<E>>,
 ) -> Result<AllocatedNum<E>, SynthesisError> {
-    let round_constants = round_constants::<E>(WIDTH);
-    let mds_matrix: Vec<Vec<_>> = generate_mds::<E>(WIDTH);
-
-    let constants = PoseidonConstants::<E> {
-        round_constants,
-        mds_matrix,
-    };
-
-    poseidon_hash(cs, preimage, constants)
+    poseidon_hash(cs, preimage, create_poseidon_parameters::<E>())
 }
 
 /// Compute l^5 and enforce constraint. If round_key is supplied, add it to l first.
