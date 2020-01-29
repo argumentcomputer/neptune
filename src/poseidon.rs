@@ -35,6 +35,8 @@ pub struct Poseidon<'a, E: ScalarEngine> {
 pub struct PoseidonConstants<E: ScalarEngine> {
     pub mds_matrix: Vec<Vec<E::Fr>>,
     pub round_constants: Vec<E::Fr>,
+    pub arity_tag: E::Fr,
+    pub width: usize,
 }
 
 impl<E: ScalarEngine> PoseidonConstants<E> {
@@ -43,15 +45,16 @@ impl<E: ScalarEngine> PoseidonConstants<E> {
         Self {
             mds_matrix: generate_mds::<E>(width),
             round_constants: round_constants::<E>(width),
+            arity_tag: arity_tag::<E>(arity),
+            width: width,
         }
     }
 }
 
 impl<'a, E: ScalarEngine> Poseidon<'a, E> {
     pub fn new(constants: &'a PoseidonConstants<E>) -> Self {
-        let arity_tag = arity_tag::<E>(ARITY); // TODO: Put this in constants.;
         let mut elements = [E::Fr::zero(); WIDTH];
-        elements[0] = arity_tag;
+        elements[0] = constants.arity_tag;
 
         Poseidon {
             constants_offset: 0,
@@ -62,8 +65,7 @@ impl<'a, E: ScalarEngine> Poseidon<'a, E> {
         }
     }
     pub fn new_with_preimage(preimage: &[E::Fr], constants: &'a PoseidonConstants<E>) -> Self {
-        let arity_tag = arity_tag::<E>(ARITY); // TODO: Put this in constants.;
-        let mut elements = [arity_tag; WIDTH];
+        let mut elements = [constants.arity_tag; WIDTH];
         for i in 1..WIDTH {
             elements[i] = preimage[i - 1];
         }
@@ -92,7 +94,7 @@ impl<'a, E: ScalarEngine> Poseidon<'a, E> {
         self.elements[1..]
             .iter_mut()
             .for_each(|l| *l = scalar_from_u64::<E>(0u64));
-        self.elements[0] = arity_tag::<E>(ARITY);
+        self.elements[0] = self.constants.arity_tag;
         self.pos = 1;
     }
 

@@ -1,5 +1,5 @@
-use crate::poseidon::{arity_tag, PoseidonConstants};
-use crate::{generate_mds, round_constants, ARITY, FULL_ROUNDS, PARTIAL_ROUNDS, WIDTH};
+use crate::poseidon::PoseidonConstants;
+use crate::{ARITY, FULL_ROUNDS, PARTIAL_ROUNDS, WIDTH};
 
 use bellperson::gadgets::num::AllocatedNum;
 use bellperson::{ConstraintSystem, SynthesisError};
@@ -196,7 +196,7 @@ pub fn poseidon_hash<CS: ConstraintSystem<E>, E: Engine>(
     constants: &PoseidonConstants<E>,
 ) -> Result<AllocatedNum<E>, SynthesisError> {
     // Add the arity tag to the front of the preimage.
-    let tag = arity_tag::<E>(ARITY);
+    let tag = constants.arity_tag; // This could be shared across hash invocations within a circuit. TODO: add a mechanism for any such shared allocations.
     let tag_num = AllocatedNum::alloc(cs.namespace(|| "arity tag"), || Ok(tag))?;
     preimage.push(tag_num);
     preimage.rotate_right(1);
@@ -206,13 +206,7 @@ pub fn poseidon_hash<CS: ConstraintSystem<E>, E: Engine>(
 }
 
 pub fn create_poseidon_parameters<E: Engine>() -> PoseidonConstants<E> {
-    let round_constants = round_constants::<E>(WIDTH);
-    let mds_matrix: Vec<Vec<_>> = generate_mds::<E>(WIDTH);
-
-    PoseidonConstants::<E> {
-        round_constants,
-        mds_matrix,
-    }
+    PoseidonConstants::new(ARITY)
 }
 
 pub fn poseidon_hash_simple<CS: ConstraintSystem<E>, E: Engine>(
