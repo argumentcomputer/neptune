@@ -187,14 +187,17 @@ fn quintic_s_box<E: ScalarEngine>(l: &mut E::Fr) {
     tmp.mul_assign(&c);
     tmp.mul_assign(&tmp.clone());
     l.mul_assign(&tmp);
-
-    // for _ in 0..4 {
-    //     l.mul_assign(&c);
-    // }
 }
 
 /// Poseidon hash function
 pub fn poseidon<E: ScalarEngine>(preimage: &[E::Fr]) -> E::Fr {
+    assert_eq!(
+        ARITY,
+        preimage.len(),
+        "Preimage should contain {} elements but contained {}.",
+        ARITY,
+        preimage.len()
+    );
     Poseidon::<E>::new(preimage).hash()
 }
 
