@@ -1,5 +1,6 @@
 [package]
 name = "neptune"
+description = "Poseidon hashing over BLS12-381 for Filecoin."
 version = "0.2.0"
 authors = ["porcuquine <porcuquine@users.noreply.github.com>"]
 edition = "2018"
