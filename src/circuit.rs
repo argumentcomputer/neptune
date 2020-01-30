@@ -134,11 +134,7 @@ impl<'a, E: Engine> PoseidonCircuit<'a, E> {
     }
 
     fn debug(&self) {
-        let element_frs: Vec<_> = self
-            .elements
-            .iter()
-            .map(|n| n.get_value().unwrap())
-            .collect();
+        let element_frs: Vec<_> = self.elements.iter().map(|n| n.get_value()).collect();
         dbg!(element_frs, self.constants_offset);
     }
 
@@ -369,14 +365,13 @@ fn multi_add<E: Engine, CS: ConstraintSystem<E>>(
     nums: &[AllocatedNum<E>],
 ) -> Result<AllocatedNum<E>, SynthesisError> {
     let res = AllocatedNum::alloc(cs.namespace(|| "multi_add"), || {
-        Ok(nums.iter().fold(E::Fr::zero(), |mut acc, num| {
+        nums.iter().try_fold(E::Fr::zero(), |mut acc, num| {
             acc.add_assign(
                 &num.get_value()
-                    .ok_or_else(|| SynthesisError::AssignmentMissing)
-                    .unwrap(),
+                    .ok_or_else(|| SynthesisError::AssignmentMissing)?,
             );
-            acc
-        }))
+            Ok(acc)
+        })
     })?;
 
     // a + b = res
@@ -392,22 +387,23 @@ fn scalar_product<E: Engine, CS: ConstraintSystem<E>>(
     to_add: Option<E::Fr>,
 ) -> Result<AllocatedNum<E>, SynthesisError> {
     let product = AllocatedNum::alloc(cs.namespace(|| "scalar product"), || {
-        let mut tmp = nums
-            .iter()
-            .zip(scalars)
-            .fold(E::Fr::zero(), |mut acc, (num, scalar)| {
-                let mut x = num
-                    .get_value()
-                    .ok_or_else(|| SynthesisError::AssignmentMissing)
-                    .unwrap();
-                x.mul_assign(scalar);
-                acc.add_assign(&x);
-                acc
-            });
+        let tmp: Result<E::Fr, SynthesisError> =
+            nums.iter()
+                .zip(scalars)
+                .try_fold(E::Fr::zero(), |mut acc, (num, scalar)| {
+                    let mut x = num
+                        .get_value()
+                        .ok_or_else(|| SynthesisError::AssignmentMissing)?;
+                    x.mul_assign(scalar);
+                    acc.add_assign(&x);
+                    Ok(acc)
+                });
+
+        let mut tmp2 = tmp?;
         if let Some(a) = to_add {
-            tmp.add_assign(&a);
+            tmp2.add_assign(&a);
         }
-        Ok(tmp)
+        Ok(tmp2)
     })?;
 
     cs.enforce(
