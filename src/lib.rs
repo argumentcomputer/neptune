@@ -76,9 +76,9 @@ fn generate_mds<E: Engine>(t: usize) -> Vec<Vec<E::Fr>> {
         let mut row: Vec<E::Fr> = Vec::with_capacity(t);
         for j in 0..t {
             // Generate the entry at (i,j)
-            let mut entry = xs[i];
-            entry.add_assign(&ys[i]);
-            entry = entry.inverse().unwrap();
+            let mut tmp = xs[i];
+            tmp.add_assign(&ys[j]);
+            let entry = tmp.inverse().unwrap();
             row.insert(j, entry);
         }
         matrix.push(row);

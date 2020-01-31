@@ -259,22 +259,22 @@ mod tests {
         let digest = p.hash();
         let expected = match ARITY {
             2 => scalar_from_u64s([
-                0x611a441e9e4a973c,
-                0x578e0f72da838698,
-                0x4dd701e0b45d07e0,
-                0x5610bed47fb4ca1e,
+                0x5839abf48eafbcc5,
+                0x651ef33cc1fb7943,
+                0x8c505814a167b971,
+                0x38de26599ba2def0,
             ]),
             4 => scalar_from_u64s([
-                0x9a2c84c72ff4029e,
-                0x74909cb435fe2159,
-                0xe6266f8b9cbb3570,
-                0x4af1ff49f2076ac4,
+                0xf491e8e3b2136ea0,
+                0x04f40ac4e1cdd09b,
+                0xfaf9cfadd283daad,
+                0x65a4e5fc9b670f89,
             ]),
             8 => scalar_from_u64s([
-                0x3a261c43c7d513f1,
-                0xd90573f76693c368,
-                0x94f197e804c99da8,
-                0x02ff178318692402,
+                0x61743f58c2ee916a,
+                0x07608ceb5fc5a8d5,
+                0xc0c06b2302d5392e,
+                0x34841de8e928834b,
             ]),
             _ => {
                 dbg!(digest);
