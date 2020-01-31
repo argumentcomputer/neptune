@@ -1,3 +1,4 @@
+use crate::matrix;
 use crate::{generate_mds, round_constants, round_numbers, scalar_from_u64, Error};
 use ff::{Field, ScalarEngine};
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
@@ -37,11 +38,12 @@ where
     typenum::Add1<Arity>: ArrayLength<E::Fr>,
 {
     pub mds_matrix: Vec<Vec<E::Fr>>,
+    pub inverse_mds_matrix: Vec<Vec<E::Fr>>,
     pub round_constants: Vec<E::Fr>,
     pub arity_tag: E::Fr,
     pub full_rounds: usize,
     pub partial_rounds: usize,
-    _w: PhantomData<Arity>,
+    _a: PhantomData<Arity>,
 }
 
 impl<E, Arity> PoseidonConstants<E, Arity>
@@ -55,6 +57,10 @@ where
     pub fn new() -> Self {
         let arity = Arity::to_usize();
         let width = arity + 1;
+
+        let mds_matrix = generate_mds::<E>(width);
+        let inverse_mds_matrix = matrix::invert::<E>(&mds_matrix).unwrap();
+
         let (full_rounds, partial_rounds) = round_numbers(arity);
         let round_constants = round_constants::<E>(arity);
 
@@ -65,12 +71,13 @@ where
         );
 
         Self {
-            mds_matrix: generate_mds::<E>(width),
+            mds_matrix,
+            inverse_mds_matrix,
             round_constants,
             arity_tag: arity_tag::<E, Arity>(),
             full_rounds,
             partial_rounds,
-            _w: PhantomData::<Arity>,
+            _a: PhantomData::<Arity>,
         }
     }
 
@@ -197,11 +204,25 @@ where
     ///
     /// After that, the poseidon elements will be set to the result of the product between the poseidon elements and the constant MDS matrix.
     pub fn full_round(&mut self) {
-        // Every element of the hash buffer is incremented by the round constants
-        self.add_round_constants();
+        let mut constants_consumed = 0;
 
-        // Apply the quintic S-Box to all elements
-        self.elements.iter_mut().for_each(|l| quintic_s_box::<E>(l));
+        // Apply the quintic S-Box to all elements, after adding the round key.
+        // Round keys are added in the S-box to match circuits (where the addition is free)
+        // and in preparation for the shift to adding round keys after (rather than before) applying the S-box.
+        self.elements
+            .iter_mut()
+            .zip(
+                self.constants
+                    .round_constants
+                    .iter()
+                    .skip(self.constants_offset),
+            )
+            .for_each(|(l, rk)| {
+                quintic_s_box::<E>(l, Some(rk), None);
+                constants_consumed += 1
+            });
+
+        self.constants_offset += constants_consumed;
 
         // Multiply the elements by the constant MDS matrix
         self.product_mds();
@@ -213,7 +234,7 @@ where
         self.add_round_constants();
 
         // Apply the quintic S-Box to the first element
-        quintic_s_box::<E>(&mut self.elements[0]);
+        quintic_s_box::<E>(&mut self.elements[0], None, None);
 
         // Multiply the elements by the constant MDS matrix
         self.product_mds();
@@ -252,12 +273,22 @@ where
 }
 
 /// Apply the quintic S-Box (s^5) to a given item
-fn quintic_s_box<E: ScalarEngine>(l: &mut E::Fr) {
+fn quintic_s_box<E: ScalarEngine>(
+    l: &mut E::Fr,
+    pre_add: Option<&E::Fr>,
+    post_add: Option<&E::Fr>,
+) {
+    if let Some(x) = pre_add {
+        l.add_assign(x);
+    }
     let c = *l;
     let mut tmp = l.clone();
     tmp.mul_assign(&c);
     tmp.mul_assign(&tmp.clone());
     l.mul_assign(&tmp);
+    if let Some(x) = post_add {
+        l.add_assign(x);
+    }
 }
 
 /// Poseidon convenience hash function.
@@ -335,7 +366,6 @@ mod tests {
         let constants = PoseidonConstants::<Bls12, U2>::new();
         let mut p = Poseidon::<Bls12, U2>::new(&constants);
         let test_arity = constants.arity();
-        dbg!(test_arity);
         let mut preimage = vec![Scalar::zero(); test_arity];
         for n in 0..test_arity {
             let scalar = scalar_from_u64::<Bls12>(n as u64);
