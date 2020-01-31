@@ -6,7 +6,6 @@ authors = ["porcuquine <porcuquine@users.noreply.github.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/porcuquine/poseidon"
-build = "build.rs"
 
 [dependencies]
 lazy_static = "1.4.0"

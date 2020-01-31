@@ -1,4 +1,4 @@
-use crate::{generate_mds, round_constants, scalar_from_u64, Error, FULL_ROUNDS, PARTIAL_ROUNDS};
+use crate::{generate_mds, round_constants, round_numbers, scalar_from_u64, Error};
 use ff::{Field, ScalarEngine};
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
 use std::marker::PhantomData;
@@ -39,6 +39,8 @@ where
     pub mds_matrix: Vec<Vec<E::Fr>>,
     pub round_constants: Vec<E::Fr>,
     pub arity_tag: E::Fr,
+    pub full_rounds: usize,
+    pub partial_rounds: usize,
     _w: PhantomData<Arity>,
 }
 
@@ -53,13 +55,29 @@ where
     pub fn new() -> Self {
         let arity = Arity::to_usize();
         let width = arity + 1;
-        // Somehow, somehwere, enforce that Arity matches width.
+        let (full_rounds, partial_rounds) = round_numbers(arity);
+        let round_constants = round_constants::<E>(arity);
+
+        // Ensure we have enough constants for the sbox rounds
+        assert!(
+            width * (full_rounds + partial_rounds) <= round_constants.len(),
+            "Not enough round constants"
+        );
+
         Self {
             mds_matrix: generate_mds::<E>(width),
-            round_constants: round_constants::<E>(width),
+            round_constants,
             arity_tag: arity_tag::<E, Arity>(),
+            full_rounds,
+            partial_rounds,
             _w: PhantomData::<Arity>,
         }
+    }
+
+    /// Returns the width.
+    #[inline]
+    pub fn arity(&self) -> usize {
+        Arity::to_usize()
     }
 
     /// Returns the width.
@@ -99,6 +117,8 @@ where
         preimage: &[E::Fr],
         constants: &'a PoseidonConstants<E, Arity>,
     ) -> Self {
+        assert_eq!(preimage.len(), Arity::to_usize(), "Invalid preimage size");
+
         let elements = GenericArray::generate(|i| {
             if i == 0 {
                 constants.arity_tag
@@ -158,15 +178,15 @@ where
     pub fn hash(&mut self) -> E::Fr {
         // This counter is incremented when a round constants is read. Therefore, the round constants never
         // repeat
-        for _ in 0..FULL_ROUNDS / 2 {
+        for _ in 0..self.constants.full_rounds / 2 {
             self.full_round();
         }
 
-        for _ in 0..PARTIAL_ROUNDS {
+        for _ in 0..self.constants.partial_rounds {
             self.partial_round();
         }
 
-        for _ in 0..FULL_ROUNDS / 2 {
+        for _ in 0..self.constants.full_rounds / 2 {
             self.full_round();
         }
 
@@ -250,8 +270,7 @@ where
         + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
     typenum::Add1<Arity>: ArrayLength<E::Fr>,
 {
-    assert_eq!(preimage.len(), Arity::to_usize(), "Invalid preimage size");
-    let constants = PoseidonConstants::new();
+    let constants = PoseidonConstants::<E, Arity>::new();
     Poseidon::<E, Arity>::new_with_preimage(preimage, &constants).hash()
 }
 
@@ -260,12 +279,14 @@ mod tests {
     use super::*;
     use crate::*;
     use ff::Field;
+    //    use generic_array::typenum::{U2, U4, U8};
     use generic_array::typenum::U2;
     use paired::bls12_381::Bls12;
 
     #[test]
     fn reset() {
-        let preimage: [Scalar; ARITY] = [Scalar::one(); ARITY];
+        let test_arity = 2;
+        let preimage = vec![Scalar::one(); test_arity];
         let constants = PoseidonConstants::new();
         let mut h = Poseidon::<Bls12, U2>::new_with_preimage(&preimage, &constants);
         h.hash();
@@ -279,7 +300,8 @@ mod tests {
 
     #[test]
     fn hash_det() {
-        let mut preimage: [Scalar; ARITY] = [Scalar::zero(); ARITY];
+        let test_arity = 2;
+        let mut preimage = vec![Scalar::zero(); test_arity];
         let constants = PoseidonConstants::new();
         preimage[0] = Scalar::one();
 
@@ -308,40 +330,44 @@ mod tests {
     #[test]
     /// Simple test vectors to ensure results don't change unintentionally in development.
     fn hash_values() {
-        let constants = PoseidonConstants::new();
+        // NOTE: For now, type parameters on constants, p, and in the final assertion below need to be updated manually when testing different arities.
+        // TODO: Mechanism to run all tests every time. (Previously only a single arity was compiled in.)
+        let constants = PoseidonConstants::<Bls12, U2>::new();
         let mut p = Poseidon::<Bls12, U2>::new(&constants);
-        let mut preimage = [Scalar::zero(); ARITY];
-        for n in 0..ARITY {
+        let test_arity = constants.arity();
+        dbg!(test_arity);
+        let mut preimage = vec![Scalar::zero(); test_arity];
+        for n in 0..test_arity {
             let scalar = scalar_from_u64::<Bls12>(n as u64);
             p.input(scalar).unwrap();
             preimage[n] = scalar;
         }
         let digest = p.hash();
-        let expected = match ARITY {
+        let expected = match test_arity {
             2 => scalar_from_u64s([
-                0x5839abf48eafbcc5,
-                0x651ef33cc1fb7943,
-                0x8c505814a167b971,
-                0x38de26599ba2def0,
+                0x7179d3495ac25e92,
+                0x81052897659f7762,
+                0x316a6d20e4a55d6c,
+                0x409e8342edab687b,
             ]),
             4 => scalar_from_u64s([
-                0xf491e8e3b2136ea0,
-                0x04f40ac4e1cdd09b,
-                0xfaf9cfadd283daad,
-                0x65a4e5fc9b670f89,
+                0xf53a7d58aacf0621,
+                0x42d3a014639efdcf,
+                0xe1a3fddb08c13a46,
+                0x43f94dbd0abd1c99,
             ]),
             8 => scalar_from_u64s([
-                0x61743f58c2ee916a,
-                0x07608ceb5fc5a8d5,
-                0xc0c06b2302d5392e,
-                0x34841de8e928834b,
+                0xa6a3e7a6b2cc7b85,
+                0xfb1eb8f641dd9dc3,
+                0xfd2a373272ebf604,
+                0x433c1e9e8de226e5,
             ]),
             _ => {
                 dbg!(digest);
-                panic!("Arity lacks test vector: {}", ARITY)
+                panic!("Arity lacks test vector: {}", test_arity)
             }
         };
-        dbg!(ARITY);
+        dbg!(test_arity);
         assert_eq!(expected, digest);
 
         assert_eq!(
