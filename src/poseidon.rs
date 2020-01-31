@@ -186,7 +186,7 @@ where
         // This counter is incremented when a round constants is read. Therefore, the round constants never
         // repeat
         for _ in 0..self.constants.full_rounds / 2 {
-            self.full_round();
+            self.full_round(true, false);
         }
 
         for _ in 0..self.constants.partial_rounds {
@@ -194,7 +194,7 @@ where
         }
 
         for _ in 0..self.constants.full_rounds / 2 {
-            self.full_round();
+            self.full_round(true, false);
         }
 
         self.elements[1]
@@ -203,26 +203,52 @@ where
     /// The full round function will add the round constants and apply the S-Box to all poseidon elements, including the bitflags first element.
     ///
     /// After that, the poseidon elements will be set to the result of the product between the poseidon elements and the constant MDS matrix.
-    pub fn full_round(&mut self) {
-        let mut constants_consumed = 0;
-
+    pub fn full_round(&mut self, add_current_round_keys: bool, absorb_next_round_keys: bool) {
         // Apply the quintic S-Box to all elements, after adding the round key.
         // Round keys are added in the S-box to match circuits (where the addition is free)
         // and in preparation for the shift to adding round keys after (rather than before) applying the S-box.
-        self.elements
-            .iter_mut()
-            .zip(
-                self.constants
-                    .round_constants
-                    .iter()
-                    .skip(self.constants_offset),
-            )
-            .for_each(|(l, rk)| {
-                quintic_s_box::<E>(l, Some(rk), None);
-                constants_consumed += 1
+
+        assert!(add_current_round_keys);
+        let mut pre_constants_consumed = 0;
+        let pre_round_keys = self
+            .constants
+            .round_constants
+            .iter()
+            .skip(self.constants_offset)
+            .map(|x| {
+                if add_current_round_keys {
+                    pre_constants_consumed += 1;
+                    Some(x)
+                } else {
+                    None
+                }
             });
 
-        self.constants_offset += constants_consumed;
+        let mut post_constants_consumed = 0;
+        let post_round_keys = self
+            .constants
+            .round_constants
+            .iter()
+            .skip(self.constants_offset)
+            .map(|x| {
+                if absorb_next_round_keys {
+                    post_constants_consumed += 1;
+                    Some(x)
+                } else {
+                    None
+                }
+            });
+
+        self.elements
+            .iter_mut()
+            .zip(pre_round_keys.zip(post_round_keys))
+            .for_each(|(l, (pre, post))| {
+                quintic_s_box::<E>(l, pre, post);
+            });
+
+        assert!(!absorb_next_round_keys);
+
+        self.constants_offset += pre_constants_consumed + post_constants_consumed;
 
         // Multiply the elements by the constant MDS matrix
         self.product_mds();
