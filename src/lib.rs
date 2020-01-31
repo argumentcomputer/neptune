@@ -2,15 +2,13 @@
 #![allow(dead_code)]
 #![doc(include = "../README.md")]
 
-use lazy_static::*;
-
 pub use crate::poseidon::Poseidon;
 use crate::round_constants::generate_constants;
 pub use error::Error;
 use ff::ScalarEngine as Engine;
 use ff::{Field, PrimeField, ScalarEngine};
 pub use paired::bls12_381::Fr as Scalar;
-use paired::bls12_381::{Bls12, FrRepr};
+use paired::bls12_381::FrRepr;
 
 /// Poseidon circuit
 pub mod circuit;
@@ -20,27 +18,22 @@ pub mod poseidon;
 mod round_constants;
 mod test;
 
-include!("constants.rs");
-
 pub(crate) const TEST_SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
 ];
 
-/// Maximum width for which we will pre-generate MDS matrices.
-pub const MAX_SUPPORTED_WIDTH: usize = 9;
+pub fn round_numbers(arity: usize) -> (usize, usize) {
+    let width = arity + 1;
 
-lazy_static! {
-    static ref ROUND_CONSTANTS: [Scalar; 960] = {
-        let bytes = round_constants::<Bls12>(WIDTH);
-        unsafe { std::ptr::read(bytes.as_ptr() as *const _) }
+    let full_rounds = 8;
+    let partial_rounds = match width {
+        2 | 3 => 55,
+        4 | 5 | 6 | 7 => 56,
+        8 | 9 | 10 | 11 | 12 => 57,
+        _ => panic!("unsupoorted arity"),
     };
-    static ref MDS_MATRIX: [[Scalar; WIDTH]; WIDTH] = {
-        let mut matrix: [[Scalar; WIDTH]; WIDTH] = [[Scalar::one(); WIDTH]; WIDTH];
-        for (i, row) in generate_mds::<Bls12>(WIDTH).iter_mut().enumerate() {
-            matrix[i].copy_from_slice(&row[..]);
-        }
-        matrix
-    };
+
+    (full_rounds, partial_rounds)
 }
 
 /// convert
@@ -113,26 +106,14 @@ fn generate_mds<E: Engine>(t: usize) -> Vec<Vec<E::Fr>> {
 const SBOX: u8 = 1; // x^5
 const FIELD: u8 = 1; // Gf(p)
 const FIELD_SIZE: usize = 255; // n  Maybe Get this from Scalar.
-const R_F_FIXED: u16 = FULL_ROUNDS as u16;
-const R_P_FIXED: u16 = PARTIAL_ROUNDS as u16;
 
 fn round_constants<E: ScalarEngine>(arity: usize) -> Vec<E::Fr> {
     let t = arity + 1;
     let n = t * FIELD_SIZE;
 
-    // TODO: These need to be derived from t
-    let r_f = R_F_FIXED;
-    let r_p = R_P_FIXED;
+    let (full_rounds, partial_rounds) = round_numbers(arity);
+
+    let r_f = full_rounds as u16;
+    let r_p = partial_rounds as u16;
     generate_constants::<E>(FIELD, SBOX, n as u16, t as u16, r_f, r_p)
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::*;
-
-    #[test]
-    fn constants_consistency() {
-        // Grant we have enough constants for the sbox rounds
-        assert!(WIDTH * (FULL_ROUNDS + PARTIAL_ROUNDS) <= ROUND_CONSTANTS.len());
-    }
 }
