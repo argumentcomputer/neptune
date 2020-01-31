@@ -5,23 +5,27 @@ use bellperson::gadgets::num::AllocatedNum;
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::Field;
 use ff::ScalarEngine as Engine;
+use generic_array::typenum::Integer;
+use generic_array::ArrayLength;
+use std::marker::PhantomData;
 
 #[derive(Clone)]
 /// Circuit for Poseidon hash.
-pub struct PoseidonCircuit<'a, E: Engine> {
+pub struct PoseidonCircuit<'a, E: Engine, Width: ArrayLength<E::Fr>> {
     constants_offset: usize,
     width: usize,
     elements: Vec<AllocatedNum<E>>,
     pos: usize,
     full_rounds: usize,
     partial_rounds: usize,
-    constants: &'a PoseidonConstants<E>,
+    constants: &'a PoseidonConstants<E, Width>,
+    _w: PhantomData<Width>,
 }
 
 /// PoseidonCircuit implementation.
-impl<'a, E: Engine> PoseidonCircuit<'a, E> {
+impl<'a, E: Engine, Width: ArrayLength<E::Fr>> PoseidonCircuit<'a, E, Width> {
     /// Create a new Poseidon hasher for `preimage`.
-    pub fn new(elements: Vec<AllocatedNum<E>>, constants: &'a PoseidonConstants<E>) -> Self {
+    pub fn new(elements: Vec<AllocatedNum<E>>, constants: &'a PoseidonConstants<E, Width>) -> Self {
         let width = WIDTH;
 
         PoseidonCircuit {
@@ -32,6 +36,7 @@ impl<'a, E: Engine> PoseidonCircuit<'a, E> {
             full_rounds: FULL_ROUNDS,
             partial_rounds: PARTIAL_ROUNDS,
             constants,
+            _w: PhantomData::<Width>,
         }
     }
 
@@ -186,10 +191,10 @@ impl<'a, E: Engine> PoseidonCircuit<'a, E> {
 }
 
 /// Create circuit for Poseidon hash.
-pub fn poseidon_hash<CS: ConstraintSystem<E>, E: Engine>(
+pub fn poseidon_hash<CS: ConstraintSystem<E>, E: Engine, Width: ArrayLength<E::Fr>>(
     mut cs: CS,
     mut preimage: Vec<AllocatedNum<E>>,
-    constants: &PoseidonConstants<E>,
+    constants: &PoseidonConstants<E, Width>,
 ) -> Result<AllocatedNum<E>, SynthesisError> {
     // Add the arity tag to the front of the preimage.
     let tag = constants.arity_tag; // This could be shared across hash invocations within a circuit. TODO: add a mechanism for any such shared allocations.
@@ -201,15 +206,20 @@ pub fn poseidon_hash<CS: ConstraintSystem<E>, E: Engine>(
     p.hash(cs)
 }
 
-pub fn create_poseidon_parameters<E: Engine>() -> PoseidonConstants<E> {
+pub fn create_poseidon_parameters<E: Engine, Width: ArrayLength<E::Fr> + Integer>(
+) -> PoseidonConstants<E, Width> {
     PoseidonConstants::new(ARITY)
 }
 
-pub fn poseidon_hash_simple<CS: ConstraintSystem<E>, E: Engine>(
+pub fn poseidon_hash_simple<
+    CS: ConstraintSystem<E>,
+    E: Engine,
+    Width: ArrayLength<E::Fr> + Integer,
+>(
     cs: CS,
     preimage: Vec<AllocatedNum<E>>,
 ) -> Result<AllocatedNum<E>, SynthesisError> {
-    poseidon_hash(cs, preimage, &create_poseidon_parameters::<E>())
+    poseidon_hash(cs, preimage, &create_poseidon_parameters::<E, Width>())
 }
 
 /// Compute l^5 and enforce constraint. If round_key is supplied, add it to l first.
@@ -433,6 +443,7 @@ mod tests {
     use crate::test::TestConstraintSystem;
     use crate::{scalar_from_u64, Poseidon, ARITY};
     use bellperson::ConstraintSystem;
+    use generic_array::typenum::U3;
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
@@ -450,7 +461,7 @@ mod tests {
             let mut cs = TestConstraintSystem::<Bls12>::new();
             let mut i = 0;
             let mut fr_data = [Fr::zero(); ARITY];
-            let data: Vec<AllocatedNum<Bls12>> = (0..ARITY)
+            let data: Vec<AllocatedNum<Bls12>> = (0..*arity)
                 .enumerate()
                 .map(|_| {
                     let fr = Fr::random(&mut rng);
@@ -460,10 +471,10 @@ mod tests {
                 })
                 .collect::<Vec<_>>();
 
-            let constants = PoseidonConstants::new(ARITY);
+            let constants = PoseidonConstants::new(*arity);
             let out = poseidon_hash(&mut cs, data, &constants).expect("poseidon hashing failed");
 
-            let mut p = Poseidon::<Bls12>::new_with_preimage(&fr_data, &constants);
+            let mut p = Poseidon::<Bls12, U3>::new_with_preimage(&fr_data, &constants);
             let expected: Fr = p.hash();
 
             assert!(cs.is_satisfied(), "constraints not satisfied");

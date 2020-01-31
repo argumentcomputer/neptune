@@ -1,8 +1,7 @@
 #![feature(external_doc)]
+#![feature(associated_type_bounds)]
 #![allow(dead_code)]
 #![doc(include = "../README.md")]
-
-use lazy_static::*;
 
 pub use crate::poseidon::Poseidon;
 use crate::round_constants::generate_constants;
@@ -10,7 +9,7 @@ pub use error::Error;
 use ff::ScalarEngine as Engine;
 use ff::{Field, PrimeField, ScalarEngine};
 pub use paired::bls12_381::Fr as Scalar;
-use paired::bls12_381::{Bls12, FrRepr};
+use paired::bls12_381::FrRepr;
 
 /// Poseidon circuit
 pub mod circuit;
@@ -28,20 +27,6 @@ pub(crate) const TEST_SEED: [u8; 16] = [
 
 /// Maximum width for which we will pre-generate MDS matrices.
 pub const MAX_SUPPORTED_WIDTH: usize = 9;
-
-lazy_static! {
-    static ref ROUND_CONSTANTS: [Scalar; 960] = {
-        let bytes = round_constants::<Bls12>(WIDTH);
-        unsafe { std::ptr::read(bytes.as_ptr() as *const _) }
-    };
-    static ref MDS_MATRIX: [[Scalar; WIDTH]; WIDTH] = {
-        let mut matrix: [[Scalar; WIDTH]; WIDTH] = [[Scalar::one(); WIDTH]; WIDTH];
-        for (i, row) in generate_mds::<Bls12>(WIDTH).iter_mut().enumerate() {
-            matrix[i].copy_from_slice(&row[..]);
-        }
-        matrix
-    };
-}
 
 /// convert
 pub fn scalar_from_u64<E: ScalarEngine>(i: u64) -> E::Fr {
@@ -129,10 +114,11 @@ fn round_constants<E: ScalarEngine>(arity: usize) -> Vec<E::Fr> {
 #[cfg(test)]
 mod tests {
     use crate::*;
+    use paired::bls12_381::Bls12;
 
     #[test]
     fn constants_consistency() {
         // Grant we have enough constants for the sbox rounds
-        assert!(WIDTH * (FULL_ROUNDS + PARTIAL_ROUNDS) <= ROUND_CONSTANTS.len());
+        assert!(WIDTH * (FULL_ROUNDS + PARTIAL_ROUNDS) <= round_constants::<Bls12>(ARITY).len());
     }
 }
