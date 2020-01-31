@@ -5,8 +5,8 @@ use std::marker::PhantomData;
 
 /// The arity tag is the first element of a Poseidon permutation.
 /// This extra element is necessary for 128-bit security.
-pub fn arity_tag<E: ScalarEngine>(arity: usize) -> E::Fr {
-    scalar_from_u64::<E>((1 << arity) - 1)
+pub fn arity_tag<E: ScalarEngine, Arity: typenum::Unsigned>() -> E::Fr {
+    scalar_from_u64::<E>((1 << Arity::to_usize()) - 1)
 }
 
 /// The `Poseidon` structure will accept a number of inputs equal to the arity.
@@ -39,7 +39,6 @@ where
     pub mds_matrix: Vec<Vec<E::Fr>>,
     pub round_constants: Vec<E::Fr>,
     pub arity_tag: E::Fr,
-    pub width: usize,
     _w: PhantomData<Arity>,
 }
 
@@ -58,10 +57,16 @@ where
         Self {
             mds_matrix: generate_mds::<E>(width),
             round_constants: round_constants::<E>(width),
-            arity_tag: arity_tag::<E>(arity),
-            width,
+            arity_tag: arity_tag::<E, Arity>(),
             _w: PhantomData::<Arity>,
         }
+    }
+
+    /// Returns the width.
+    #[inline]
+    pub fn width(&self) -> usize {
+        use typenum::Unsigned;
+        typenum::Add1::<Arity>::to_usize()
     }
 }
 
@@ -136,7 +141,7 @@ where
     /// The returned `usize` represents the element position (within arity) for the input operation
     pub fn input(&mut self, element: E::Fr) -> Result<usize, Error> {
         // Cannot input more elements than the defined arity
-        if self.pos >= self.constants.width {
+        if self.pos >= self.constants.width() {
             return Err(Error::FullBuffer);
         }
 
@@ -197,30 +202,32 @@ where
     /// For every leaf, add the round constants with index defined by the constants offset, and increment the
     /// offset
     fn add_round_constants(&mut self) {
-        let mut constants_offset = self.constants_offset;
-
-        for i in 0..self.elements.len() {
-            self.elements[i].add_assign(&self.constants.round_constants[constants_offset]);
-            constants_offset += 1;
+        for (element, round_constant) in self.elements.iter_mut().zip(
+            self.constants
+                .round_constants
+                .iter()
+                .skip(self.constants_offset),
+        ) {
+            element.add_assign(round_constant);
         }
-        self.constants_offset = constants_offset;
+
+        self.constants_offset += self.elements.len();
     }
 
     /// Set the provided elements with the result of the product between the elements and the constant
     /// MDS matrix
     fn product_mds(&mut self) {
         let mut result = GenericArray::<E::Fr, typenum::Add1<Arity>>::generate(|_| E::Fr::zero());
-        let width = self.constants.width;
 
-        for j in 0..width {
-            for k in 0..width {
-                let mut tmp = self.constants.mds_matrix[j][k];
-                tmp.mul_assign(&self.elements[k]);
-                result[j].add_assign(&tmp);
+        for (result, mds_row) in result.iter_mut().zip(self.constants.mds_matrix.iter()) {
+            for (mds, element) in mds_row.iter().zip(self.elements.iter()) {
+                let mut tmp = *mds;
+                tmp.mul_assign(element);
+                result.add_assign(&tmp);
             }
         }
 
-        self.elements.copy_from_slice(&result);
+        std::mem::replace(&mut self.elements, result);
     }
 }
 
