@@ -20,7 +20,7 @@ fn main() {
     let default_partial_rounds = match width {
         2 | 3 => 55,
         4 | 5 | 6 | 7 => 56,
-        8 | 9 => 57,
+        8 | 9 | 10 | 11 | 12 => 57,
         _ => panic!("unsupoorted arity"),
     };
 
