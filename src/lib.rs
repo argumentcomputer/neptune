@@ -1,5 +1,4 @@
 #![feature(external_doc)]
-#![feature(associated_type_bounds)]
 #![allow(dead_code)]
 #![doc(include = "../README.md")]
 

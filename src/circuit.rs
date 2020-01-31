@@ -1,31 +1,45 @@
 use crate::poseidon::PoseidonConstants;
-use crate::{ARITY, FULL_ROUNDS, PARTIAL_ROUNDS, WIDTH};
+use crate::{FULL_ROUNDS, PARTIAL_ROUNDS, WIDTH};
 
 use bellperson::gadgets::num::AllocatedNum;
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::Field;
 use ff::ScalarEngine as Engine;
-use generic_array::typenum::Integer;
+use generic_array::typenum;
 use generic_array::ArrayLength;
 use std::marker::PhantomData;
 
 #[derive(Clone)]
 /// Circuit for Poseidon hash.
-pub struct PoseidonCircuit<'a, E: Engine, Width: ArrayLength<E::Fr>> {
+pub struct PoseidonCircuit<'a, E, Arity>
+where
+    E: Engine,
+    Arity: typenum::Unsigned
+        + std::ops::Add<typenum::bit::B1>
+        + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
+    typenum::Add1<Arity>: ArrayLength<E::Fr>,
+{
     constants_offset: usize,
     width: usize,
     elements: Vec<AllocatedNum<E>>,
     pos: usize,
     full_rounds: usize,
     partial_rounds: usize,
-    constants: &'a PoseidonConstants<E, Width>,
-    _w: PhantomData<Width>,
+    constants: &'a PoseidonConstants<E, Arity>,
+    _w: PhantomData<Arity>,
 }
 
 /// PoseidonCircuit implementation.
-impl<'a, E: Engine, Width: ArrayLength<E::Fr>> PoseidonCircuit<'a, E, Width> {
+impl<'a, E, Arity> PoseidonCircuit<'a, E, Arity>
+where
+    E: Engine,
+    Arity: typenum::Unsigned
+        + std::ops::Add<typenum::bit::B1>
+        + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
+    typenum::Add1<Arity>: ArrayLength<E::Fr>,
+{
     /// Create a new Poseidon hasher for `preimage`.
-    pub fn new(elements: Vec<AllocatedNum<E>>, constants: &'a PoseidonConstants<E, Width>) -> Self {
+    pub fn new(elements: Vec<AllocatedNum<E>>, constants: &'a PoseidonConstants<E, Arity>) -> Self {
         let width = WIDTH;
 
         PoseidonCircuit {
@@ -36,7 +50,7 @@ impl<'a, E: Engine, Width: ArrayLength<E::Fr>> PoseidonCircuit<'a, E, Width> {
             full_rounds: FULL_ROUNDS,
             partial_rounds: PARTIAL_ROUNDS,
             constants,
-            _w: PhantomData::<Width>,
+            _w: PhantomData::<Arity>,
         }
     }
 
@@ -191,11 +205,19 @@ impl<'a, E: Engine, Width: ArrayLength<E::Fr>> PoseidonCircuit<'a, E, Width> {
 }
 
 /// Create circuit for Poseidon hash.
-pub fn poseidon_hash<CS: ConstraintSystem<E>, E: Engine, Width: ArrayLength<E::Fr>>(
+pub fn poseidon_hash<CS, E, Arity>(
     mut cs: CS,
     mut preimage: Vec<AllocatedNum<E>>,
-    constants: &PoseidonConstants<E, Width>,
-) -> Result<AllocatedNum<E>, SynthesisError> {
+    constants: &PoseidonConstants<E, Arity>,
+) -> Result<AllocatedNum<E>, SynthesisError>
+where
+    CS: ConstraintSystem<E>,
+    E: Engine,
+    Arity: typenum::Unsigned
+        + std::ops::Add<typenum::bit::B1>
+        + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
+    typenum::Add1<Arity>: ArrayLength<E::Fr>,
+{
     // Add the arity tag to the front of the preimage.
     let tag = constants.arity_tag; // This could be shared across hash invocations within a circuit. TODO: add a mechanism for any such shared allocations.
     let tag_num = AllocatedNum::alloc(cs.namespace(|| "arity tag"), || Ok(tag))?;
@@ -206,20 +228,30 @@ pub fn poseidon_hash<CS: ConstraintSystem<E>, E: Engine, Width: ArrayLength<E::F
     p.hash(cs)
 }
 
-pub fn create_poseidon_parameters<E: Engine, Width: ArrayLength<E::Fr> + Integer>(
-) -> PoseidonConstants<E, Width> {
-    PoseidonConstants::new(ARITY)
+pub fn create_poseidon_parameters<E, Arity>() -> PoseidonConstants<E, Arity>
+where
+    E: Engine,
+    Arity: typenum::Unsigned
+        + std::ops::Add<typenum::bit::B1>
+        + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
+    typenum::Add1<Arity>: ArrayLength<E::Fr>,
+{
+    PoseidonConstants::new()
 }
 
-pub fn poseidon_hash_simple<
-    CS: ConstraintSystem<E>,
-    E: Engine,
-    Width: ArrayLength<E::Fr> + Integer,
->(
+pub fn poseidon_hash_simple<CS, E, Arity>(
     cs: CS,
     preimage: Vec<AllocatedNum<E>>,
-) -> Result<AllocatedNum<E>, SynthesisError> {
-    poseidon_hash(cs, preimage, &create_poseidon_parameters::<E, Width>())
+) -> Result<AllocatedNum<E>, SynthesisError>
+where
+    CS: ConstraintSystem<E>,
+    E: Engine,
+    Arity: typenum::Unsigned
+        + std::ops::Add<typenum::bit::B1>
+        + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
+    typenum::Add1<Arity>: ArrayLength<E::Fr>,
+{
+    poseidon_hash(cs, preimage, &create_poseidon_parameters::<E, Arity>())
 }
 
 /// Compute l^5 and enforce constraint. If round_key is supplied, add it to l first.
@@ -443,7 +475,6 @@ mod tests {
     use crate::test::TestConstraintSystem;
     use crate::{scalar_from_u64, Poseidon, ARITY};
     use bellperson::ConstraintSystem;
-    use generic_array::typenum::U3;
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
@@ -471,10 +502,10 @@ mod tests {
                 })
                 .collect::<Vec<_>>();
 
-            let constants = PoseidonConstants::new(*arity);
+            let constants = PoseidonConstants::new();
             let out = poseidon_hash(&mut cs, data, &constants).expect("poseidon hashing failed");
 
-            let mut p = Poseidon::<Bls12, U3>::new_with_preimage(&fr_data, &constants);
+            let mut p = Poseidon::<Bls12>::new_with_preimage(&fr_data, &constants);
             let expected: Fr = p.hash();
 
             assert!(cs.is_satisfied(), "constraints not satisfied");

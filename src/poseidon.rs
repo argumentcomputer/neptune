@@ -1,17 +1,7 @@
-use lazy_static::*;
-
-use crate::{
-    generate_mds, round_constants, scalar_from_u64, Error, Scalar, ARITY, FULL_ROUNDS,
-    PARTIAL_ROUNDS,
-};
+use crate::{generate_mds, round_constants, scalar_from_u64, Error, FULL_ROUNDS, PARTIAL_ROUNDS};
 use ff::{Field, ScalarEngine};
-use generic_array::{sequence::GenericSequence, ArrayLength, GenericArray};
-use paired::bls12_381::Bls12;
+use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
 use std::marker::PhantomData;
-
-lazy_static! {
-    pub static ref ARITY_TAG: Scalar = arity_tag::<Bls12>(ARITY);
-}
 
 /// The arity tag is the first element of a Poseidon permutation.
 /// This extra element is necessary for 128-bit security.
@@ -21,52 +11,80 @@ pub fn arity_tag<E: ScalarEngine>(arity: usize) -> E::Fr {
 
 /// The `Poseidon` structure will accept a number of inputs equal to the arity.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Poseidon<'a, E: ScalarEngine, Width: ArrayLength<E::Fr>> {
+pub struct Poseidon<'a, E, Arity = typenum::U2>
+where
+    E: ScalarEngine,
+    Arity: typenum::Unsigned
+        + std::ops::Add<typenum::bit::B1>
+        + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
+    typenum::Add1<Arity>: ArrayLength<E::Fr>,
+{
     constants_offset: usize,
     /// the elements to permute
-    pub elements: GenericArray<E::Fr, Width>,
+    pub elements: GenericArray<E::Fr, typenum::Add1<Arity>>,
     pos: usize,
-    constants: &'a PoseidonConstants<E, Width>,
+    constants: &'a PoseidonConstants<E, Arity>,
     _e: PhantomData<E>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct PoseidonConstants<E: ScalarEngine, Width: ArrayLength<E::Fr>> {
+pub struct PoseidonConstants<E, Arity>
+where
+    E: ScalarEngine,
+    Arity: typenum::Unsigned
+        + std::ops::Add<typenum::bit::B1>
+        + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
+    typenum::Add1<Arity>: ArrayLength<E::Fr>,
+{
     pub mds_matrix: Vec<Vec<E::Fr>>,
     pub round_constants: Vec<E::Fr>,
     pub arity_tag: E::Fr,
     pub width: usize,
-    _w: PhantomData<Width>,
+    _w: PhantomData<Arity>,
 }
 
-impl<E: ScalarEngine, Width: ArrayLength<E::Fr>> PoseidonConstants<E, Width> {
-    pub fn new(arity: usize) -> Self {
+impl<E, Arity> PoseidonConstants<E, Arity>
+where
+    E: ScalarEngine,
+    Arity: typenum::Unsigned
+        + std::ops::Add<typenum::bit::B1>
+        + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
+    typenum::Add1<Arity>: ArrayLength<E::Fr>,
+{
+    pub fn new() -> Self {
+        let arity = Arity::to_usize();
         let width = arity + 1;
-        // Somehow, somehwere, enforce that Width matches width.
+        // Somehow, somehwere, enforce that Arity matches width.
         Self {
             mds_matrix: generate_mds::<E>(width),
             round_constants: round_constants::<E>(width),
             arity_tag: arity_tag::<E>(arity),
             width,
-            _w: PhantomData::<Width>,
+            _w: PhantomData::<Arity>,
         }
     }
 }
 
-impl<'a, E: ScalarEngine, Width: ArrayLength<E::Fr>> Poseidon<'a, E, Width> {
-    pub fn new(constants: &'a PoseidonConstants<E, Width>) -> Self {
-        let mut elements: GenericArray<E::Fr, Width> = GenericArray::generate(|i| {
+impl<'a, E, Arity> Poseidon<'a, E, Arity>
+where
+    E: ScalarEngine,
+    Arity: typenum::Unsigned
+        + std::ops::Add<typenum::bit::B1>
+        + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
+    typenum::Add1<Arity>: ArrayLength<E::Fr>,
+{
+    pub fn new(constants: &'a PoseidonConstants<E, Arity>) -> Self {
+        let elements = GenericArray::generate(|i| {
             if i == 0 {
                 constants.arity_tag
             } else {
                 E::Fr::zero()
             }
         });
-        elements[0] = constants.arity_tag;
 
         Poseidon {
             constants_offset: 0,
-            elements: elements,
+            elements,
             pos: 1,
             constants,
             _e: PhantomData::<E>,
@@ -74,24 +92,21 @@ impl<'a, E: ScalarEngine, Width: ArrayLength<E::Fr>> Poseidon<'a, E, Width> {
     }
     pub fn new_with_preimage(
         preimage: &[E::Fr],
-        constants: &'a PoseidonConstants<E, Width>,
+        constants: &'a PoseidonConstants<E, Arity>,
     ) -> Self {
-        let mut elements: GenericArray<E::Fr, Width> = GenericArray::generate(|i| {
+        let elements = GenericArray::generate(|i| {
             if i == 0 {
                 constants.arity_tag
             } else {
-                E::Fr::zero()
+                preimage[i - 1]
             }
         });
 
         let width = elements.len();
 
-        for i in 1..width {
-            elements[i] = preimage[i - 1];
-        }
         Poseidon {
             constants_offset: 0,
-            elements: elements,
+            elements,
             pos: width,
             constants,
             _e: PhantomData::<E>,
@@ -194,7 +209,7 @@ impl<'a, E: ScalarEngine, Width: ArrayLength<E::Fr>> Poseidon<'a, E, Width> {
     /// Set the provided elements with the result of the product between the elements and the constant
     /// MDS matrix
     fn product_mds(&mut self) {
-        let mut result: GenericArray<E::Fr, Width> = GenericArray::generate(|_| E::Fr::zero());
+        let mut result = GenericArray::<E::Fr, typenum::Add1<Arity>>::generate(|_| E::Fr::zero());
         let width = self.constants.width;
 
         for j in 0..width {
@@ -220,9 +235,17 @@ fn quintic_s_box<E: ScalarEngine>(l: &mut E::Fr) {
 
 /// Poseidon convenience hash function.
 /// NOTE: this is expensive, since it computes all constants when initializing hasher struct.
-pub fn poseidon<E: ScalarEngine, Width: ArrayLength<E::Fr>>(preimage: &[E::Fr]) -> E::Fr {
-    let constants = PoseidonConstants::new(preimage.len());
-    Poseidon::<E, Width>::new_with_preimage(preimage, &constants).hash()
+pub fn poseidon<E, Arity>(preimage: &[E::Fr]) -> E::Fr
+where
+    E: ScalarEngine,
+    Arity: typenum::Unsigned
+        + std::ops::Add<typenum::bit::B1>
+        + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
+    typenum::Add1<Arity>: ArrayLength<E::Fr>,
+{
+    assert_eq!(preimage.len(), Arity::to_usize(), "Invalid preimage size");
+    let constants = PoseidonConstants::new();
+    Poseidon::<E, Arity>::new_with_preimage(preimage, &constants).hash()
 }
 
 #[cfg(test)]
@@ -230,17 +253,18 @@ mod tests {
     use super::*;
     use crate::*;
     use ff::Field;
-    use generic_array::typenum::U3;
+    use generic_array::typenum::U2;
+    use paired::bls12_381::Bls12;
 
     #[test]
     fn reset() {
         let preimage: [Scalar; ARITY] = [Scalar::one(); ARITY];
-        let constants = PoseidonConstants::new(ARITY);
-        let mut h = Poseidon::<Bls12, U3>::new_with_preimage(&preimage, &constants);
+        let constants = PoseidonConstants::new();
+        let mut h = Poseidon::<Bls12, U2>::new_with_preimage(&preimage, &constants);
         h.hash();
         h.reset();
 
-        let default = Poseidon::<Bls12, U3>::new(&constants);
+        let default = Poseidon::<Bls12, U2>::new(&constants);
         assert_eq!(default.pos, h.pos);
         assert_eq!(default.elements, h.elements);
         assert_eq!(default.constants_offset, h.constants_offset);
@@ -249,10 +273,24 @@ mod tests {
     #[test]
     fn hash_det() {
         let mut preimage: [Scalar; ARITY] = [Scalar::zero(); ARITY];
-        let constants = PoseidonConstants::new(ARITY);
+        let constants = PoseidonConstants::new();
         preimage[0] = Scalar::one();
 
-        let mut h = Poseidon::<Bls12, U3>::new_with_preimage(&preimage, &constants);
+        let mut h = Poseidon::<Bls12, U2>::new_with_preimage(&preimage, &constants);
+
+        let mut h2 = h.clone();
+        let result: <Bls12 as ScalarEngine>::Fr = h.hash();
+
+        assert_eq!(result, h2.hash());
+    }
+
+    #[test]
+    fn hash_arity_3() {
+        let mut preimage: [Scalar; 3] = [Scalar::zero(); 3];
+        let constants = PoseidonConstants::new();
+        preimage[0] = Scalar::one();
+
+        let mut h = Poseidon::<Bls12, typenum::U3>::new_with_preimage(&preimage, &constants);
 
         let mut h2 = h.clone();
         let result: <Bls12 as ScalarEngine>::Fr = h.hash();
@@ -263,8 +301,8 @@ mod tests {
     #[test]
     /// Simple test vectors to ensure results don't change unintentionally in development.
     fn hash_values() {
-        let constants = PoseidonConstants::new(ARITY);
-        let mut p = Poseidon::<Bls12, U3>::new(&constants);
+        let constants = PoseidonConstants::new();
+        let mut p = Poseidon::<Bls12, U2>::new(&constants);
         let mut preimage = [Scalar::zero(); ARITY];
         for n in 0..ARITY {
             let scalar = scalar_from_u64::<Bls12>(n as u64);
@@ -301,7 +339,7 @@ mod tests {
 
         assert_eq!(
             digest,
-            poseidon::<Bls12, U3>(&preimage),
+            poseidon::<Bls12, U2>(&preimage),
             "Poseidon wrapper disagrees with element-at-a-time invocation."
         );
     }
