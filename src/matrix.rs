@@ -89,6 +89,38 @@ fn vec_mul<E: ScalarEngine>(a: &Vec<Scalar<E>>, b: &Vec<Scalar<E>>) -> Scalar<E>
         })
 }
 
+fn vec_add<E: ScalarEngine>(a: &Vec<Scalar<E>>, b: &Vec<Scalar<E>>) -> Vec<Scalar<E>> {
+    a.iter()
+        .zip(b.iter())
+        .map(|(a, b)| {
+            let mut res = a.clone();
+            res.add_assign(b);
+            res
+        })
+        .collect::<Vec<_>>()
+}
+
+/// Multiply a square matrix by a vector of same size: MV where V is considered a row vector.
+pub fn apply_matrix<E: ScalarEngine>(m: &Matrix<Scalar<E>>, v: &Vec<Scalar<E>>) -> Vec<Scalar<E>> {
+    assert!(is_square(m), "Only square matrix can be applied to vector.");
+    assert_eq!(
+        rows(m),
+        v.len(),
+        "Matrix can only be applied to vector of same size."
+    );
+
+    let mut result: Vec<Scalar<E>> = vec![Scalar::<E>::zero(); v.len()];
+
+    for (result, row) in result.iter_mut().zip(m.iter()) {
+        for (mat_val, vec_val) in row.iter().zip(v) {
+            let mut tmp = *mat_val;
+            tmp.mul_assign(vec_val);
+            result.add_assign(&tmp);
+        }
+    }
+    result
+}
+
 fn transpose<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> Matrix<Scalar<E>> {
     let size = rows(matrix);
     let mut new = Vec::with_capacity(size);
@@ -356,25 +388,54 @@ mod tests {
         let eight = scalar_from_u64::<Bls12>(8);
         let nine = scalar_from_u64::<Bls12>(9);
 
+        let m = vec![
+            vec![one, two, three],
+            vec![four, three, six],
+            vec![five, eight, seven],
+        ];
+
         let m1 = vec![
             vec![one, two, three],
             vec![four, five, six],
             vec![seven, eight, nine],
         ];
 
-        let m2 = vec![
-            vec![one, two, three],
-            vec![four, five, six],
-            vec![seven, eight, eight],
-        ];
-
         assert!(!is_invertible::<Bls12>(&m1));
-        assert!(is_invertible::<Bls12>(&m2));
+        assert!(is_invertible::<Bls12>(&m));
 
-        let inverse = invert::<Bls12>(&m2).unwrap();
+        let m_inv = invert::<Bls12>(&m).unwrap();
 
-        let computed_identity = mat_mul::<Bls12>(&m2, &inverse).unwrap();
+        let computed_identity = mat_mul::<Bls12>(&m, &m_inv).unwrap();
 
         assert!(is_identity::<Bls12>(&computed_identity));
+
+        // S
+        let some_vec = vec![six, five, four];
+
+        // M^-1(S)
+        let inverse_applied = super::apply_matrix::<Bls12>(&m_inv, &some_vec);
+
+        // M(M^-1(S))
+        let m_applied_after_inverse = super::apply_matrix::<Bls12>(&m, &inverse_applied);
+
+        // S = M(M^-1(S))
+        assert_eq!(
+            some_vec, m_applied_after_inverse,
+            "M(M^-1(V))) = V did not hold"
+        );
+
+        //panic!();
+        // B
+        let base_vec = vec![eight, two, five];
+
+        // S + M(B)
+        let add_after_apply = vec_add::<Bls12>(&some_vec, &apply_matrix::<Bls12>(&m, &base_vec));
+
+        // M(B + M^-1(S))
+        let apply_after_add =
+            apply_matrix::<Bls12>(&m, &vec_add::<Bls12>(&base_vec, &inverse_applied));
+
+        // S + M(B) = M(B + M^-1(S))
+        assert_eq!(add_after_apply, apply_after_add, "breakin' the law");
     }
 }

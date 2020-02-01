@@ -179,23 +179,181 @@ where
         Ok(self.pos - 1)
     }
 
+    pub fn hash(&mut self) -> E::Fr {
+        self.hash_optimized()
+        // let funky = true;
+
+        // if funky {
+        //     self.hash_funky()
+        // } else {
+        //     self.hash_simple()
+        // }
+    }
+
     /// The number of rounds is divided into two equal parts for the full rounds, plus the partial rounds.
     ///
     /// The returned element is the second poseidon element, the first is the arity tag.
-    pub fn hash(&mut self) -> E::Fr {
+    pub fn hash_correct(&mut self) -> E::Fr {
+        self.debug("Hash simple");
         // This counter is incremented when a round constants is read. Therefore, the round constants never
         // repeat
+        // The first full round should use the initial constants.
+        self.full_round(true, false);
+
+        self.debug("After first full round");
+
+        for i in 1..self.constants.full_rounds / 2 {
+            self.full_round(true, false);
+            if i == 1 {
+                self.debug("After second full round");
+            }
+        }
+
+        self.debug("Before first partial round");
+
+        // Constants were added in the previous full round, so skip them here (false argument).
+        self.partial_round(true, false);
+
+        self.debug("After first partial round");
+
+        for _ in 1..self.constants.partial_rounds {
+            self.partial_round(true, false);
+        }
+
+        self.debug("After last partial round");
+
         for _ in 0..self.constants.full_rounds / 2 {
             self.full_round(true, false);
         }
 
-        for _ in 0..self.constants.partial_rounds {
-            self.partial_round();
+        self.debug("After last full round");
+
+        self.elements[1]
+    }
+
+    pub fn hash_simple(&mut self) -> E::Fr {
+        self.debug("Hash simple");
+        // This counter is incremented when a round constants is read. Therefore, the round constants never
+        // repeat
+        // The first full round should use the initial constants.
+        self.full_round(true, false);
+        self.debug("After first full round");
+
+        // => M(B)
+
+        // M(B) + S
+        self.add_round_constants();
+
+        // Verify that the round constants here (S), really are the S from full_round (post_vec).
+
+        self.debug("After adding constants");
+
+        // for i in 1..self.constants.full_rounds / 2 {
+        //     self.full_round(true, false);
+        //     if i == 1 {
+        //         self.debug("After second full round");
+        //     }
+        // }
+
+        // self.debug("Before first partial round");
+
+        // // Constants were added in the previous full round, so skip them here (false argument).
+        // self.partial_round(true, false);
+
+        // self.debug("After first partial round");
+
+        // for _ in 1..self.constants.partial_rounds {
+        //     self.partial_round(true, false);
+        // }
+
+        // self.debug("After last partial round");
+
+        // for _ in 0..self.constants.full_rounds / 2 {
+        //     self.full_round(true, false);
+        // }
+
+        // self.debug("After last full round");
+
+        // B + S
+        self.elements[1]
+    }
+
+    pub fn hash_funky(&mut self) -> E::Fr {
+        // This counter is incremented when a round constants is read. Therefore, the round constants never
+        // repeat
+        self.debug("Hash funky");
+        // The first full round should use the initial constants.
+        self.full_round(true, true);
+        self.debug("After first full round");
+
+        // => M(B + M^-1(S))
+
+        // for i in 1..self.constants.full_rounds / 2 {
+        //     self.full_round(false, true);
+        //     if i == 1 {
+        //         self.debug("After second full round");
+        //     }
+        // }
+
+        // self.debug("Before first partial round");
+
+        // // Constants were added in the previous full round, so skip them here (false argument).
+        // self.partial_round(false, false);
+
+        // self.debug("After first partial round");
+
+        // for _ in 1..self.constants.partial_rounds {
+        //     self.partial_round(true, false);
+        // }
+
+        // self.debug("After last partial round");
+
+        // for _ in 0..self.constants.full_rounds / 2 {
+        //     self.full_round(true, false);
+        // }
+
+        // self.debug("After last full round");
+
+        // M(B + M^-1(S))
+        self.elements[1]
+    }
+
+    pub fn hash_optimized(&mut self) -> E::Fr {
+        // This counter is incremented when a round constants is read. Therefore, the round constants never
+        // repeat
+
+        self.debug("Hash funky");
+
+        // The first full round should use the initial constants.
+        self.full_round(true, true);
+
+        self.debug("After first full round");
+
+        for i in 1..self.constants.full_rounds / 2 {
+            self.full_round(false, true);
+            if i == 1 {
+                self.debug("After second full round");
+            }
         }
+
+        self.debug("Before first partial round");
+
+        // Constants were added in the previous full round, so skip them here (false argument).
+        self.partial_round(false, false);
+
+        self.debug("After first partial round");
+
+        for _ in 1..self.constants.partial_rounds {
+            self.partial_round(true, false);
+        }
+
+        self.debug("After last partial round");
 
         for _ in 0..self.constants.full_rounds / 2 {
             self.full_round(true, false);
         }
+
+        self.debug("After last full round");
 
         self.elements[1]
     }
@@ -204,12 +362,13 @@ where
     ///
     /// After that, the poseidon elements will be set to the result of the product between the poseidon elements and the constant MDS matrix.
     pub fn full_round(&mut self, add_current_round_keys: bool, absorb_next_round_keys: bool) {
+        // NOTE: decrease in performance is expected during this refactoring.
+        // We seek to preserve correctness while transforming the algorithm to an eventually more performant one.
+
         // Apply the quintic S-Box to all elements, after adding the round key.
         // Round keys are added in the S-box to match circuits (where the addition is free)
         // and in preparation for the shift to adding round keys after (rather than before) applying the S-box.
 
-        assert!(add_current_round_keys);
-        let mut pre_constants_consumed = 0;
         let pre_round_keys = self
             .constants
             .round_constants
@@ -217,47 +376,92 @@ where
             .skip(self.constants_offset)
             .map(|x| {
                 if add_current_round_keys {
-                    pre_constants_consumed += 1;
                     Some(x)
                 } else {
                     None
                 }
             });
 
-        let mut post_constants_consumed = 0;
-        let post_round_keys = self
-            .constants
-            .round_constants
-            .iter()
-            .skip(self.constants_offset)
-            .map(|x| {
-                if absorb_next_round_keys {
-                    post_constants_consumed += 1;
-                    Some(x)
-                } else {
-                    None
-                }
-            });
+        if absorb_next_round_keys {
+            // Using the notation from `test_inverse` in matrix.rs:
 
-        self.elements
-            .iter_mut()
-            .zip(pre_round_keys.zip(post_round_keys))
-            .for_each(|(l, (pre, post))| {
-                quintic_s_box::<E>(l, pre, post);
-            });
+            // S
+            let post_vec = self
+                .constants
+                .round_constants
+                .iter()
+                .skip(self.constants_offset + self.elements.len())
+                .take(self.elements.len())
+                .map(|x| *x)
+                .collect::<Vec<_>>();
 
-        assert!(!absorb_next_round_keys);
+            // Compute the constants which should be added *before* the next `product_mds`.
+            // in order to have the same effect as adding the given constants *after* the next `product_mds`.
 
-        self.constants_offset += pre_constants_consumed + post_constants_consumed;
+            // M^-1(S)
+            let inverted_vec =
+                matrix::apply_matrix::<E>(&self.constants.inverse_mds_matrix, &post_vec);
 
+            // M(M^-1(S))
+            let original = matrix::apply_matrix::<E>(&self.constants.mds_matrix, &inverted_vec);
+
+            dbg!(
+                "post_vec (should be same as some round constants)",
+                &post_vec,
+                &inverted_vec,
+                &original
+            );
+            // S = M(M^-1(S))
+            assert_eq!(&post_vec, &original, "Oh no, the inversion trick failed.");
+
+            let post_round_keys = inverted_vec.iter();
+
+            // S-Box Output = B.
+            // With post-add, result is B + M^-1(S).
+            self.elements
+                .iter_mut()
+                .zip(pre_round_keys.zip(post_round_keys))
+                .for_each(|(l, (pre, post))| {
+                    dbg!("a");
+                    quintic_s_box::<E>(l, pre, Some(post));
+                });
+        } else {
+            self.elements
+                .iter_mut()
+                .zip(pre_round_keys)
+                .for_each(|(l, pre)| {
+                    dbg!("b");
+                    quintic_s_box::<E>(l, pre, None);
+                });
+        }
+
+        self.constants_offset += self.elements.len();
+
+        let stashed = self.elements.clone();
+
+        // If absorb_next_round_keys
+        //   M(B + M^-1(S)
+        // else
+        //   M(B)
         // Multiply the elements by the constant MDS matrix
         self.product_mds();
+
+        let applied = matrix::apply_matrix::<E>(&self.constants.mds_matrix, &stashed.to_vec());
+        assert_eq!(
+            applied[..],
+            self.elements[..],
+            "product_mds gives different result than matrix application",
+        );
     }
 
     /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
-    pub fn partial_round(&mut self) {
-        // Every element of the hash buffer is incremented by the round constants
-        self.add_round_constants();
+    pub fn partial_round(&mut self, add_current_round_keys: bool, absorb_next_round_keys: bool) {
+        assert!(!absorb_next_round_keys); // Not yet implemented.
+
+        if add_current_round_keys {
+            // Every element of the hash buffer is incremented by the round constants
+            self.add_round_constants();
+        }
 
         // Apply the quintic S-Box to the first element
         quintic_s_box::<E>(&mut self.elements[0], None, None);
@@ -275,6 +479,7 @@ where
                 .iter()
                 .skip(self.constants_offset),
         ) {
+            dbg!("adding round constant: {}", &round_constant);
             element.add_assign(round_constant);
         }
 
@@ -296,6 +501,10 @@ where
 
         std::mem::replace(&mut self.elements, result);
     }
+
+    fn debug(&self, msg: &str) {
+        dbg!(msg, &self.constants_offset, &self.elements);
+    }
 }
 
 /// Apply the quintic S-Box (s^5) to a given item
@@ -307,13 +516,16 @@ fn quintic_s_box<E: ScalarEngine>(
     if let Some(x) = pre_add {
         l.add_assign(x);
     }
+    dbg!("S-box input", &l);
     let c = *l;
     let mut tmp = l.clone();
     tmp.mul_assign(&c);
     tmp.mul_assign(&tmp.clone());
     l.mul_assign(&tmp);
+    dbg!("S-box output", &l);
     if let Some(x) = post_add {
         l.add_assign(x);
+        dbg!("After S-box post-add", &l);
     }
 }
 
@@ -431,5 +643,32 @@ mod tests {
             poseidon::<Bls12, U2>(&preimage),
             "Poseidon wrapper disagrees with element-at-a-time invocation."
         );
+        panic!();
+    }
+
+    #[test]
+    /// Simple test vectors to ensure results don't change unintentionally in development.
+    fn hash_compare() {
+        // NOTE: For now, type parameters on constants, p, and in the final assertion below need to be updated manually when testing different arities.
+        // TODO: Mechanism to run all tests every time. (Previously only a single arity was compiled in.)
+        let constants = PoseidonConstants::<Bls12, U2>::new();
+        let mut p = Poseidon::<Bls12, U2>::new(&constants);
+        let test_arity = constants.arity();
+        let mut preimage = vec![Scalar::zero(); test_arity];
+        for n in 0..test_arity {
+            let scalar = scalar_from_u64::<Bls12>(n as u64);
+            p.input(scalar).unwrap();
+            preimage[n] = scalar;
+        }
+        let mut p2 = p.clone();
+        // M(B) + S
+        let digest_simple = p.hash_simple();
+
+        // M(B + M^-1(S))
+        let digest_funky = p2.hash_funky();
+
+        dbg!(&p.constants.round_constants[0..10]);
+        // M(B) + S = M(B + M^-1(S))
+        assert_eq!(digest_simple, digest_funky);
     }
 }
