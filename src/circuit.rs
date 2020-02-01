@@ -478,6 +478,14 @@ mod tests {
     fn test_poseidon_hash() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
+        // TODO: add this exact calculation into the test.
+        // (It correctly yields the values in the cases below.)
+        // (defun constraints (arity rp &optional (rf 8))
+        //  (let* ((width (1+ arity))
+        //         (s-boxes (+ (* width rf) rp))
+        //         (s-box-constraints (* 3 s-boxes))
+        //         (mds-constraints (* width (+ rf rp))))
+        //   (+ s-box-constraints mds-constraints)))
         let cases = [(2, 426), (4, 608), (8, 972)];
 
         // TODO: test multiple arities.

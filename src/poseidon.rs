@@ -46,6 +46,23 @@ where
     _a: PhantomData<Arity>,
 }
 
+pub enum HashMode {
+    // The initial and correct version of the algorithm. We should preserve the ability to hash this way for reference
+    // and to preserve confidence in our tests along thew way.
+    Correct,
+    // This mode is meant to be mostly synchronized with `Correct` but may reduce or simplify the total algorithm.
+    // Its purpose is for use during refactoring/development, as a target for `ModB`.
+    ModA,
+    // Here is where the hardest work happens. Incremental refactoring is applied here and reconciled with `ModA`
+    // through instrumentation. A target behavior other than complete/correct hashing may need to be negotiated to faciliatate this.
+    ModB,
+    // The target, this mode accumulates transformations to the algorithm and should give the same results as `Correct`.
+    Optimized,
+}
+use HashMode::{Correct, ModA, ModB, Optimized};
+
+pub const DEFAULT_HASH_MODE: HashMode = Correct;
+
 impl<E, Arity> PoseidonConstants<E, Arity>
 where
     E: ScalarEngine,
@@ -179,22 +196,24 @@ where
         Ok(self.pos - 1)
     }
 
-    pub fn hash(&mut self) -> E::Fr {
-        self.hash_optimized()
-        // let funky = true;
+    pub fn hash_in_mode(&mut self, mode: HashMode) -> E::Fr {
+        match mode {
+            Correct => self.hash_correct(),
+            Optimized => self.hash_optimized(),
+            ModA => self.hash_mod_a(),
+            ModB => self.hash_mod_b(),
+        }
+    }
 
-        // if funky {
-        //     self.hash_funky()
-        // } else {
-        //     self.hash_simple()
-        // }
+    pub fn hash(&mut self) -> E::Fr {
+        self.hash_in_mode(DEFAULT_HASH_MODE)
     }
 
     /// The number of rounds is divided into two equal parts for the full rounds, plus the partial rounds.
     ///
     /// The returned element is the second poseidon element, the first is the arity tag.
     pub fn hash_correct(&mut self) -> E::Fr {
-        self.debug("Hash simple");
+        self.debug("Hash Correct");
         // This counter is incremented when a round constants is read. Therefore, the round constants never
         // repeat
         // The first full round should use the initial constants.
@@ -231,8 +250,8 @@ where
         self.elements[1]
     }
 
-    pub fn hash_simple(&mut self) -> E::Fr {
-        self.debug("Hash simple");
+    pub fn hash_mod_a(&mut self) -> E::Fr {
+        self.debug("Hash Mod A");
         // This counter is incremented when a round constants is read. Therefore, the round constants never
         // repeat
         // The first full round should use the initial constants.
@@ -280,10 +299,10 @@ where
         self.elements[1]
     }
 
-    pub fn hash_funky(&mut self) -> E::Fr {
+    pub fn hash_mod_b(&mut self) -> E::Fr {
         // This counter is incremented when a round constants is read. Therefore, the round constants never
         // repeat
-        self.debug("Hash funky");
+        self.debug("Hash Mod B");
         // The first full round should use the initial constants.
         self.full_round(true, true);
         self.debug("After first full round");
@@ -324,7 +343,7 @@ where
         // This counter is incremented when a round constants is read. Therefore, the round constants never
         // repeat
 
-        self.debug("Hash funky");
+        self.debug("Hash Optimized");
 
         // The first full round should use the initial constants.
         self.full_round(true, true);
@@ -662,7 +681,7 @@ mod tests {
 
     #[test]
     /// Simple test vectors to ensure results don't change unintentionally in development.
-    fn hash_compare_funky() {
+    fn hash_compare_mods() {
         // NOTE: For now, type parameters on constants, p, and in the final assertion below need to be updated manually when testing different arities.
         // TODO: Mechanism to run all tests every time. (Previously only a single arity was compiled in.)
         let constants = PoseidonConstants::<Bls12, U2>::new();
@@ -676,17 +695,15 @@ mod tests {
         }
         let mut p2 = p.clone();
         // M(B) + S
-        let digest_simple = p.hash_simple();
+        let digest_a = p.hash_in_mode(ModA);
 
         // M(B + M^-1(S))
-        let digest_funky = p2.hash_funky();
+        let digest_b = p2.hash_in_mode(ModB);
 
         dbg!(&p.constants.round_constants[0..10]);
         // M(B) + S = M(B + M^-1(S))
 
-        p.debug("hash simple");
-        p2.debug("hash funky");
-        assert_eq!(digest_simple, digest_funky);
+        assert_eq!(digest_a, digest_b);
     }
 
     #[test]
@@ -704,9 +721,9 @@ mod tests {
         }
         let mut p2 = p.clone();
 
-        let digest_correct = p.hash_correct();
+        let digest_correct = p.hash_in_mode(Correct);
 
-        let digest_optimized = p2.hash_optimized();
+        let digest_optimized = p2.hash_in_mode(Optimized);
 
         dbg!(&p.constants.round_constants[0..10]);
 
