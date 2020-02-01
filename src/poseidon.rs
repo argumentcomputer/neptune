@@ -242,23 +242,25 @@ where
         // => M(B)
 
         // M(B) + S
-        self.add_round_constants();
+        //self.add_round_constants();
 
         // Verify that the round constants here (S), really are the S from full_round (post_vec).
 
         self.debug("After adding constants");
 
-        // for i in 1..self.constants.full_rounds / 2 {
-        //     self.full_round(true, false);
-        //     if i == 1 {
-        //         self.debug("After second full round");
-        //     }
-        // }
+        for i in 1..self.constants.full_rounds / 2 {
+            self.full_round(true, false);
+            if i == 1 {
+                self.debug("After second full round");
+            }
+        }
 
-        // self.debug("Before first partial round");
+        // self.add_round_constants();
 
-        // // Constants were added in the previous full round, so skip them here (false argument).
-        // self.partial_round(true, false);
+        self.debug("Before first partial round");
+
+        // Constants were added in the previous full round, so skip them here (false argument).
+        self.partial_round(true, false);
 
         // self.debug("After first partial round");
 
@@ -288,17 +290,17 @@ where
 
         // => M(B + M^-1(S))
 
-        // for i in 1..self.constants.full_rounds / 2 {
-        //     self.full_round(false, true);
-        //     if i == 1 {
-        //         self.debug("After second full round");
-        //     }
-        // }
+        for i in 1..self.constants.full_rounds / 2 {
+            self.full_round(false, true);
+            if i == 1 {
+                self.debug("After second full round");
+            }
+        }
 
-        // self.debug("Before first partial round");
+        self.debug("Before first partial round");
 
         // // Constants were added in the previous full round, so skip them here (false argument).
-        // self.partial_round(false, false);
+        self.partial_round(false, false);
 
         // self.debug("After first partial round");
 
@@ -390,7 +392,14 @@ where
                 .constants
                 .round_constants
                 .iter()
-                .skip(self.constants_offset + self.elements.len())
+                .skip(
+                    self.constants_offset
+                        + if add_current_round_keys {
+                            self.elements.len()
+                        } else {
+                            0
+                        },
+                )
                 .take(self.elements.len())
                 .map(|x| *x)
                 .collect::<Vec<_>>();
@@ -434,8 +443,14 @@ where
                     quintic_s_box::<E>(l, pre, None);
                 });
         }
-
-        self.constants_offset += self.elements.len();
+        let mut consumed = 0;
+        if add_current_round_keys {
+            consumed += self.elements.len()
+        };
+        if absorb_next_round_keys {
+            consumed += self.elements.len()
+        };
+        self.constants_offset += consumed;
 
         let stashed = self.elements.clone();
 
@@ -643,12 +658,11 @@ mod tests {
             poseidon::<Bls12, U2>(&preimage),
             "Poseidon wrapper disagrees with element-at-a-time invocation."
         );
-        panic!();
     }
 
     #[test]
     /// Simple test vectors to ensure results don't change unintentionally in development.
-    fn hash_compare() {
+    fn hash_compare_funky() {
         // NOTE: For now, type parameters on constants, p, and in the final assertion below need to be updated manually when testing different arities.
         // TODO: Mechanism to run all tests every time. (Previously only a single arity was compiled in.)
         let constants = PoseidonConstants::<Bls12, U2>::new();
@@ -669,6 +683,33 @@ mod tests {
 
         dbg!(&p.constants.round_constants[0..10]);
         // M(B) + S = M(B + M^-1(S))
+
+        p.debug("hash simple");
+        p2.debug("hash funky");
         assert_eq!(digest_simple, digest_funky);
+    }
+
+    #[test]
+    fn hash_compare_optimized() {
+        // NOTE: For now, type parameters on constants, p, and in the final assertion below need to be updated manually when testing different arities.
+        // TODO: Mechanism to run all tests every time. (Previously only a single arity was compiled in.)
+        let constants = PoseidonConstants::<Bls12, U2>::new();
+        let mut p = Poseidon::<Bls12, U2>::new(&constants);
+        let test_arity = constants.arity();
+        let mut preimage = vec![Scalar::zero(); test_arity];
+        for n in 0..test_arity {
+            let scalar = scalar_from_u64::<Bls12>(n as u64);
+            p.input(scalar).unwrap();
+            preimage[n] = scalar;
+        }
+        let mut p2 = p.clone();
+
+        let digest_correct = p.hash_correct();
+
+        let digest_optimized = p2.hash_optimized();
+
+        dbg!(&p.constants.round_constants[0..10]);
+
+        assert_eq!(digest_correct, digest_optimized);
     }
 }
