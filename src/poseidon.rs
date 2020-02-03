@@ -84,8 +84,13 @@ where
 
         let (full_rounds, partial_rounds) = round_numbers(arity);
         let round_constants = round_constants::<E>(arity);
-        let preprocessed_round_constants =
-            preprocess_round_constants::<E>(width, full_rounds, partial_rounds, &round_constants);
+        let preprocessed_round_constants = preprocess_round_constants::<E>(
+            width,
+            full_rounds,
+            partial_rounds,
+            &round_constants,
+            &inverse_mds_matrix,
+        );
         // Ensure we have enough constants for the sbox rounds
         assert!(
             width * (full_rounds + partial_rounds) <= round_constants.len(),
@@ -119,12 +124,49 @@ where
 }
 
 fn preprocess_round_constants<E: ScalarEngine>(
-    _width: usize,
-    _full_rounds: usize,
-    _partial_rounds: usize,
+    width: usize,
+    full_rounds: usize,
+    partial_rounds: usize,
     round_constants: &Vec<E::Fr>,
+    inverse_matrix: &Vec<Vec<E::Fr>>,
 ) -> Vec<E::Fr> {
-    round_constants.clone()
+    let mut res = Vec::new();
+
+    let round_keys = |r: usize| &round_constants[r * width..(r + 1) * width];
+    let half_full_rounds = full_rounds / 2; // Not half-full rounds; half full-rounds.
+
+    // First round constants are unchanged.
+    //res.extend(&round_constants[0..width]);
+    res.extend(round_keys(0));
+
+    // Post S-box adds for the first set of full rounds should be 'inverted' from next round.
+    for i in 0..half_full_rounds {
+        let start = 1; // First round was added before any S-boxes.
+        let next_round = round_keys(i + start);
+        let inverted = matrix::apply_matrix::<E>(inverse_matrix, next_round);
+        res.extend(inverted);
+    }
+
+    // TODO: The trick partial rounds.
+    // The plan:
+    // - Work backwards from last row in this group
+    // - Invert the row.
+    // - Save first constant (corresponding to the one S-box performed).
+    // - Add inverted result to previous row.
+    // - Repeat until all partial round key rows have been consumed.
+    // - Extend the preprocessed result by the final resultant row.
+    // - Move the accumulated list of single round keys to the preprocessed result.
+    //   - (Last produced should be first applied, so either pop until empty, or reverse and extend, etc.
+
+    // Post S-box adds for the first set of full rounds should be 'inverted' from next round.
+    for i in 0..(half_full_rounds - 1) {
+        let start = 1 + half_full_rounds + partial_rounds;
+        let next_round = round_keys(i + start);
+        let inverted = matrix::apply_matrix::<E>(inverse_matrix, next_round);
+        res.extend(inverted);
+    }
+
+    res
 }
 
 impl<'a, E, Arity> Poseidon<'a, E, Arity>

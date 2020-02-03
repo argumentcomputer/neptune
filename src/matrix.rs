@@ -78,7 +78,7 @@ fn mat_mul<E: ScalarEngine>(
     Some(res)
 }
 
-fn vec_mul<E: ScalarEngine>(a: &Vec<Scalar<E>>, b: &Vec<Scalar<E>>) -> Scalar<E> {
+fn vec_mul<E: ScalarEngine>(a: &[Scalar<E>], b: &[Scalar<E>]) -> Scalar<E> {
     a.iter()
         .zip(b)
         .fold(Scalar::<E>::zero(), |mut acc, (v1, v2)| {
@@ -89,7 +89,7 @@ fn vec_mul<E: ScalarEngine>(a: &Vec<Scalar<E>>, b: &Vec<Scalar<E>>) -> Scalar<E>
         })
 }
 
-fn vec_add<E: ScalarEngine>(a: &Vec<Scalar<E>>, b: &Vec<Scalar<E>>) -> Vec<Scalar<E>> {
+fn vec_add<E: ScalarEngine>(a: &[Scalar<E>], b: &[Scalar<E>]) -> Vec<Scalar<E>> {
     a.iter()
         .zip(b.iter())
         .map(|(a, b)| {
@@ -101,7 +101,7 @@ fn vec_add<E: ScalarEngine>(a: &Vec<Scalar<E>>, b: &Vec<Scalar<E>>) -> Vec<Scala
 }
 
 /// Multiply a square matrix by a vector of same size: MV where V is considered a row vector.
-pub fn apply_matrix<E: ScalarEngine>(m: &Matrix<Scalar<E>>, v: &Vec<Scalar<E>>) -> Vec<Scalar<E>> {
+pub fn apply_matrix<E: ScalarEngine>(m: &Matrix<Scalar<E>>, v: &[Scalar<E>]) -> Vec<Scalar<E>> {
     assert!(is_square(m), "Only square matrix can be applied to vector.");
     assert_eq!(
         rows(m),
