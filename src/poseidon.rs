@@ -40,6 +40,7 @@ where
     pub mds_matrix: Vec<Vec<E::Fr>>,
     pub inverse_mds_matrix: Vec<Vec<E::Fr>>,
     pub round_constants: Vec<E::Fr>,
+    pub preprocessed_round_constants: Vec<E::Fr>,
     pub arity_tag: E::Fr,
     pub full_rounds: usize,
     pub partial_rounds: usize,
@@ -56,10 +57,13 @@ pub enum HashMode {
     // Here is where the hardest work happens. Incremental refactoring is applied here and reconciled with `ModA`
     // through instrumentation. A target behavior other than complete/correct hashing may need to be negotiated to faciliatate this.
     ModB,
-    // The target, this mode accumulates transformations to the algorithm and should give the same results as `Correct`.
-    Optimized,
+    // The intermediate target, this mode accumulates transformations to the algorithm and should give the same results as `Correct`.
+    // Dynamic optimization calculates round constants along the way and may emit them for use by the static optimization.
+    OptimizedDynamic,
+    // Consumes statically pre-processed constants for simplest operation.
+    OptimizedStatic,
 }
-use HashMode::{Correct, ModA, ModB, Optimized};
+use HashMode::{Correct, ModA, ModB, OptimizedDynamic, OptimizedStatic};
 
 pub const DEFAULT_HASH_MODE: HashMode = Correct;
 
@@ -80,7 +84,8 @@ where
 
         let (full_rounds, partial_rounds) = round_numbers(arity);
         let round_constants = round_constants::<E>(arity);
-
+        let preprocessed_round_constants =
+            preprocess_round_constants::<E>(width, full_rounds, partial_rounds, &round_constants);
         // Ensure we have enough constants for the sbox rounds
         assert!(
             width * (full_rounds + partial_rounds) <= round_constants.len(),
@@ -91,6 +96,7 @@ where
             mds_matrix,
             inverse_mds_matrix,
             round_constants,
+            preprocessed_round_constants,
             arity_tag: arity_tag::<E, Arity>(),
             full_rounds,
             partial_rounds,
@@ -110,6 +116,15 @@ where
         use typenum::Unsigned;
         typenum::Add1::<Arity>::to_usize()
     }
+}
+
+fn preprocess_round_constants<E: ScalarEngine>(
+    _width: usize,
+    _full_rounds: usize,
+    _partial_rounds: usize,
+    round_constants: &Vec<E::Fr>,
+) -> Vec<E::Fr> {
+    round_constants.clone()
 }
 
 impl<'a, E, Arity> Poseidon<'a, E, Arity>
@@ -199,7 +214,8 @@ where
     pub fn hash_in_mode(&mut self, mode: HashMode) -> E::Fr {
         match mode {
             Correct => self.hash_correct(),
-            Optimized => self.hash_optimized(),
+            OptimizedDynamic => self.hash_optimized(),
+            OptimizedStatic => self.hash_optimized_static(),
             ModA => self.hash_mod_a(),
             ModB => self.hash_mod_b(),
         }
@@ -214,6 +230,7 @@ where
     /// The returned element is the second poseidon element, the first is the arity tag.
     pub fn hash_correct(&mut self) -> E::Fr {
         self.debug("Hash Correct");
+
         // This counter is incremented when a round constants is read. Therefore, the round constants never
         // repeat
         // The first full round should use the initial constants.
@@ -343,7 +360,7 @@ where
         // This counter is incremented when a round constants is read. Therefore, the round constants never
         // repeat
 
-        self.debug("Hash Optimized");
+        self.debug("Hash OptimizedDynamic");
 
         // The first full round should use the initial constants.
         self.full_round(true, true);
@@ -379,9 +396,6 @@ where
         self.elements[1]
     }
 
-    /// The full round function will add the round constants and apply the S-Box to all poseidon elements, including the bitflags first element.
-    ///
-    /// After that, the poseidon elements will be set to the result of the product between the poseidon elements and the constant MDS matrix.
     pub fn full_round(&mut self, add_current_round_keys: bool, absorb_next_round_keys: bool) {
         // NOTE: decrease in performance is expected during this refactoring.
         // We seek to preserve correctness while transforming the algorithm to an eventually more performant one.
@@ -488,6 +502,76 @@ where
         );
     }
 
+    pub fn hash_optimized_static(&mut self) -> E::Fr {
+        // This counter is incremented when a round constants is read. Therefore, the round constants never
+        // repeat
+
+        self.debug("Hash OptimizedStatic");
+
+        // The first full round should use the initial constants.
+        self.add_round_constants_static();
+
+        for i in 0..self.constants.full_rounds / 2 {
+            self.full_round_static();
+            if i == 1 {
+                self.debug("After second full round");
+            }
+        }
+
+        self.debug("Before first partial round");
+
+        // Constants were added in the previous full round, so skip them here (false argument).
+        self.partial_round_static();
+
+        self.debug("After first partial round");
+
+        for _ in 1..self.constants.partial_rounds {
+            self.partial_round_static();
+        }
+
+        self.debug("After last partial round");
+
+        for _ in 0..self.constants.full_rounds / 2 {
+            self.full_round_static();
+        }
+
+        self.debug("After last full round");
+
+        self.elements[1]
+    }
+
+    fn full_round_static(&mut self) {
+        let post_round_keys = self
+            .constants
+            .preprocessed_round_constants
+            .iter()
+            .take(self.elements.len());
+
+        self.elements
+            .iter_mut()
+            .zip(post_round_keys)
+            .for_each(|(l, post)| {
+                quintic_s_box::<E>(l, None, Some(post));
+            });
+
+        self.constants_offset += self.elements.len();
+
+        self.product_mds();
+    }
+
+    /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
+    pub fn partial_round_static(&mut self) {
+        let post_round_key = self.constants.preprocessed_round_constants[self.constants_offset];
+
+        // Apply the quintic S-Box to the first element
+        quintic_s_box::<E>(&mut self.elements[0], None, Some(&post_round_key));
+
+        self.constants_offset += 1;
+
+        // Multiply the elements by the constant MDS matrix
+        self.product_mds();
+    }
+
     /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
     pub fn partial_round(&mut self, add_current_round_keys: bool, absorb_next_round_keys: bool) {
         assert!(!absorb_next_round_keys); // Not yet implemented.
@@ -510,6 +594,20 @@ where
         for (element, round_constant) in self.elements.iter_mut().zip(
             self.constants
                 .round_constants
+                .iter()
+                .skip(self.constants_offset),
+        ) {
+            dbg!("adding round constant: {}", &round_constant);
+            element.add_assign(round_constant);
+        }
+
+        self.constants_offset += self.elements.len();
+    }
+
+    fn add_round_constants_static(&mut self) {
+        for (element, round_constant) in self.elements.iter_mut().zip(
+            self.constants
+                .preprocessed_round_constants
                 .iter()
                 .skip(self.constants_offset),
         ) {
@@ -720,13 +818,16 @@ mod tests {
             preimage[n] = scalar;
         }
         let mut p2 = p.clone();
+        let mut p3 = p.clone();
 
         let digest_correct = p.hash_in_mode(Correct);
 
-        let digest_optimized = p2.hash_in_mode(Optimized);
+        let digest_optimized_dynamic = p2.hash_in_mode(OptimizedDynamic);
+        let digest_optimized_static = p3.hash_in_mode(OptimizedStatic);
 
         dbg!(&p.constants.round_constants[0..10]);
 
-        assert_eq!(digest_correct, digest_optimized);
+        assert_eq!(digest_correct, digest_optimized_dynamic);
+        //assert_eq!(digest_correct, digest_optimized_static);
     }
 }
