@@ -133,14 +133,15 @@ fn preprocess_round_constants<E: ScalarEngine>(
     let mut res = Vec::new();
 
     let round_keys = |r: usize| &round_constants[r * width..(r + 1) * width];
+
     let half_full_rounds = full_rounds / 2; // Not half-full rounds; half full-rounds.
 
     // First round constants are unchanged.
-    //res.extend(&round_constants[0..width]);
     res.extend(round_keys(0));
 
     // Post S-box adds for the first set of full rounds should be 'inverted' from next round.
-    for i in 0..half_full_rounds {
+    // The final round is skipped because that value must be obtained from the result of preprocesing the partial rounds.
+    for i in 0..(half_full_rounds - 1) {
         let start = 1; // First round was added before any S-boxes.
         let next_round = round_keys(i + start);
         let inverted = matrix::apply_matrix::<E>(inverse_matrix, next_round);
@@ -157,27 +158,38 @@ fn preprocess_round_constants<E: ScalarEngine>(
     // - Move the accumulated list of single round keys to the preprocessed result.
     //   - (Last produced should be first applied, so either pop until empty, or reverse and extend, etc.
 
-    // `partial_acc` will accumulate the single post-S-box constant for each partial-round, in reverse order.
-    let mut partial_acc: Vec<E::Fr> = Vec::new();
-    for _i in 0..(partial_rounds) {
-        //for _i in 0..(partial_rounds - 10) {
-        // This bogus -10 term is the point at which the length of the result breaks  optimized_static.
-        partial_acc.push(E::Fr::zero()); // FIXME: Just to check size assumptions of preprocessed constants.
-    }
+    // `partial_keys` will accumulate the single post-S-box constant for each partial-round, in reverse order.
+    let mut partial_keys: Vec<E::Fr> = Vec::new();
 
-    while let Some(x) = partial_acc.pop() {
+    // `round_acc` holds the accumulated result of inverting and adding subsuquent round constants (in reverse).
+    let round_acc = (0..partial_rounds) // alpha
+        .map(|i| round_keys(half_full_rounds + partial_rounds - i))
+        .fold(vec![E::Fr::zero(); width], |acc, round_keys| {
+            let mut inverted = matrix::apply_matrix::<E>(inverse_matrix, &round_keys);
+            partial_keys.push(inverted[0]);
+            inverted[0] = E::Fr::zero();
+            let incremented = matrix::vec_add::<E>(&acc, &inverted);
+            incremented
+        });
+
+    res.extend(round_acc);
+
+    dbg!("preprocessed partial keys", partial_keys.len());
+
+    while let Some(x) = partial_keys.pop() {
         res.push(x)
     }
 
     // Post S-box adds for the first set of full rounds should be 'inverted' from next round.
-    for i in 0..(half_full_rounds - 1) {
-        let start = 1 + half_full_rounds + partial_rounds;
+    for i in 1..(half_full_rounds) {
+        let start = half_full_rounds + partial_rounds;
         let next_round = round_keys(i + start);
         let inverted = matrix::apply_matrix::<E>(inverse_matrix, next_round);
         res.extend(inverted);
     }
 
     dbg!("preprocessed length", &res.len());
+    dbg!(&res);
     res
 }
 
@@ -268,7 +280,7 @@ where
     pub fn hash_in_mode(&mut self, mode: HashMode) -> E::Fr {
         match mode {
             Correct => self.hash_correct(),
-            OptimizedDynamic => self.hash_optimized(),
+            OptimizedDynamic => self.hash_optimized_dynamic(),
             OptimizedStatic => self.hash_optimized_static(),
             ModA => self.hash_mod_a(),
             ModB => self.hash_mod_b(),
@@ -290,12 +302,12 @@ where
         // The first full round should use the initial constants.
         self.full_round(true, false);
 
-        self.debug("After first full round");
+        self.debug("After first full round (Correct)");
 
         for i in 1..self.constants.full_rounds / 2 {
             self.full_round(true, false);
             if i == 1 {
-                self.debug("After second full round");
+                self.debug("After second full round (Correct)");
             }
         }
 
@@ -304,19 +316,19 @@ where
         // Constants were added in the previous full round, so skip them here (false argument).
         self.partial_round(true, false);
 
-        self.debug("After first partial round");
+        self.debug("After first partial round (Correct)");
 
         for _ in 1..self.constants.partial_rounds {
             self.partial_round(true, false);
         }
 
-        self.debug("After last partial round");
+        self.debug("After last partial round (Correct)");
 
         for _ in 0..self.constants.full_rounds / 2 {
             self.full_round(true, false);
         }
 
-        self.debug("After last full round");
+        self.debug("After last full round (Correct)");
 
         self.elements[1]
     }
@@ -410,7 +422,7 @@ where
         self.elements[1]
     }
 
-    pub fn hash_optimized(&mut self) -> E::Fr {
+    pub fn hash_optimized_dynamic(&mut self) -> E::Fr {
         // This counter is incremented when a round constants is read. Therefore, the round constants never
         // repeat
 
@@ -421,14 +433,17 @@ where
 
         self.debug("After first full round (dynamic)");
 
-        for i in 1..self.constants.full_rounds / 2 {
+        for i in 1..(self.constants.full_rounds / 2) {
             self.full_round(false, true);
             if i == 1 {
                 self.debug("After second full round (dynamic)");
             }
+            if i == (self.constants.full_rounds / 2) - 2 {
+                self.debug("Before last full round (dynamic)");
+            }
         }
 
-        self.debug("Before first partial round");
+        self.debug("Before first partial round (dynamic)");
 
         // Constants were added in the previous full round, so skip them here (false argument).
         self.partial_round(false, false);
@@ -501,12 +516,6 @@ where
             // M(M^-1(S))
             let original = matrix::apply_matrix::<E>(&self.constants.mds_matrix, &inverted_vec);
 
-            dbg!(
-                "post_vec (should be same as some round constants)",
-                &post_vec,
-                &inverted_vec,
-                &original
-            );
             // S = M(M^-1(S))
             assert_eq!(&post_vec, &original, "Oh no, the inversion trick failed.");
 
@@ -570,6 +579,9 @@ where
             if i == 1 {
                 self.debug("After second full round (static)");
             }
+            if i == (self.constants.full_rounds / 2) - 2 {
+                self.debug("Before last full round (static)");
+            }
         }
 
         self.debug("Before first partial round (static)");
@@ -587,8 +599,14 @@ where
         self.full_round_static(true);
 
         self.debug("After last full round (static)");
-        dbg!(self.constants.preprocessed_round_constants.len());
 
+        assert_eq!(
+            self.constants_offset,
+            self.constants.preprocessed_round_constants.len(),
+            "Constants consumed ({}) must equal preprocessed constants provided ({}).",
+            self.constants_offset,
+            self.constants.preprocessed_round_constants.len()
+        );
         self.elements[1]
     }
 
@@ -621,8 +639,9 @@ where
                 quintic_s_box::<E>(l, None, post_key);
             });
 
-        self.constants_offset += self.elements.len();
-
+        if !last_round {
+            self.constants_offset += self.elements.len();
+        }
         self.product_mds();
     }
 

@@ -89,7 +89,7 @@ fn vec_mul<E: ScalarEngine>(a: &[Scalar<E>], b: &[Scalar<E>]) -> Scalar<E> {
         })
 }
 
-fn vec_add<E: ScalarEngine>(a: &[Scalar<E>], b: &[Scalar<E>]) -> Vec<Scalar<E>> {
+pub fn vec_add<E: ScalarEngine>(a: &[Scalar<E>], b: &[Scalar<E>]) -> Vec<Scalar<E>> {
     a.iter()
         .zip(b.iter())
         .map(|(a, b)| {
