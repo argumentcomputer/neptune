@@ -44,6 +44,7 @@ where
     pub arity_tag: E::Fr,
     pub full_rounds: usize,
     pub partial_rounds: usize,
+    pub partial_preprocessed: usize,
     _a: PhantomData<Arity>,
 }
 
@@ -84,12 +85,16 @@ where
 
         let (full_rounds, partial_rounds) = round_numbers(arity);
         let round_constants = round_constants::<E>(arity);
+
+        let partial_preprocessed = 0;
+
         let preprocessed_round_constants = preprocess_round_constants::<E>(
             width,
             full_rounds,
             partial_rounds,
             &round_constants,
             &inverse_mds_matrix,
+            partial_preprocessed,
         );
         // Ensure we have enough constants for the sbox rounds
         assert!(
@@ -105,6 +110,7 @@ where
             arity_tag: arity_tag::<E, Arity>(),
             full_rounds,
             partial_rounds,
+            partial_preprocessed,
             _a: PhantomData::<Arity>,
         }
     }
@@ -129,6 +135,7 @@ fn preprocess_round_constants<E: ScalarEngine>(
     partial_rounds: usize,
     round_constants: &Vec<E::Fr>,
     inverse_matrix: &Vec<Vec<E::Fr>>,
+    partial_preprocessed: usize,
 ) -> Vec<E::Fr> {
     let mut res = Vec::new();
 
@@ -139,15 +146,36 @@ fn preprocess_round_constants<E: ScalarEngine>(
     // First round constants are unchanged.
     res.extend(round_keys(0));
 
+    let unpreprocessed = partial_rounds - partial_preprocessed;
+
     // Post S-box adds for the first set of full rounds should be 'inverted' from next round.
-    // The final round is skipped because that value must be obtained from the result of preprocesing the partial rounds.
-    for i in 0..(half_full_rounds - 1) {
-        let start = 1; // First round was added before any S-boxes.
-        let next_round = round_keys(i + start);
+    // The final round is skipped when fully preprocessing because that value must be obtained from the result of preprocesing the partial rounds.
+    let end = if unpreprocessed > 0 {
+        half_full_rounds
+    } else {
+        half_full_rounds - 1
+    };
+    for i in 0..end {
+        let next_round = round_keys(i + 1); // First round was added before any S-boxes.
         let inverted = matrix::apply_matrix::<E>(inverse_matrix, next_round);
         res.extend(inverted);
     }
 
+    if unpreprocessed > 0 {
+        res.extend(round_keys(half_full_rounds + 1));
+    }
+
+    for i in 0..(unpreprocessed - 1) {
+        if i == unpreprocessed - 2 {
+            res.extend(matrix::apply_matrix::<E>(
+                inverse_matrix,
+                round_keys(half_full_rounds + i + 2),
+            ));
+        } else {
+            res.extend(round_keys(half_full_rounds + i + 2));
+        };
+    }
+    dbg!(unpreprocessed);
     // The plan:
     // - Work backwards from last row in this group
     // - Invert the row.
@@ -161,19 +189,19 @@ fn preprocess_round_constants<E: ScalarEngine>(
     // `partial_keys` will accumulate the single post-S-box constant for each partial-round, in reverse order.
     let mut partial_keys: Vec<E::Fr> = Vec::new();
 
-    // `round_acc` holds the accumulated result of inverting and adding subsuquent round constants (in reverse).
-    let round_acc = (0..partial_rounds) // alpha
-        .map(|i| round_keys(half_full_rounds + partial_rounds - i))
-        .fold(vec![E::Fr::zero(); width], |acc, round_keys| {
-            let mut inverted = matrix::apply_matrix::<E>(inverse_matrix, &round_keys);
-            partial_keys.push(inverted[0]);
-            inverted[0] = E::Fr::zero();
-            let incremented = matrix::vec_add::<E>(&acc, &inverted);
-            incremented
-        });
-
-    res.extend(round_acc);
-
+    if partial_preprocessed > 0 {
+        // `round_acc` holds the accumulated result of inverting and adding subsequent round constants (in reverse).
+        let round_acc = (unpreprocessed..partial_rounds)
+            .map(|i| round_keys(half_full_rounds + partial_rounds - i))
+            .fold(vec![E::Fr::zero(); width], |acc, round_keys| {
+                let mut inverted = matrix::apply_matrix::<E>(inverse_matrix, &round_keys);
+                partial_keys.push(inverted[0]);
+                inverted[0] = E::Fr::zero();
+                let incremented = matrix::vec_add::<E>(&acc, &inverted);
+                incremented
+            });
+        res.extend(round_acc);
+    }
     dbg!("preprocessed partial keys", partial_keys.len());
 
     while let Some(x) = partial_keys.pop() {
@@ -209,7 +237,6 @@ where
                 E::Fr::zero()
             }
         });
-
         Poseidon {
             constants_offset: 0,
             elements,
@@ -427,6 +454,7 @@ where
         // repeat
 
         self.debug("Hash OptimizedDynamic");
+        dbg!(&self.constants.round_constants);
 
         // The first full round should use the initial constants.
         self.full_round(true, true);
@@ -450,18 +478,105 @@ where
 
         self.debug("After first partial round (dynamic)");
 
-        for _ in 1..self.constants.partial_rounds {
+        for i in 1..self.constants.partial_rounds {
             self.partial_round(true, false);
+            if i == 1 {
+                self.debug("After second partial round (dynamic)");
+            }
         }
 
         self.debug("After last partial round (dynamic)");
 
-        for _ in 0..self.constants.full_rounds / 2 {
+        for i in 0..self.constants.full_rounds / 2 {
             self.full_round(true, false);
+
+            if i == (self.constants.full_rounds / 2) - 2 {
+                self.debug("Before last full round (dynamic)");
+            }
         }
 
         self.debug("After last full round (dynamic)");
 
+        self.elements[1]
+    }
+
+    pub fn hash_optimized_static(&mut self) -> E::Fr {
+        // This counter is incremented when a round constants is read. Therefore, the round constants never
+        // repeat
+
+        self.debug("Hash OptimizedStatic");
+
+        // The first full round should use the initial constants.
+        self.add_round_constants_static();
+
+        for i in 0..self.constants.full_rounds / 2 {
+            self.full_round_static(false);
+            if i == 1 {
+                self.debug("After second full round (static)");
+            }
+            if i == (self.constants.full_rounds / 2) - 2 {
+                self.debug("Before last full round (static)");
+            }
+        }
+
+        self.debug("Before first partial round (static)");
+
+        let unpreprocessed = self.constants.partial_rounds - self.constants.partial_preprocessed;
+        for i in 0..(unpreprocessed - 1) {
+            self.partial_round_static(false, i == 0, false);
+
+            if i == 0 {
+                self.debug("After first partial round (static)");
+            }
+            if i == 1 {
+                self.debug("After second partial round (static)");
+            }
+
+            if i == unpreprocessed - 2 {
+                self.debug("Before second-to-last unpreprocessed partial round (static)");
+            }
+        }
+
+        if unpreprocessed > 0 {
+            // We need both pre and post round-keys added at the seam.
+            self.partial_round_static(false, false, true);
+        }
+
+        for i in unpreprocessed..self.constants.partial_rounds {
+            if i == (self.constants.partial_rounds - 1) {
+                self.debug("Before last preprocessed partial round (static)");
+            }
+            self.partial_round_static(true, false, false);
+        }
+
+        self.debug("After last partial round (static)");
+
+        // if self.constants.partial_preprocessed == 0 {
+        //     self.add_round_constants_static();
+        // };
+        //        self.add_round_constants_static();
+
+        // All but last full round.
+        for i in 0..self.constants.full_rounds / 2 {
+            if i == (self.constants.full_rounds / 2) - 1 {
+                self.debug("Before last full round (static)");
+                self.full_round_static(true);
+            } else {
+                self.full_round_static(false);
+            }
+        }
+        // self.debug("Before last full round (static)");
+        // self.full_round_static(true);
+
+        self.debug("After last full round (static)");
+
+        assert_eq!(
+            self.constants_offset,
+            self.constants.preprocessed_round_constants.len(),
+            "Constants consumed ({}) must equal preprocessed constants provided ({}).",
+            self.constants_offset,
+            self.constants.preprocessed_round_constants.len()
+        );
         self.elements[1]
     }
 
@@ -480,6 +595,7 @@ where
             .skip(self.constants_offset)
             .map(|x| {
                 if add_current_round_keys {
+                    dbg!(x);
                     Some(x)
                 } else {
                     None
@@ -565,60 +681,14 @@ where
         );
     }
 
-    pub fn hash_optimized_static(&mut self) -> E::Fr {
-        // This counter is incremented when a round constants is read. Therefore, the round constants never
-        // repeat
-
-        self.debug("Hash OptimizedStatic");
-
-        // The first full round should use the initial constants.
-        self.add_round_constants_static();
-
-        for i in 0..self.constants.full_rounds / 2 {
-            self.full_round_static(false);
-            if i == 1 {
-                self.debug("After second full round (static)");
-            }
-            if i == (self.constants.full_rounds / 2) - 2 {
-                self.debug("Before last full round (static)");
-            }
-        }
-
-        self.debug("Before first partial round (static)");
-
-        for _ in 0..self.constants.partial_rounds {
-            self.partial_round_static();
-        }
-
-        self.debug("After last partial round (static)");
-
-        // All but last full round.
-        for _ in 1..self.constants.full_rounds / 2 {
-            self.full_round_static(false);
-        }
-        self.full_round_static(true);
-
-        self.debug("After last full round (static)");
-
-        assert_eq!(
-            self.constants_offset,
-            self.constants.preprocessed_round_constants.len(),
-            "Constants consumed ({}) must equal preprocessed constants provided ({}).",
-            self.constants_offset,
-            self.constants.preprocessed_round_constants.len()
-        );
-        self.elements[1]
-    }
-
     fn full_round_static(&mut self, last_round: bool) {
         let to_take = self.elements.len();
-
         let post_round_keys = self
             .constants
             .preprocessed_round_constants
             .iter()
             .skip(self.constants_offset)
-            .take(self.elements.len());
+            .take(to_take);
 
         if !last_round {
             let needed = self.constants_offset + to_take;
@@ -635,26 +705,24 @@ where
             .zip(post_round_keys)
             .for_each(|(l, post)| {
                 // Be explicit that no round key is added after last round of S-boxes.
-                let post_key = if last_round { None } else { Some(post) };
+                dbg!(&post);
+                let post_key = if last_round {
+                    panic!("Trying to skip last full round, but there is a key here!")
+                } else {
+                    Some(post)
+                };
                 quintic_s_box::<E>(l, None, post_key);
             });
+        // We need this because post_round_keys will have been empty, so it didn't happen in the for_each. :(
+        if last_round {
+            self.elements
+                .iter_mut()
+                .for_each(|l| quintic_s_box::<E>(l, None, None));
+        }
 
         if !last_round {
             self.constants_offset += self.elements.len();
         }
-        self.product_mds();
-    }
-
-    /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
-    pub fn partial_round_static(&mut self) {
-        let post_round_key = self.constants.preprocessed_round_constants[self.constants_offset];
-
-        // Apply the quintic S-Box to the first element
-        quintic_s_box::<E>(&mut self.elements[0], None, Some(&post_round_key));
-
-        self.constants_offset += 1;
-
-        // Multiply the elements by the constant MDS matrix
         self.product_mds();
     }
 
@@ -674,6 +742,37 @@ where
         self.product_mds();
     }
 
+    /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
+    pub fn partial_round_static(
+        &mut self,
+        preprocessed: bool,
+        skip_constants: bool,
+        last_unpreprpocessed: bool,
+    ) {
+        if preprocessed {
+            let post_round_key = self.constants.preprocessed_round_constants[self.constants_offset];
+            // Apply the quintic S-Box to the first element
+            quintic_s_box::<E>(&mut self.elements[0], None, Some(&post_round_key));
+            self.constants_offset += 1;
+
+            assert!(!skip_constants);
+        // if !skip_constants {
+        //     self.add_round_constants_static();
+        // }
+        } else {
+            if !skip_constants {
+                self.add_round_constants_static();
+            }
+            quintic_s_box::<E>(&mut self.elements[0], None, None);
+        }
+        if last_unpreprpocessed {
+            self.add_round_constants_static();
+        }
+
+        // Multiply the elements by the constant MDS matrix
+        self.product_mds();
+    }
+
     /// For every leaf, add the round constants with index defined by the constants offset, and increment the
     /// offset
     fn add_round_constants(&mut self) {
@@ -683,7 +782,11 @@ where
                 .iter()
                 .skip(self.constants_offset),
         ) {
-            //dbg!("adding round constant: {}", &round_constant);
+            dbg!(
+                "adding round constant:",
+                &round_constant,
+                &self.constants_offset
+            );
             element.add_assign(round_constant);
         }
 
@@ -697,7 +800,11 @@ where
                 .iter()
                 .skip(self.constants_offset),
         ) {
-            //            dbg!("adding round constant: {}", &round_constant);
+            dbg!(
+                "adding round constant (static):",
+                &round_constant,
+                &self.constants_offset
+            );
             element.add_assign(round_constant);
         }
 
@@ -734,13 +841,13 @@ fn quintic_s_box<E: ScalarEngine>(
     if let Some(x) = pre_add {
         l.add_assign(x);
     }
-    //dbg!("S-box input", &l);
+    dbg!("S-box input", &l);
     let c = *l;
     let mut tmp = l.clone();
     tmp.mul_assign(&c);
     tmp.mul_assign(&tmp.clone());
     l.mul_assign(&tmp);
-    //dbg!("S-box output", &l);
+    dbg!("S-box output", &l);
     if let Some(x) = post_add {
         l.add_assign(x);
         //  dbg!("After S-box post-add", &l);
