@@ -100,6 +100,17 @@ pub fn vec_add<E: ScalarEngine>(a: &[Scalar<E>], b: &[Scalar<E>]) -> Vec<Scalar<
         .collect::<Vec<_>>()
 }
 
+pub fn vec_sub<E: ScalarEngine>(a: &[Scalar<E>], b: &[Scalar<E>]) -> Vec<Scalar<E>> {
+    a.iter()
+        .zip(b.iter())
+        .map(|(a, b)| {
+            let mut res = a.clone();
+            res.sub_assign(b);
+            res
+        })
+        .collect::<Vec<_>>()
+}
+
 /// Multiply a square matrix by a vector of same size: MV where V is considered a row vector.
 pub fn apply_matrix<E: ScalarEngine>(m: &Matrix<Scalar<E>>, v: &[Scalar<E>]) -> Vec<Scalar<E>> {
     assert!(is_square(m), "Only square matrix can be applied to vector.");

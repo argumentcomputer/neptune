@@ -86,7 +86,9 @@ where
         let (full_rounds, partial_rounds) = round_numbers(arity);
         let round_constants = round_constants::<E>(arity);
 
-        let partial_preprocessed = 0;
+        //let partial_preprocessed = 0;
+        let partial_preprocessed = 1;
+        //let partial_preprocessed = partial_rounds;
 
         let preprocessed_round_constants = preprocess_round_constants::<E>(
             width,
@@ -94,6 +96,7 @@ where
             partial_rounds,
             &round_constants,
             &inverse_mds_matrix,
+            &mds_matrix,
             partial_preprocessed,
         );
         // Ensure we have enough constants for the sbox rounds
@@ -135,6 +138,7 @@ fn preprocess_round_constants<E: ScalarEngine>(
     partial_rounds: usize,
     round_constants: &Vec<E::Fr>,
     inverse_matrix: &Vec<Vec<E::Fr>>,
+    mds_matrix: &Vec<Vec<E::Fr>>,
     partial_preprocessed: usize,
 ) -> Vec<E::Fr> {
     let mut res = Vec::new();
@@ -161,21 +165,6 @@ fn preprocess_round_constants<E: ScalarEngine>(
         res.extend(inverted);
     }
 
-    if unpreprocessed > 0 {
-        res.extend(round_keys(half_full_rounds + 1));
-    }
-
-    for i in 0..(unpreprocessed - 1) {
-        if i == unpreprocessed - 2 {
-            res.extend(matrix::apply_matrix::<E>(
-                inverse_matrix,
-                round_keys(half_full_rounds + i + 2),
-            ));
-        } else {
-            res.extend(round_keys(half_full_rounds + i + 2));
-        };
-    }
-    dbg!(unpreprocessed);
     // The plan:
     // - Work backwards from last row in this group
     // - Invert the row.
@@ -189,20 +178,60 @@ fn preprocess_round_constants<E: ScalarEngine>(
     // `partial_keys` will accumulate the single post-S-box constant for each partial-round, in reverse order.
     let mut partial_keys: Vec<E::Fr> = Vec::new();
 
-    if partial_preprocessed > 0 {
-        // `round_acc` holds the accumulated result of inverting and adding subsequent round constants (in reverse).
-        let round_acc = (unpreprocessed..partial_rounds)
-            .map(|i| round_keys(half_full_rounds + partial_rounds - i))
-            .fold(vec![E::Fr::zero(); width], |acc, round_keys| {
-                let mut inverted = matrix::apply_matrix::<E>(inverse_matrix, &round_keys);
-                partial_keys.push(inverted[0]);
-                inverted[0] = E::Fr::zero();
-                let incremented = matrix::vec_add::<E>(&acc, &inverted);
-                incremented
-            });
-        res.extend(round_acc);
+    let final_round = half_full_rounds + partial_rounds;
+    let final_round_key = round_keys(final_round).to_vec();
+
+    // `round_acc` holds the accumulated result of inverting and adding subsequent round constants (in reverse).
+    let round_acc = (0..partial_preprocessed)
+        .map(|i| round_keys(final_round - i - 1))
+        .fold(final_round_key, |acc, previous_round_keys| {
+            let mut inverted = matrix::apply_matrix::<E>(inverse_matrix, &acc);
+            partial_keys.push(inverted[0]);
+            inverted[0] = E::Fr::zero();
+            let diff = matrix::vec_sub::<E>(&inverted, &previous_round_keys);
+
+            dbg!(&inverted, &diff);
+            diff
+        });
+
+    if partial_preprocessed == 1 {
+        let base_round = half_full_rounds + unpreprocessed;
+        // Shared between branches.
+        let initial = vec![E::Fr::one(), E::Fr::one(), E::Fr::one()];
+
+        // Compute one step with the given (unpreprocessed) constants.
+        let mut q_state = matrix::vec_add::<E>(round_keys(base_round), &initial);
+        quintic_s_box::<E>(&mut q_state[0], None, None);
+        let mixed = matrix::apply_matrix::<E>(mds_matrix, &q_state);
+        let plain_result = matrix::vec_add::<E>(round_keys(base_round + 1), &mixed);
+
+        // Compute the same step using the preprocessed constants.
+        // initial + (inverted_id - initial) = inverted_id
+        let mut p_state = matrix::vec_add::<E>(&round_acc.clone(), &initial);
+
+        quintic_s_box::<E>(&mut p_state[0], None, Some(&partial_keys[0]));
+        let preprocessed_result = matrix::apply_matrix::<E>(mds_matrix, &p_state);
+
+        assert_eq!(
+            plain_result, preprocessed_result,
+            "Single preprocessing step couldn't be verified."
+        );
     }
-    dbg!("preprocessed partial keys", partial_keys.len());
+
+    if unpreprocessed == 0 {
+        res.extend(round_acc);
+    } else {
+        for i in 1..=unpreprocessed {
+            if i == unpreprocessed {
+                //res.extend(&round_acc);
+                res.extend(matrix::apply_matrix::<E>(inverse_matrix, &round_acc));
+            } else {
+                res.extend(round_keys(half_full_rounds + i));
+            };
+        }
+    }
+
+    dbg!(&partial_keys);
 
     while let Some(x) = partial_keys.pop() {
         res.push(x)
@@ -216,8 +245,7 @@ fn preprocess_round_constants<E: ScalarEngine>(
         res.extend(inverted);
     }
 
-    dbg!("preprocessed length", &res.len());
-    dbg!(&res);
+    dbg!(&res.len(), &res);
     res
 }
 
@@ -522,40 +550,38 @@ where
         self.debug("Before first partial round (static)");
 
         let unpreprocessed = self.constants.partial_rounds - self.constants.partial_preprocessed;
-        for i in 0..(unpreprocessed - 1) {
-            self.partial_round_static(false, i == 0, false);
-
-            if i == 0 {
-                self.debug("After first partial round (static)");
-            }
-            if i == 1 {
-                self.debug("After second partial round (static)");
-            }
-
-            if i == unpreprocessed - 2 {
-                self.debug("Before second-to-last unpreprocessed partial round (static)");
-            }
-        }
-
         if unpreprocessed > 0 {
+            for i in 0..(unpreprocessed - 1) {
+                self.partial_round_static(false, i == 0, false);
+
+                if i == 0 {
+                    self.debug("After first partial round (static)");
+                }
+                if i == 1 {
+                    self.debug("After second partial round (static)");
+                }
+                if i == unpreprocessed - 2 {
+                    self.debug("Before second-to-last unpreprocessed partial round (static)");
+                    dbg!(self.constants.preprocessed_round_constants[self.constants_offset]);
+                }
+            }
+
             // We need both pre and post round-keys added at the seam.
             self.partial_round_static(false, false, true);
+            self.debug("xxx");
         }
 
         for i in unpreprocessed..self.constants.partial_rounds {
             if i == (self.constants.partial_rounds - 1) {
                 self.debug("Before last preprocessed partial round (static)");
+                dbg!(self.constants.preprocessed_round_constants[self.constants_offset]);
             }
-            self.partial_round_static(true, false, false);
+            //self.partial_round_static(true, false, false);
+            self.partial_round_static(true, true, false);
         }
 
         self.debug("After last partial round (static)");
-
-        // if self.constants.partial_preprocessed == 0 {
-        //     self.add_round_constants_static();
-        // };
-        //        self.add_round_constants_static();
-
+        //        panic!();
         // All but last full round.
         for i in 0..self.constants.full_rounds / 2 {
             if i == (self.constants.full_rounds / 2) - 1 {
@@ -565,8 +591,6 @@ where
                 self.full_round_static(false);
             }
         }
-        // self.debug("Before last full round (static)");
-        // self.full_round_static(true);
 
         self.debug("After last full round (static)");
 
@@ -577,6 +601,7 @@ where
             self.constants_offset,
             self.constants.preprocessed_round_constants.len()
         );
+
         self.elements[1]
     }
 
@@ -595,7 +620,6 @@ where
             .skip(self.constants_offset)
             .map(|x| {
                 if add_current_round_keys {
-                    dbg!(x);
                     Some(x)
                 } else {
                     None
@@ -699,7 +723,6 @@ where
                 needed
             );
         }
-
         self.elements
             .iter_mut()
             .zip(post_round_keys)
@@ -707,7 +730,7 @@ where
                 // Be explicit that no round key is added after last round of S-boxes.
                 dbg!(&post);
                 let post_key = if last_round {
-                    panic!("Trying to skip last full round, but there is a key here!")
+                    panic!("Trying to skip last full round, but there is a key here! ({})");
                 } else {
                     Some(post)
                 };
@@ -747,26 +770,26 @@ where
         &mut self,
         preprocessed: bool,
         skip_constants: bool,
-        last_unpreprpocessed: bool,
+        last_unpreprocessed: bool,
     ) {
         if preprocessed {
             let post_round_key = self.constants.preprocessed_round_constants[self.constants_offset];
+            dbg!(&post_round_key);
             // Apply the quintic S-Box to the first element
             quintic_s_box::<E>(&mut self.elements[0], None, Some(&post_round_key));
             self.constants_offset += 1;
-
-            assert!(!skip_constants);
-        // if !skip_constants {
-        //     self.add_round_constants_static();
-        // }
+            self.debug("After adding partial key post S-box.");
+        // assert!(!skip_constants);
         } else {
             if !skip_constants {
                 self.add_round_constants_static();
             }
+            self.debug("before s-box");
             quintic_s_box::<E>(&mut self.elements[0], None, None);
         }
-        if last_unpreprpocessed {
+        if last_unpreprocessed {
             self.add_round_constants_static();
+            self.debug("after round constants (and s-box)");
         }
 
         // Multiply the elements by the constant MDS matrix
@@ -782,11 +805,11 @@ where
                 .iter()
                 .skip(self.constants_offset),
         ) {
-            dbg!(
-                "adding round constant:",
-                &round_constant,
-                &self.constants_offset
-            );
+            // dbg!(
+            //     "adding round constant:",
+            //     &round_constant,
+            //     &self.constants_offset
+            // );
             element.add_assign(round_constant);
         }
 
@@ -800,11 +823,11 @@ where
                 .iter()
                 .skip(self.constants_offset),
         ) {
-            dbg!(
-                "adding round constant (static):",
-                &round_constant,
-                &self.constants_offset
-            );
+            // dbg!(
+            //     "adding round constant (static):",
+            //     &round_constant,
+            //     &self.constants_offset
+            // );
             element.add_assign(round_constant);
         }
 
@@ -841,13 +864,13 @@ fn quintic_s_box<E: ScalarEngine>(
     if let Some(x) = pre_add {
         l.add_assign(x);
     }
-    dbg!("S-box input", &l);
+    // dbg!("S-box input", &l);
     let c = *l;
     let mut tmp = l.clone();
     tmp.mul_assign(&c);
     tmp.mul_assign(&tmp.clone());
     l.mul_assign(&tmp);
-    dbg!("S-box output", &l);
+    // dbg!("S-box output", &l);
     if let Some(x) = post_add {
         l.add_assign(x);
         //  dbg!("After S-box post-add", &l);
