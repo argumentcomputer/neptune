@@ -1,6 +1,4 @@
-#![feature(external_doc)]
 #![allow(dead_code)]
-#![doc(include = "../README.md")]
 
 pub use crate::poseidon::Poseidon;
 use crate::round_constants::generate_constants;
