@@ -86,9 +86,14 @@ where
         let (full_rounds, partial_rounds) = round_numbers(arity);
         let round_constants = round_constants::<E>(arity);
 
+        // These succeed:
         //let partial_preprocessed = 0;
-        let partial_preprocessed = 1;
-        //let partial_preprocessed = partial_rounds;
+        //let partial_preprocessed = 1;
+        let partial_preprocessed = 53;
+
+        // These fail:
+        // let partial_preprocessed = 54;
+        //let partial_preprocessed = partial_rounds; // partial_rounds = 55
 
         let preprocessed_round_constants = preprocess_round_constants::<E>(
             width,
@@ -188,28 +193,76 @@ fn preprocess_round_constants<E: ScalarEngine>(
             let mut inverted = matrix::apply_matrix::<E>(inverse_matrix, &acc);
             partial_keys.push(inverted[0]);
             inverted[0] = E::Fr::zero();
-            let diff = matrix::vec_sub::<E>(&inverted, &previous_round_keys);
-
-            dbg!(&inverted, &diff);
-            diff
+            matrix::vec_add::<E>(&previous_round_keys, &inverted)
         });
 
+    // Everything in here is dev-driven testing.
+    // Dev test case only checks one deep.
     if partial_preprocessed == 1 {
-        let base_round = half_full_rounds + unpreprocessed;
-        // Shared between branches.
-        let initial = vec![E::Fr::one(), E::Fr::one(), E::Fr::one()];
+        // Check assumptions about how the fold calculating round_acc  manifested.
 
+        // The last round containing unpreprocessed constants which should be compressed.
+        let terminal_constants_round = half_full_rounds + partial_rounds;
+        // Constants from the last round (of two) which should be compressed.
+
+        // Constants from the last round (of two) which should be compressed.
+        // T
+        let terminal_round_keys = round_keys(terminal_constants_round);
+
+        // Constants from the first round (of two) which should be compressed.
+        // I
+        let initial_round_keys = round_keys(terminal_constants_round - 1);
+
+        // M^-1(T)
+        let mut inv = matrix::apply_matrix::<E>(inverse_matrix, terminal_round_keys);
+        // M^-1(T)[0]
+        let pk = inv[0];
+
+        // M^-1(T) - pk (kinda)
+        inv[0] = E::Fr::zero();
+
+        // (M^-1(T) - pk) - I
+        let result_key = matrix::vec_add::<E>(&initial_round_keys, &inv);
+
+        assert_eq!(&result_key, &round_acc, "Acc assumption failed.");
+        assert_eq!(pk, partial_keys[0], "Partial-key assumption failed.");
+
+        ////////////////////////////////////////////////////////////////////////////////
+        // Shared between branches, an arbitrary initial state representing the output of a previous round's S-Box layer.
+        // X
+        let initial_state = vec![E::Fr::one(), E::Fr::one(), E::Fr::one()];
+
+        ////////////////////////////////////////////////////////////////////////////////
         // Compute one step with the given (unpreprocessed) constants.
-        let mut q_state = matrix::vec_add::<E>(round_keys(base_round), &initial);
+
+        // ARK
+        // I + X
+        let mut q_state = matrix::vec_add::<E>(initial_round_keys, &initial_state);
+
+        // S-Box (partial layer)
+        // S((I + X)[0]) = S(I[0] + X[0])
         quintic_s_box::<E>(&mut q_state[0], None, None);
+
+        // Mix
         let mixed = matrix::apply_matrix::<E>(mds_matrix, &q_state);
-        let plain_result = matrix::vec_add::<E>(round_keys(base_round + 1), &mixed);
 
+        // Ark
+        let plain_result = matrix::vec_add::<E>(terminal_round_keys, &mixed);
+
+        ////////////////////////////////////////////////////////////////////////////////
         // Compute the same step using the preprocessed constants.
-        // initial + (inverted_id - initial) = inverted_id
-        let mut p_state = matrix::vec_add::<E>(&round_acc.clone(), &initial);
+        // initial_state + (inverted_id - initial_state) = inverted_id
+        let mut p_state = matrix::vec_add::<E>(&result_key, &initial_state);
 
-        quintic_s_box::<E>(&mut p_state[0], None, Some(&partial_keys[0]));
+        // In order for the S-box result to be correct, it must have the same input as in the plain path.
+        // That means its input (the first component of the state) must have been constructed by
+        // adding the same single round constant in that position.
+        assert_eq!(
+            &result_key[0], &initial_round_keys[0],
+            "S-box inputs did not match."
+        );
+
+        quintic_s_box::<E>(&mut p_state[0], None, Some(&pk));
         let preprocessed_result = matrix::apply_matrix::<E>(mds_matrix, &p_state);
 
         assert_eq!(
