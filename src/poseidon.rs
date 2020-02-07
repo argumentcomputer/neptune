@@ -99,8 +99,8 @@ where
         let round_constants = round_constants::<E>(arity);
 
         // These succeed:
-        let partial_preprocessed = 0;
-        //let partial_preprocessed = 1;
+        //let partial_preprocessed = 0;
+        let partial_preprocessed = 1;
         //let partial_preprocessed = 53;
         //let partial_preprocessed = partial_rounds; // partial_rounds = 55
 
@@ -210,19 +210,21 @@ fn preprocess_round_constants<E: ScalarEngine>(
     let round_acc = (0..partial_preprocessed)
         .map(|i| round_keys(final_round - i - 1))
         .fold(final_round_key, |acc, previous_round_keys| {
-            let mut inverted = apply_matrix::<E>(m_double_prime_inv, &acc);
+            let mut inverted = apply_matrix::<E>(inverse_matrix, &acc);
+            //let mut inverted = apply_matrix::<E>(m_double_prime_inv, &acc);
 
             partial_keys.push(inverted[0]);
-            inverted = apply_matrix::<E>(m_prime_inv, &inverted);
+            //inverted = apply_matrix::<E>(m_prime_inv, &inverted);
             inverted[0] = E::Fr::zero();
 
             let res1 = vec_add::<E>(&previous_round_keys, &inverted);
-            apply_matrix::<E>(m_prime, &res1)
+            res1
+            //apply_matrix::<E>(m_prime, &res1)
         });
 
     // Everything in here is dev-driven testing.
     // Dev test case only checks one deep.
-    if partial_preprocessed == 1 {
+    if partial_preprocessed == 111 {
         // Check assumptions about how the fold calculating round_acc  manifested.
 
         // The last round containing unpreprocessed constants which should be compressed.
@@ -601,6 +603,52 @@ where
         self.elements[1]
     }
 
+    /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
+    fn partial_round_static(&mut self, round_type: PartialRound) {
+        match &round_type {
+            Preprocessed => {
+                let post_round_key =
+                    self.constants.preprocessed_round_constants[self.constants_offset];
+                dbg!(&post_round_key);
+                // Apply the quintic S-Box to the first element
+                quintic_s_box::<E>(&mut self.elements[0], None, Some(&post_round_key));
+                self.constants_offset += 1;
+                self.debug("After adding partial key post S-box.");
+                // assert!(!skip_constants);
+            }
+            FirstUnpreprocessed => {
+                self.debug("before s-box (FirstUnpreprocessed)");
+                quintic_s_box::<E>(&mut self.elements[0], None, None);
+            }
+            _ => {
+                dbg!(
+                    "adding round constants in partial_round_static",
+                    &round_type
+                );
+                self.add_round_constants_static();
+                self.debug("before s-box");
+                quintic_s_box::<E>(&mut self.elements[0], None, None);
+            }
+        };
+        match &round_type {
+            LastUnpreprocessedAlpha | LastUnpreprocessedBeta => {
+                self.debug("after round constants (and s-box)");
+                self.add_round_constants_static();
+            }
+            // LastUnpreprocessedBeta => {
+            //     dbg!("multiplying by m_prime");
+            //     self.product_mds(&self.constants.mds_matrices.m_prime);
+            //     self.debug("after round constants (and s-box)");
+            //     self.add_round_constants_static();
+            // }
+            _ => {}
+        };
+        match &round_type {
+            //            Preprocessed => self.product_mds(&self.constants.mds_matrices.m_double_prime),
+            _ => self.product_mds(&self.constants.mds_matrices.m),
+        };
+    }
+
     pub fn full_round(&mut self, add_current_round_keys: bool, absorb_next_round_keys: bool) {
         // NOTE: decrease in performance is expected during this refactoring.
         // We seek to preserve correctness while transforming the algorithm to an eventually more performant one.
@@ -759,52 +807,6 @@ where
 
         // Multiply the elements by the constant MDS matrix
         self.product_mds(&self.constants.mds_matrices.m);
-    }
-
-    /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
-    fn partial_round_static(&mut self, round_type: PartialRound) {
-        match &round_type {
-            Preprocessed => {
-                let post_round_key =
-                    self.constants.preprocessed_round_constants[self.constants_offset];
-                dbg!(&post_round_key);
-                // Apply the quintic S-Box to the first element
-                quintic_s_box::<E>(&mut self.elements[0], None, Some(&post_round_key));
-                self.constants_offset += 1;
-                self.debug("After adding partial key post S-box.");
-                // assert!(!skip_constants);
-            }
-            FirstUnpreprocessed => {
-                self.debug("before s-box (FirstUnpreprocessed)");
-                quintic_s_box::<E>(&mut self.elements[0], None, None);
-            }
-            _ => {
-                dbg!(
-                    "adding round constants in partial_round_static",
-                    &round_type
-                );
-                self.add_round_constants_static();
-                self.debug("before s-box");
-                quintic_s_box::<E>(&mut self.elements[0], None, None);
-            }
-        };
-        match &round_type {
-            LastUnpreprocessedAlpha => {
-                self.debug("after round constants (and s-box)");
-                self.add_round_constants_static();
-            }
-            LastUnpreprocessedBeta => {
-                dbg!("multiplying by m_prime");
-                self.product_mds(&self.constants.mds_matrices.m_prime);
-                self.debug("after round constants (and s-box)");
-                self.add_round_constants_static();
-            }
-            _ => {}
-        };
-        match &round_type {
-            Preprocessed => self.product_mds(&self.constants.mds_matrices.m_double_prime),
-            _ => self.product_mds(&self.constants.mds_matrices.m),
-        };
     }
 
     /// For every leaf, add the round constants with index defined by the constants offset, and increment the
