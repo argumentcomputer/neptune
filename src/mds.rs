@@ -78,7 +78,6 @@ fn generate_mds<E: ScalarEngine>(t: usize) -> Matrix<Scalar<E>> {
 
     assert!(is_invertible::<E>(&matrix));
     // To ensure correctness, we would check all sub-matrices for invertibility. Meanwhile, this is a simple sanity check.
-
     matrix
 }
 
@@ -140,7 +139,7 @@ fn make_v_w<E: ScalarEngine>(m: &Matrix<Scalar<E>>) -> (Vec<Scalar<E>>, Vec<Scal
 mod tests {
     use super::*;
     use crate::*;
-    use matrix::right_apply_matrix;
+    use matrix::left_apply_matrix;
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
@@ -157,7 +156,7 @@ mod tests {
             m,
             m_inv,
             m_hat,
-            m_hat_inv,
+            m_hat_inv: _,
             m_prime,
             m_double_prime,
             m_prime_inv,
@@ -184,9 +183,6 @@ mod tests {
         assert!(matrix::is_identity::<Bls12>(
             &matrix::mat_mul::<Bls12>(&m_prime_inv, &m_prime).unwrap()
         ));
-
-        dbg!(m, m_prime, m_double_prime);
-        //        panic!();
     }
 
     #[test]
@@ -199,9 +195,9 @@ mod tests {
 
         let MDSMatrices {
             m,
-            m_inv,
-            m_hat,
-            m_hat_inv,
+            m_inv: _,
+            m_hat: _,
+            m_hat_inv: _,
             m_prime,
             m_double_prime,
             m_prime_inv,
@@ -225,18 +221,13 @@ mod tests {
         assert_eq!(zy[0], y[0]);
         assert_eq!(zx[1..], zy[1..]);
 
-        let ones = vec![Fr::one(); width];
-        let z_ones = apply_matrix::<Bls12>(&m_prime_inv, &ones);
-
-        let x_m1_m2 = right_apply_matrix::<Bls12>(
-            &m_double_prime,
-            &right_apply_matrix::<Bls12>(&m_prime, &x),
-        );
-        let xm = right_apply_matrix::<Bls12>(&m, &x);
+        let xm = apply_matrix::<Bls12>(&m, &x);
+        let x_m1_m2 = apply_matrix::<Bls12>(&m_double_prime, &apply_matrix::<Bls12>(&m_prime, &x));
         assert_eq!(xm, x_m1_m2);
 
-        let mx = apply_matrix::<Bls12>(&m, &x);
-        let m1_m2_x = apply_matrix::<Bls12>(&m_prime, &apply_matrix::<Bls12>(&m_double_prime, &x));
+        let mx = left_apply_matrix::<Bls12>(&m, &x);
+        let m1_m2_x =
+            left_apply_matrix::<Bls12>(&m_prime, &left_apply_matrix::<Bls12>(&m_double_prime, &x));
         assert_eq!(mx, m1_m2_x);
     }
 }

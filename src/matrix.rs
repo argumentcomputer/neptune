@@ -126,7 +126,10 @@ pub fn vec_sub<E: ScalarEngine>(a: &[Scalar<E>], b: &[Scalar<E>]) -> Vec<Scalar<
 }
 
 /// Left-multiply a vector by a square matrix of same size: MV where V is considered a column vector.
-pub fn apply_matrix<E: ScalarEngine>(m: &Matrix<Scalar<E>>, v: &[Scalar<E>]) -> Vec<Scalar<E>> {
+pub fn left_apply_matrix<E: ScalarEngine>(
+    m: &Matrix<Scalar<E>>,
+    v: &[Scalar<E>],
+) -> Vec<Scalar<E>> {
     assert!(is_square(m), "Only square matrix can be applied to vector.");
     assert_eq!(
         rows(m),
@@ -147,10 +150,7 @@ pub fn apply_matrix<E: ScalarEngine>(m: &Matrix<Scalar<E>>, v: &[Scalar<E>]) -> 
 }
 
 /// Right-multiply a vector by a square matrix  of same size: VM where V is considered a row vector.
-pub fn right_apply_matrix<E: ScalarEngine>(
-    m: &Matrix<Scalar<E>>,
-    v: &[Scalar<E>],
-) -> Vec<Scalar<E>> {
+pub fn apply_matrix<E: ScalarEngine>(m: &Matrix<Scalar<E>>, v: &[Scalar<E>]) -> Vec<Scalar<E>> {
     assert!(is_square(m), "Only square matrix can be applied to vector.");
     assert_eq!(
         rows(m),

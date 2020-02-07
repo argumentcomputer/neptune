@@ -891,11 +891,11 @@ where
     fn product_mds(&mut self) {
         let mut result = GenericArray::<E::Fr, typenum::Add1<Arity>>::generate(|_| E::Fr::zero());
 
-        for (result, mds_row) in result.iter_mut().zip(self.constants.mds_matrices.m.iter()) {
-            for (mds, element) in mds_row.iter().zip(self.elements.iter()) {
-                let mut tmp = *mds;
-                tmp.mul_assign(element);
-                result.add_assign(&tmp);
+        for (j, val) in result.iter_mut().enumerate() {
+            for (i, row) in self.constants.mds_matrices.m.iter().enumerate() {
+                let mut tmp = row[j];
+                tmp.mul_assign(&self.elements[i]);
+                val.add_assign(&tmp);
             }
         }
 
