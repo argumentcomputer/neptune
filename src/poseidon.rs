@@ -51,6 +51,7 @@ where
     _a: PhantomData<Arity>,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum HashMode {
     // The initial and correct version of the algorithm. We should preserve the ability to hash this way for reference
     // and to preserve confidence in our tests along thew way.
@@ -62,6 +63,19 @@ pub enum HashMode {
     OptimizedStatic,
 }
 use HashMode::{Correct, OptimizedDynamic, OptimizedStatic};
+
+#[derive(Debug, PartialEq)]
+enum PartialRound {
+    FirstUnpreprocessed,
+    InternalUnpreprocessed,
+    LastUnpreprocessedAlpha,
+    LastUnpreprocessedBeta,
+    Preprocessed,
+}
+use PartialRound::{
+    FirstUnpreprocessed, InternalUnpreprocessed, LastUnpreprocessedAlpha, LastUnpreprocessedBeta,
+    Preprocessed,
+};
 
 pub const DEFAULT_HASH_MODE: HashMode = Correct;
 
@@ -240,6 +254,11 @@ fn preprocess_round_constants<E: ScalarEngine>(
         dbg!(&result_key, &round_acc);
         assert_eq!(&result_key, &round_acc, "Acc assumption failed.");
         assert_eq!(pk, partial_keys[0], "Partial-key assumption failed.");
+        assert_eq!(
+            1,
+            partial_keys.len(),
+            "Partial-keys length assumption failed."
+        );
 
         ////////////////////////////////////////////////////////////////////////////////
         // Shared between branches, an arbitrary initial state representing the output of a previous round's S-Box layer.
@@ -523,8 +542,9 @@ where
         let unpreprocessed = self.constants.partial_rounds - self.constants.partial_preprocessed;
         if unpreprocessed > 0 {
             dbg!(unpreprocessed);
-            for i in 0..(unpreprocessed - 1) {
-                self.partial_round_static(false, i == 0, false);
+            self.partial_round_static(FirstUnpreprocessed);
+            for i in 1..(unpreprocessed - 1) {
+                self.partial_round_static(InternalUnpreprocessed);
 
                 if i == 0 {
                     self.debug("After first partial round (static)");
@@ -537,8 +557,13 @@ where
                     dbg!(self.constants.preprocessed_round_constants[self.constants_offset]);
                 }
             }
+            dbg!("before last unpreprocessed partial round (static)");
             // We need both pre and post round-keys added at the seam.
-            self.partial_round_static(false, false, true);
+            if self.constants.partial_preprocessed > 0 {
+                self.partial_round_static(LastUnpreprocessedBeta);
+            } else {
+                self.partial_round_static(LastUnpreprocessedAlpha);
+            }
         }
 
         for i in unpreprocessed..self.constants.partial_rounds {
@@ -547,7 +572,7 @@ where
                 dbg!(self.constants.preprocessed_round_constants[self.constants_offset]);
             }
             //self.partial_round_static(true, false, false);
-            self.partial_round_static(true, true, false);
+            self.partial_round_static(Preprocessed);
         }
 
         self.debug("After last partial round (static)");
@@ -737,38 +762,48 @@ where
     }
 
     /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
-    pub fn partial_round_static(
-        &mut self,
-        preprocessed: bool,
-        skip_constants: bool,
-        last_unpreprocessed: bool,
-    ) {
-        if preprocessed {
-            let post_round_key = self.constants.preprocessed_round_constants[self.constants_offset];
-            dbg!(&post_round_key);
-            // Apply the quintic S-Box to the first element
-            quintic_s_box::<E>(&mut self.elements[0], None, Some(&post_round_key));
-            self.constants_offset += 1;
-            self.debug("After adding partial key post S-box.");
-        // assert!(!skip_constants);
-        } else {
-            if !skip_constants {
+    fn partial_round_static(&mut self, round_type: PartialRound) {
+        match &round_type {
+            Preprocessed => {
+                let post_round_key =
+                    self.constants.preprocessed_round_constants[self.constants_offset];
+                dbg!(&post_round_key);
+                // Apply the quintic S-Box to the first element
+                quintic_s_box::<E>(&mut self.elements[0], None, Some(&post_round_key));
+                self.constants_offset += 1;
+                self.debug("After adding partial key post S-box.");
+                // assert!(!skip_constants);
+            }
+            FirstUnpreprocessed => {
+                self.debug("before s-box (FirstUnpreprocessed)");
+                quintic_s_box::<E>(&mut self.elements[0], None, None);
+            }
+            _ => {
+                dbg!(
+                    "adding round constants in partial_round_static",
+                    &round_type
+                );
+                self.add_round_constants_static();
+                self.debug("before s-box");
+                quintic_s_box::<E>(&mut self.elements[0], None, None);
+            }
+        };
+        match &round_type {
+            LastUnpreprocessedAlpha => {
+                self.debug("after round constants (and s-box)");
                 self.add_round_constants_static();
             }
-            self.debug("before s-box");
-            quintic_s_box::<E>(&mut self.elements[0], None, None);
-        }
-        if last_unpreprocessed {
-            self.debug("after round constants (and s-box)");
-            if preprocessed {
+            LastUnpreprocessedBeta => {
+                dbg!("multiplying by m_prime");
                 self.product_mds(&self.constants.mds_matrices.m_prime);
+                self.debug("after round constants (and s-box)");
+                self.add_round_constants_static();
             }
-            self.add_round_constants_static();
-        }
-        if preprocessed {
-            self.product_mds(&self.constants.mds_matrices.m_double_prime)
-        } else {
-            self.product_mds(&self.constants.mds_matrices.m)
+            _ => {}
+        };
+        match &round_type {
+            Preprocessed => self.product_mds(&self.constants.mds_matrices.m_double_prime),
+            _ => self.product_mds(&self.constants.mds_matrices.m),
         };
     }
 
