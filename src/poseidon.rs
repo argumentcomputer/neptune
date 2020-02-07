@@ -91,9 +91,9 @@ where
 
         // These succeed:
         //let partial_preprocessed = 0;
-        //let partial_preprocessed = 1;
+        let partial_preprocessed = 1;
         //let partial_preprocessed = 53;
-        let partial_preprocessed = partial_rounds; // partial_rounds = 55
+        //let partial_preprocessed = partial_rounds; // partial_rounds = 55
 
         // Although annoying, this is a very special case — when only a single round is not preprocessed.
         // That strongly suggests this failure is an artifact of the test scaffolding we have erected
@@ -192,13 +192,22 @@ fn preprocess_round_constants<E: ScalarEngine>(
     let final_round = half_full_rounds + partial_rounds;
     let final_round_key = round_keys(final_round).to_vec();
 
+    let m_prime = &mds_matrices.m_prime;
+    let m_prime_inv = &mds_matrices.m_prime_inv;
+    let m_double_prime = &mds_matrices.m_double_prime;
+    let m_double_prime_inv = &mds_matrices.m_double_prime_inv;
+
     // `round_acc` holds the accumulated result of inverting and adding subsequent round constants (in reverse).
     let round_acc = (0..partial_preprocessed)
         .map(|i| round_keys(final_round - i - 1))
         .fold(final_round_key, |acc, previous_round_keys| {
-            let mut inverted = matrix::apply_matrix::<E>(inverse_matrix, &acc);
-            partial_keys.push(inverted[0]);
-            inverted[0] = E::Fr::zero();
+            let mut inverted1 = matrix::apply_matrix::<E>(mds_matrix, &acc);
+
+            partial_keys.push(inverted1[0]);
+            inverted1[0] = E::Fr::zero();
+
+            let inverted = matrix::apply_matrix::<E>(m_prime_inv, &inverted1);
+
             matrix::vec_add::<E>(&previous_round_keys, &inverted)
         });
 
@@ -219,18 +228,22 @@ fn preprocess_round_constants<E: ScalarEngine>(
         let initial_round_keys = round_keys(terminal_constants_round - 1);
 
         // M^-1(T)
-        let mut inv = matrix::apply_matrix::<E>(inverse_matrix, terminal_round_keys);
+        let mut inv = matrix::apply_matrix::<E>(m_double_prime_inv, terminal_round_keys);
+
         // M^-1(T)[0]
         let pk = inv[0];
 
         // M^-1(T) - pk (kinda)
         inv[0] = E::Fr::zero();
 
+        inv = matrix::apply_matrix::<E>(m_prime_inv, &inv);
+        //let irk_prime = matrix::apply_matrix::<E>(m_prime, &initial_round_keys);
         // (M^-1(T) - pk) - I
         let result_key = matrix::vec_add::<E>(&initial_round_keys, &inv);
-
-        assert_eq!(&result_key, &round_acc, "Acc assumption failed.");
-        assert_eq!(pk, partial_keys[0], "Partial-key assumption failed.");
+        //let result_key = matrix::vec_add::<E>(&irk_prime, &inv);
+        dbg!(&result_key, &round_acc);
+        //assert_eq!(&result_key, &round_acc, "Acc assumption failed.");
+        //assert_eq!(pk, partial_keys[0], "Partial-key assumption failed.");
 
         ////////////////////////////////////////////////////////////////////////////////
         // Shared between branches, an arbitrary initial state representing the output of a previous round's S-Box layer.
@@ -248,7 +261,7 @@ fn preprocess_round_constants<E: ScalarEngine>(
         // S((I + X)[0]) = S(I[0] + X[0])
         quintic_s_box::<E>(&mut q_state[0], None, None);
 
-        // Mix
+        // Mix with mds_matrix
         let mixed = matrix::apply_matrix::<E>(mds_matrix, &q_state);
 
         // Ark
@@ -258,6 +271,10 @@ fn preprocess_round_constants<E: ScalarEngine>(
         // Compute the same step using the preprocessed constants.
         // initial_state + (inverted_id - initial_state) = inverted_id
         let mut p_state = matrix::vec_add::<E>(&result_key, &initial_state);
+        p_state = matrix::apply_matrix::<E>(&m_prime, &p_state);
+
+        // // FIXME: don't use round_acc -- just a shortcut in early test.
+        // let mut p_state = matrix::vec_add::<E>(&round_acc, &initial_state);
 
         // In order for the S-box result to be correct, it must have the same input as in the plain path.
         // That means its input (the first component of the state) must have been constructed by
@@ -269,7 +286,8 @@ fn preprocess_round_constants<E: ScalarEngine>(
         );
 
         quintic_s_box::<E>(&mut p_state[0], None, Some(&pk));
-        let preprocessed_result = matrix::apply_matrix::<E>(mds_matrix, &p_state);
+
+        let preprocessed_result = matrix::apply_matrix::<E>(&m_double_prime, &p_state);
 
         assert_eq!(
             plain_result, preprocessed_result,
@@ -747,7 +765,7 @@ where
         // else
         //   M(B)
         // Multiply the elements by the constant MDS matrix
-        self.product_mds();
+        self.product_mds(false);
 
         let applied = matrix::apply_matrix::<E>(&self.constants.mds_matrices.m, &stashed.to_vec());
         assert_eq!(
@@ -798,7 +816,7 @@ where
         if !last_round {
             self.constants_offset += self.elements.len();
         }
-        self.product_mds();
+        self.product_mds(false);
     }
 
     /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
@@ -814,7 +832,7 @@ where
         quintic_s_box::<E>(&mut self.elements[0], None, None);
 
         // Multiply the elements by the constant MDS matrix
-        self.product_mds();
+        self.product_mds(false);
     }
 
     /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
@@ -845,7 +863,7 @@ where
         }
 
         // Multiply the elements by the constant MDS matrix
-        self.product_mds();
+        self.product_mds(preprocessed);
     }
 
     /// For every leaf, add the round constants with index defined by the constants offset, and increment the
@@ -887,12 +905,17 @@ where
     }
 
     /// Set the provided elements with the result of the product between the elements and the constant
-    /// MDS matrix
-    fn product_mds(&mut self) {
+    /// MDS matrix. If `use_mds_double_prime` is true, then use M'' in the M = M' x M'' decomposition.
+    fn product_mds(&mut self, use_mds_double_prime: bool) {
+        let matrix = if use_mds_double_prime {
+            &self.constants.mds_matrices.m_double_prime
+        } else {
+            &self.constants.mds_matrices.m
+        };
         let mut result = GenericArray::<E::Fr, typenum::Add1<Arity>>::generate(|_| E::Fr::zero());
 
         for (j, val) in result.iter_mut().enumerate() {
-            for (i, row) in self.constants.mds_matrices.m.iter().enumerate() {
+            for (i, row) in matrix.iter().enumerate() {
                 let mut tmp = row[j];
                 tmp.mul_assign(&self.elements[i]);
                 val.add_assign(&tmp);
