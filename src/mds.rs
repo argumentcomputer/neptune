@@ -12,6 +12,7 @@ pub struct MDSMatrices<E: ScalarEngine> {
     pub m_prime: Matrix<Scalar<E>>,
     pub m_double_prime: Matrix<Scalar<E>>,
     pub m_prime_inv: Matrix<Scalar<E>>,
+    pub m_double_prime_inv: Matrix<Scalar<E>>,
 }
 
 pub fn create_mds_matrices<'a, E: ScalarEngine>(t: usize) -> MDSMatrices<E> {
@@ -22,6 +23,7 @@ pub fn create_mds_matrices<'a, E: ScalarEngine>(t: usize) -> MDSMatrices<E> {
     let m_prime = make_prime::<E>(&m);
     let m_double_prime = make_double_prime::<E>(&m, &m_hat_inv);
     let m_prime_inv = invert::<E>(&m_prime).unwrap();
+    let m_double_prime_inv = invert::<E>(&m_double_prime).unwrap();
 
     MDSMatrices {
         m,
@@ -31,6 +33,7 @@ pub fn create_mds_matrices<'a, E: ScalarEngine>(t: usize) -> MDSMatrices<E> {
         m_prime,
         m_double_prime,
         m_prime_inv,
+        m_double_prime_inv,
     }
 }
 
@@ -160,6 +163,7 @@ mod tests {
             m_prime,
             m_double_prime,
             m_prime_inv,
+            m_double_prime_inv: _,
         } = create_mds_matrices::<Bls12>(width);
 
         for i in 0..m_hat.len() {
@@ -201,6 +205,7 @@ mod tests {
             m_prime,
             m_double_prime,
             m_prime_inv,
+            m_double_prime_inv: _,
         } = create_mds_matrices::<Bls12>(width);
 
         let mut base = Vec::with_capacity(width);
@@ -214,6 +219,12 @@ mod tests {
         let mut y = base.clone();
         y[0] = Fr::random(&mut rng);
 
+        let qx = apply_matrix::<Bls12>(&m_prime, &x);
+        let qy = apply_matrix::<Bls12>(&m_prime, &y);
+        assert_eq!(qx[0], x[0]);
+        assert_eq!(qy[0], y[0]);
+        assert_eq!(qx[1..], qy[1..]);
+
         let zx = apply_matrix::<Bls12>(&m_prime_inv, &x);
         let zy = apply_matrix::<Bls12>(&m_prime_inv, &y);
 
@@ -221,13 +232,26 @@ mod tests {
         assert_eq!(zy[0], y[0]);
         assert_eq!(zx[1..], zy[1..]);
 
-        let xm = apply_matrix::<Bls12>(&m, &x);
-        let x_m1_m2 = apply_matrix::<Bls12>(&m_double_prime, &apply_matrix::<Bls12>(&m_prime, &x));
-        assert_eq!(xm, x_m1_m2);
-
         let mx = left_apply_matrix::<Bls12>(&m, &x);
         let m1_m2_x =
             left_apply_matrix::<Bls12>(&m_prime, &left_apply_matrix::<Bls12>(&m_double_prime, &x));
         assert_eq!(mx, m1_m2_x);
+
+        let xm = apply_matrix::<Bls12>(&m, &x);
+        let x_m1_m2 = apply_matrix::<Bls12>(&m_double_prime, &apply_matrix::<Bls12>(&m_prime, &x));
+        assert_eq!(xm, x_m1_m2);
+
+        let mut rk = Vec::with_capacity(width);
+        for _ in 0..width {
+            rk.push(Fr::random(&mut rng));
+        }
+
+        // let simple = vec_add::<Bls12>(&apply_matrix::<Bls12>(&m, &base), &rk);
+        // let rk_inv = apply_matrix::<Bls12>(&m_prime_inv, &rk);
+        // let shifted = vec_add::<Bls12>(&base, &rk_inv);
+        // let alt = apply_matrix::<Bls12>(&m_double_prime, &shifted);
+
+        dbg!(&m);
+        //        assert_eq!(simple, alt);
     }
 }

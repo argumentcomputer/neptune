@@ -1,4 +1,5 @@
 use crate::matrix;
+use crate::matrix::{apply_matrix, vec_add, Matrix};
 use crate::{
     mds::create_mds_matrices, mds::MDSMatrices, round_constants, round_numbers, scalar_from_u64,
     Error,
@@ -56,17 +57,11 @@ pub enum HashMode {
     Correct,
     // This mode is meant to be mostly synchronized with `Correct` but may reduce or simplify the total algorithm.
     // Its purpose is for use during refactoring/development, as a target for `ModB`.
-    ModA,
-    // Here is where the hardest work happens. Incremental refactoring is applied here and reconciled with `ModA`
-    // through instrumentation. A target behavior other than complete/correct hashing may need to be negotiated to faciliatate this.
-    ModB,
-    // The intermediate target, this mode accumulates transformations to the algorithm and should give the same results as `Correct`.
-    // Dynamic optimization calculates round constants along the way and may emit them for use by the static optimization.
     OptimizedDynamic,
     // Consumes statically pre-processed constants for simplest operation.
     OptimizedStatic,
 }
-use HashMode::{Correct, ModA, ModB, OptimizedDynamic, OptimizedStatic};
+use HashMode::{Correct, OptimizedDynamic, OptimizedStatic};
 
 pub const DEFAULT_HASH_MODE: HashMode = Correct;
 
@@ -90,8 +85,8 @@ where
         let round_constants = round_constants::<E>(arity);
 
         // These succeed:
-        //let partial_preprocessed = 0;
-        let partial_preprocessed = 1;
+        let partial_preprocessed = 0;
+        //let partial_preprocessed = 1;
         //let partial_preprocessed = 53;
         //let partial_preprocessed = partial_rounds; // partial_rounds = 55
 
@@ -172,7 +167,7 @@ fn preprocess_round_constants<E: ScalarEngine>(
     };
     for i in 0..end {
         let next_round = round_keys(i + 1); // First round was added before any S-boxes.
-        let inverted = matrix::apply_matrix::<E>(inverse_matrix, next_round);
+        let inverted = apply_matrix::<E>(inverse_matrix, next_round);
         res.extend(inverted);
     }
 
@@ -201,14 +196,14 @@ fn preprocess_round_constants<E: ScalarEngine>(
     let round_acc = (0..partial_preprocessed)
         .map(|i| round_keys(final_round - i - 1))
         .fold(final_round_key, |acc, previous_round_keys| {
-            let mut inverted1 = matrix::apply_matrix::<E>(mds_matrix, &acc);
+            let mut inverted = apply_matrix::<E>(m_double_prime_inv, &acc);
 
-            partial_keys.push(inverted1[0]);
-            inverted1[0] = E::Fr::zero();
+            partial_keys.push(inverted[0]);
+            inverted = apply_matrix::<E>(m_prime_inv, &inverted);
+            inverted[0] = E::Fr::zero();
 
-            let inverted = matrix::apply_matrix::<E>(m_prime_inv, &inverted1);
-
-            matrix::vec_add::<E>(&previous_round_keys, &inverted)
+            let res1 = vec_add::<E>(&previous_round_keys, &inverted);
+            apply_matrix::<E>(m_prime, &res1)
         });
 
     // Everything in here is dev-driven testing.
@@ -228,22 +223,23 @@ fn preprocess_round_constants<E: ScalarEngine>(
         let initial_round_keys = round_keys(terminal_constants_round - 1);
 
         // M^-1(T)
-        let mut inv = matrix::apply_matrix::<E>(m_double_prime_inv, terminal_round_keys);
+        let mut inv = apply_matrix::<E>(m_double_prime_inv, terminal_round_keys);
 
         // M^-1(T)[0]
         let pk = inv[0];
 
+        inv = apply_matrix::<E>(m_prime_inv, &inv);
         // M^-1(T) - pk (kinda)
         inv[0] = E::Fr::zero();
 
-        inv = matrix::apply_matrix::<E>(m_prime_inv, &inv);
         //let irk_prime = matrix::apply_matrix::<E>(m_prime, &initial_round_keys);
         // (M^-1(T) - pk) - I
-        let result_key = matrix::vec_add::<E>(&initial_round_keys, &inv);
-        //let result_key = matrix::vec_add::<E>(&irk_prime, &inv);
+        let result_key1 = vec_add::<E>(&initial_round_keys, &inv);
+        let result_key = apply_matrix::<E>(&m_prime, &result_key1);
+
         dbg!(&result_key, &round_acc);
-        //assert_eq!(&result_key, &round_acc, "Acc assumption failed.");
-        //assert_eq!(pk, partial_keys[0], "Partial-key assumption failed.");
+        assert_eq!(&result_key, &round_acc, "Acc assumption failed.");
+        assert_eq!(pk, partial_keys[0], "Partial-key assumption failed.");
 
         ////////////////////////////////////////////////////////////////////////////////
         // Shared between branches, an arbitrary initial state representing the output of a previous round's S-Box layer.
@@ -255,26 +251,23 @@ fn preprocess_round_constants<E: ScalarEngine>(
 
         // ARK
         // I + X
-        let mut q_state = matrix::vec_add::<E>(initial_round_keys, &initial_state);
+        let mut q_state = vec_add::<E>(initial_round_keys, &initial_state);
 
         // S-Box (partial layer)
         // S((I + X)[0]) = S(I[0] + X[0])
         quintic_s_box::<E>(&mut q_state[0], None, None);
 
         // Mix with mds_matrix
-        let mixed = matrix::apply_matrix::<E>(mds_matrix, &q_state);
+        let mixed = apply_matrix::<E>(mds_matrix, &q_state);
 
         // Ark
-        let plain_result = matrix::vec_add::<E>(terminal_round_keys, &mixed);
+        let plain_result = vec_add::<E>(terminal_round_keys, &mixed);
 
         ////////////////////////////////////////////////////////////////////////////////
         // Compute the same step using the preprocessed constants.
-        // initial_state + (inverted_id - initial_state) = inverted_id
-        let mut p_state = matrix::vec_add::<E>(&result_key, &initial_state);
-        p_state = matrix::apply_matrix::<E>(&m_prime, &p_state);
-
-        // // FIXME: don't use round_acc -- just a shortcut in early test.
-        // let mut p_state = matrix::vec_add::<E>(&round_acc, &initial_state);
+        // M'(initial_state) + (inverted_id - initial_state) = inverted_id
+        let initial_state1 = apply_matrix::<E>(&m_prime, &initial_state);
+        let mut p_state = vec_add::<E>(&result_key, &initial_state1);
 
         // In order for the S-box result to be correct, it must have the same input as in the plain path.
         // That means its input (the first component of the state) must have been constructed by
@@ -287,7 +280,7 @@ fn preprocess_round_constants<E: ScalarEngine>(
 
         quintic_s_box::<E>(&mut p_state[0], None, Some(&pk));
 
-        let preprocessed_result = matrix::apply_matrix::<E>(&m_double_prime, &p_state);
+        let preprocessed_result = apply_matrix::<E>(&m_double_prime, &p_state);
 
         assert_eq!(
             plain_result, preprocessed_result,
@@ -310,7 +303,7 @@ fn preprocess_round_constants<E: ScalarEngine>(
     for i in 1..(half_full_rounds) {
         let start = half_full_rounds + partial_rounds;
         let next_round = round_keys(i + start);
-        let inverted = matrix::apply_matrix::<E>(inverse_matrix, next_round);
+        let inverted = apply_matrix::<E>(inverse_matrix, next_round);
         res.extend(inverted);
     }
 
@@ -406,8 +399,6 @@ where
             Correct => self.hash_correct(),
             OptimizedDynamic => self.hash_optimized_dynamic(),
             OptimizedStatic => self.hash_optimized_static(),
-            ModA => self.hash_mod_a(),
-            ModB => self.hash_mod_b(),
         }
     }
 
@@ -454,95 +445,6 @@ where
 
         self.debug("After last full round (Correct)");
 
-        self.elements[1]
-    }
-
-    pub fn hash_mod_a(&mut self) -> E::Fr {
-        self.debug("Hash Mod A");
-        // This counter is incremented when a round constants is read. Therefore, the round constants never
-        // repeat
-        // The first full round should use the initial constants.
-        self.full_round(true, false);
-        self.debug("After first full round");
-
-        // => M(B)
-
-        // M(B) + S
-        //self.add_round_constants();
-
-        // Verify that the round constants here (S), really are the S from full_round (post_vec).
-
-        self.debug("After adding constants");
-
-        for i in 1..self.constants.full_rounds / 2 {
-            self.full_round(true, false);
-            if i == 1 {
-                self.debug("After second full round");
-            }
-        }
-
-        // self.add_round_constants();
-
-        self.debug("Before first partial round");
-
-        // Constants were added in the previous full round, so skip them here (false argument).
-        self.partial_round(true, false);
-
-        // self.debug("After first partial round");
-
-        // for _ in 1..self.constants.partial_rounds {
-        //     self.partial_round(true, false);
-        // }
-
-        // self.debug("After last partial round");
-
-        // for _ in 0..self.constants.full_rounds / 2 {
-        //     self.full_round(true, false);
-        // }
-
-        // self.debug("After last full round");
-
-        // B + S
-        self.elements[1]
-    }
-
-    pub fn hash_mod_b(&mut self) -> E::Fr {
-        // This counter is incremented when a round constants is read. Therefore, the round constants never
-        // repeat
-        self.debug("Hash Mod B");
-        // The first full round should use the initial constants.
-        self.full_round(true, true);
-        self.debug("After first full round");
-
-        // => M(B + M^-1(S))
-
-        for i in 1..self.constants.full_rounds / 2 {
-            self.full_round(false, true);
-            if i == 1 {
-                self.debug("After second full round");
-            }
-        }
-
-        self.debug("Before first partial round");
-
-        // // Constants were added in the previous full round, so skip them here (false argument).
-        self.partial_round(false, false);
-
-        // self.debug("After first partial round");
-
-        // for _ in 1..self.constants.partial_rounds {
-        //     self.partial_round(true, false);
-        // }
-
-        // self.debug("After last partial round");
-
-        // for _ in 0..self.constants.full_rounds / 2 {
-        //     self.full_round(true, false);
-        // }
-
-        // self.debug("After last full round");
-
-        // M(B + M^-1(S))
         self.elements[1]
     }
 
@@ -637,7 +539,6 @@ where
             }
             // We need both pre and post round-keys added at the seam.
             self.partial_round_static(false, false, true);
-            self.debug("xxx");
         }
 
         for i in unpreprocessed..self.constants.partial_rounds {
@@ -765,7 +666,7 @@ where
         // else
         //   M(B)
         // Multiply the elements by the constant MDS matrix
-        self.product_mds(false);
+        self.product_mds(&self.constants.mds_matrices.m);
 
         let applied = matrix::apply_matrix::<E>(&self.constants.mds_matrices.m, &stashed.to_vec());
         assert_eq!(
@@ -816,7 +717,7 @@ where
         if !last_round {
             self.constants_offset += self.elements.len();
         }
-        self.product_mds(false);
+        self.product_mds(&self.constants.mds_matrices.m);
     }
 
     /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
@@ -832,7 +733,7 @@ where
         quintic_s_box::<E>(&mut self.elements[0], None, None);
 
         // Multiply the elements by the constant MDS matrix
-        self.product_mds(false);
+        self.product_mds(&self.constants.mds_matrices.m);
     }
 
     /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
@@ -858,12 +759,17 @@ where
             quintic_s_box::<E>(&mut self.elements[0], None, None);
         }
         if last_unpreprocessed {
-            self.add_round_constants_static();
             self.debug("after round constants (and s-box)");
+            if preprocessed {
+                self.product_mds(&self.constants.mds_matrices.m_prime);
+            }
+            self.add_round_constants_static();
         }
-
-        // Multiply the elements by the constant MDS matrix
-        self.product_mds(preprocessed);
+        if preprocessed {
+            self.product_mds(&self.constants.mds_matrices.m_double_prime)
+        } else {
+            self.product_mds(&self.constants.mds_matrices.m)
+        };
     }
 
     /// For every leaf, add the round constants with index defined by the constants offset, and increment the
@@ -906,12 +812,7 @@ where
 
     /// Set the provided elements with the result of the product between the elements and the constant
     /// MDS matrix. If `use_mds_double_prime` is true, then use M'' in the M = M' x M'' decomposition.
-    fn product_mds(&mut self, use_mds_double_prime: bool) {
-        let matrix = if use_mds_double_prime {
-            &self.constants.mds_matrices.m_double_prime
-        } else {
-            &self.constants.mds_matrices.m
-        };
+    fn product_mds(&mut self, matrix: &Matrix<E::Fr>) {
         let mut result = GenericArray::<E::Fr, typenum::Add1<Arity>>::generate(|_| E::Fr::zero());
 
         for (j, val) in result.iter_mut().enumerate() {
@@ -1066,31 +967,6 @@ mod tests {
             poseidon::<Bls12, U2>(&preimage),
             "Poseidon wrapper disagrees with element-at-a-time invocation."
         );
-    }
-
-    #[test]
-    /// Simple test vectors to ensure results don't change unintentionally in development.
-    fn hash_compare_mods() {
-        // NOTE: For now, type parameters on constants, p, and in the final assertion below need to be updated manually when testing different arities.
-        // TODO: Mechanism to run all tests every time. (Previously only a single arity was compiled in.)
-        let constants = PoseidonConstants::<Bls12, U2>::new();
-        let mut p = Poseidon::<Bls12, U2>::new(&constants);
-        let test_arity = constants.arity();
-        let mut preimage = vec![Scalar::zero(); test_arity];
-        for n in 0..test_arity {
-            let scalar = scalar_from_u64::<Bls12>(n as u64);
-            p.input(scalar).unwrap();
-            preimage[n] = scalar;
-        }
-        let mut p2 = p.clone();
-        // M(B) + S
-        let digest_a = p.hash_in_mode(ModA);
-
-        // M(B + M^-1(S))
-        let digest_b = p2.hash_in_mode(ModB);
-
-        // M(B) + S = M(B + M^-1(S))
-        assert_eq!(digest_a, digest_b);
     }
 
     #[test]
