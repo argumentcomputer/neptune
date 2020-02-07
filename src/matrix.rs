@@ -3,8 +3,8 @@ use ff::{Field, ScalarEngine};
 /// Matrix functions here are, at least for now, quick and dirty — intended only to support precomputation of poseidon optimization.
 
 /// Matrix represented as a Vec of rows, so that m[i][j] represents the jth column of the ith row in Matrix, m.
-type Matrix<T> = Vec<Vec<T>>;
-type Scalar<E> = <E as ScalarEngine>::Fr;
+pub type Matrix<T> = Vec<Vec<T>>;
+pub type Scalar<E> = <E as ScalarEngine>::Fr;
 
 fn rows<T>(matrix: &Matrix<T>) -> usize {
     matrix.len()
@@ -56,7 +56,21 @@ fn scalar_mul<E: ScalarEngine>(scalar: Scalar<E>, matrix: &Matrix<Scalar<E>>) ->
         .collect::<Vec<_>>()
 }
 
-fn mat_mul<E: ScalarEngine>(
+// Multiply two vectors element-wise
+pub fn hadamard_vec_mul<E: ScalarEngine>(a: &[Scalar<E>], b: &[Scalar<E>]) -> Vec<Scalar<E>> {
+    assert_eq!(a.len(), b.len());
+
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| {
+            let mut res = x.clone();
+            res.mul_assign(y);
+            res
+        })
+        .collect()
+}
+
+pub fn mat_mul<E: ScalarEngine>(
     a: &Matrix<Scalar<E>>,
     b: &Matrix<Scalar<E>>,
 ) -> Option<Matrix<Scalar<E>>> {
@@ -111,7 +125,7 @@ pub fn vec_sub<E: ScalarEngine>(a: &[Scalar<E>], b: &[Scalar<E>]) -> Vec<Scalar<
         .collect::<Vec<_>>()
 }
 
-/// Multiply a square matrix by a vector of same size: MV where V is considered a row vector.
+/// Left-multiply a vector by a square matrix of same size: MV where V is considered a column vector.
 pub fn apply_matrix<E: ScalarEngine>(m: &Matrix<Scalar<E>>, v: &[Scalar<E>]) -> Vec<Scalar<E>> {
     assert!(is_square(m), "Only square matrix can be applied to vector.");
     assert_eq!(
@@ -132,7 +146,31 @@ pub fn apply_matrix<E: ScalarEngine>(m: &Matrix<Scalar<E>>, v: &[Scalar<E>]) -> 
     result
 }
 
-fn transpose<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> Matrix<Scalar<E>> {
+/// Right-multiply a vector by a square matrix  of same size: VM where V is considered a row vector.
+pub fn right_apply_matrix<E: ScalarEngine>(
+    m: &Matrix<Scalar<E>>,
+    v: &[Scalar<E>],
+) -> Vec<Scalar<E>> {
+    assert!(is_square(m), "Only square matrix can be applied to vector.");
+    assert_eq!(
+        rows(m),
+        v.len(),
+        "Matrix can only be applied to vector of same size."
+    );
+
+    let mut result: Vec<Scalar<E>> = vec![Scalar::<E>::zero(); v.len()];
+    for (j, val) in result.iter_mut().enumerate() {
+        for (i, row) in m.iter().enumerate() {
+            let mut tmp = row[j];
+            tmp.mul_assign(&v[i]);
+            val.add_assign(&tmp);
+        }
+    }
+
+    result
+}
+
+pub fn transpose<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> Matrix<Scalar<E>> {
     let size = rows(matrix);
     let mut new = Vec::with_capacity(size);
     for j in 0..size {
@@ -145,7 +183,7 @@ fn transpose<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> Matrix<Scalar<E>> {
     new
 }
 
-fn is_identity<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> bool {
+pub fn is_identity<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> bool {
     let one = Scalar::<E>::one();
     let zero = Scalar::<E>::zero();
 
@@ -222,7 +260,7 @@ fn cofactor<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>, i: usize, j: usize) -> 
     acc
 }
 
-fn minor<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>, i: usize, j: usize) -> Matrix<Scalar<E>> {
+pub fn minor<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>, i: usize, j: usize) -> Matrix<Scalar<E>> {
     assert!(is_square(matrix));
     let size = rows(matrix);
     assert!(size > 0);

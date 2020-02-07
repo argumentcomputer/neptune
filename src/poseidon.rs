@@ -1,5 +1,8 @@
 use crate::matrix;
-use crate::{generate_mds, round_constants, round_numbers, scalar_from_u64, Error};
+use crate::{
+    mds::create_mds_matrices, mds::MDSMatrices, round_constants, round_numbers, scalar_from_u64,
+    Error,
+};
 use ff::{Field, ScalarEngine};
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
 use std::marker::PhantomData;
@@ -37,8 +40,7 @@ where
         + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
     typenum::Add1<Arity>: ArrayLength<E::Fr>,
 {
-    pub mds_matrix: Vec<Vec<E::Fr>>,
-    pub inverse_mds_matrix: Vec<Vec<E::Fr>>,
+    pub mds_matrices: MDSMatrices<E>,
     pub round_constants: Vec<E::Fr>,
     pub preprocessed_round_constants: Vec<E::Fr>,
     pub arity_tag: E::Fr,
@@ -68,7 +70,7 @@ use HashMode::{Correct, ModA, ModB, OptimizedDynamic, OptimizedStatic};
 
 pub const DEFAULT_HASH_MODE: HashMode = Correct;
 
-impl<E, Arity> PoseidonConstants<E, Arity>
+impl<'a, E, Arity> PoseidonConstants<E, Arity>
 where
     E: ScalarEngine,
     Arity: typenum::Unsigned
@@ -80,8 +82,9 @@ where
         let arity = Arity::to_usize();
         let width = arity + 1;
 
-        let mds_matrix = generate_mds::<E>(width);
-        let inverse_mds_matrix = matrix::invert::<E>(&mds_matrix).unwrap();
+        let mds_matrices = create_mds_matrices::<E>(width);
+        // let mds_matrix = generate_mds::<E>(width);
+        // let m_inv = matrix::invert::<E>(&mds_matrix).unwrap();
 
         let (full_rounds, partial_rounds) = round_numbers(arity);
         let round_constants = round_constants::<E>(arity);
@@ -103,8 +106,7 @@ where
             full_rounds,
             partial_rounds,
             &round_constants,
-            &inverse_mds_matrix,
-            &mds_matrix,
+            &mds_matrices,
             partial_preprocessed,
         );
         // Ensure we have enough constants for the sbox rounds
@@ -114,8 +116,7 @@ where
         );
 
         Self {
-            mds_matrix,
-            inverse_mds_matrix,
+            mds_matrices,
             round_constants,
             preprocessed_round_constants,
             arity_tag: arity_tag::<E, Arity>(),
@@ -145,10 +146,12 @@ fn preprocess_round_constants<E: ScalarEngine>(
     full_rounds: usize,
     partial_rounds: usize,
     round_constants: &Vec<E::Fr>,
-    inverse_matrix: &Vec<Vec<E::Fr>>,
-    mds_matrix: &Vec<Vec<E::Fr>>,
+    mds_matrices: &MDSMatrices<E>,
     partial_preprocessed: usize,
 ) -> Vec<E::Fr> {
+    let mds_matrix = &mds_matrices.m;
+    let inverse_matrix = &mds_matrices.m_inv;
+
     let mut res = Vec::new();
 
     let round_keys = |r: usize| &round_constants[r * width..(r + 1) * width];
@@ -700,10 +703,10 @@ where
 
             // M^-1(S)
             let inverted_vec =
-                matrix::apply_matrix::<E>(&self.constants.inverse_mds_matrix, &post_vec);
+                matrix::apply_matrix::<E>(&self.constants.mds_matrices.m_inv, &post_vec);
 
             // M(M^-1(S))
-            let original = matrix::apply_matrix::<E>(&self.constants.mds_matrix, &inverted_vec);
+            let original = matrix::apply_matrix::<E>(&self.constants.mds_matrices.m, &inverted_vec);
 
             // S = M(M^-1(S))
             assert_eq!(&post_vec, &original, "Oh no, the inversion trick failed.");
@@ -746,7 +749,7 @@ where
         // Multiply the elements by the constant MDS matrix
         self.product_mds();
 
-        let applied = matrix::apply_matrix::<E>(&self.constants.mds_matrix, &stashed.to_vec());
+        let applied = matrix::apply_matrix::<E>(&self.constants.mds_matrices.m, &stashed.to_vec());
         assert_eq!(
             applied[..],
             self.elements[..],
@@ -888,7 +891,7 @@ where
     fn product_mds(&mut self) {
         let mut result = GenericArray::<E::Fr, typenum::Add1<Arity>>::generate(|_| E::Fr::zero());
 
-        for (result, mds_row) in result.iter_mut().zip(self.constants.mds_matrix.iter()) {
+        for (result, mds_row) in result.iter_mut().zip(self.constants.mds_matrices.m.iter()) {
             for (mds, element) in mds_row.iter().zip(self.elements.iter()) {
                 let mut tmp = *mds;
                 tmp.mul_assign(element);

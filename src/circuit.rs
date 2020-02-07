@@ -115,7 +115,7 @@ where
         let mut result: Vec<AllocatedNum<E>> = Vec::with_capacity(self.constants.width());
 
         for j in 0..self.constants.width() {
-            let column = self.constants.mds_matrix[j].to_vec();
+            let column = self.constants.mds_matrices.m[j].to_vec();
             // TODO: This could be cached per round to save synthesis time.
             let constant_term = if add_round_keys {
                 let mut acc = E::Fr::zero();
@@ -223,7 +223,7 @@ where
     p.hash(cs)
 }
 
-pub fn create_poseidon_parameters<E, Arity>() -> PoseidonConstants<E, Arity>
+pub fn create_poseidon_parameters<'a, E, Arity>() -> PoseidonConstants<E, Arity>
 where
     E: Engine,
     Arity: typenum::Unsigned

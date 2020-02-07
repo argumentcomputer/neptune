@@ -1,10 +1,9 @@
 #![allow(dead_code)]
 
-use crate::matrix::is_invertible;
 pub use crate::poseidon::Poseidon;
 use crate::round_constants::generate_constants;
 pub use error::Error;
-use ff::{Field, PrimeField, ScalarEngine};
+use ff::{PrimeField, ScalarEngine};
 pub use paired::bls12_381::Fr as Scalar;
 use paired::bls12_381::FrRepr;
 
@@ -12,6 +11,7 @@ use paired::bls12_381::FrRepr;
 pub mod circuit;
 mod error;
 mod matrix;
+mod mds;
 /// Poseidon hash
 pub mod poseidon;
 mod round_constants;
@@ -43,54 +43,6 @@ pub fn scalar_from_u64<E: ScalarEngine>(i: u64) -> E::Fr {
 /// create field element from four u64
 pub fn scalar_from_u64s(parts: [u64; 4]) -> Scalar {
     Scalar::from_repr(FrRepr(parts)).unwrap()
-}
-
-fn generate_mds<E: ScalarEngine>(t: usize) -> Vec<Vec<E::Fr>> {
-    // Source: https://github.com/dusk-network/dusk-poseidon-merkle/commit/776c37734ea2e71bb608ce4bc58fdb5f208112a7#diff-2eee9b20fb23edcc0bf84b14167cbfdc
-    let mut matrix: Vec<Vec<E::Fr>> = Vec::with_capacity(t);
-    let mut xs: Vec<E::Fr> = Vec::with_capacity(t);
-    let mut ys: Vec<E::Fr> = Vec::with_capacity(t);
-
-    // Generate x and y values deterministically for the cauchy matrix
-    // where x[i] != y[i] to allow the values to be inverted
-    // and there are no duplicates in the x vector or y vector, so that the determinant is always non-zero
-    // [a b]
-    // [c d]
-    // det(M) = (ad - bc) ; if a == b and c == d => det(M) =0
-    // For an MDS matrix, every possible mxm submatrix, must have det(M) != 0
-    for i in 0..t {
-        let x = scalar_from_u64::<E>((i) as u64);
-        let y = scalar_from_u64::<E>((i + t) as u64);
-        xs.push(x);
-        ys.push(y);
-    }
-
-    // for i in 0..t {
-    //     let mut row: Vec<Scalar> = Vec::with_capacity(t);
-    //     for j in 0..t {
-    //         // Generate the entry at (i,j)
-    //         let entry = (xs[i] + ys[j]).invert();
-    //         row.insert(j, entry);
-    //     }
-    //     matrix.push(row);
-    // }
-    // Adapted from source above to use E::Fr.
-    for i in 0..t {
-        let mut row: Vec<E::Fr> = Vec::with_capacity(t);
-        for j in 0..t {
-            // Generate the entry at (i,j)
-            let mut tmp = xs[i];
-            tmp.add_assign(&ys[j]);
-            let entry = tmp.inverse().unwrap();
-            row.insert(j, entry);
-        }
-        matrix.push(row);
-    }
-
-    assert!(is_invertible::<E>(&matrix));
-    // To ensure correctness, we would check all sub-matrices for invertibility. Meanwhile, this is a simple sanity check.
-
-    matrix
 }
 
 const SBOX: u8 = 1; // x^5
