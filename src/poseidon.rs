@@ -1,5 +1,5 @@
 use crate::matrix::Matrix;
-use crate::preprocessing::preprocess_round_constants;
+use crate::preprocessing::compress_round_constants;
 use crate::{matrix, quintic_s_box};
 use crate::{
     mds::create_mds_matrices, mds::MDSMatrices, round_constants, round_numbers, scalar_from_u64,
@@ -44,11 +44,10 @@ where
 {
     pub mds_matrices: MDSMatrices<E>,
     pub round_constants: Vec<E::Fr>,
-    pub preprocessed_round_constants: Vec<E::Fr>,
+    pub compressed_round_constants: Vec<E::Fr>,
     pub arity_tag: E::Fr,
     pub full_rounds: usize,
     pub partial_rounds: usize,
-    pub partial_preprocessed: usize,
     _a: PhantomData<Arity>,
 }
 
@@ -64,19 +63,6 @@ pub enum HashMode {
     OptimizedStatic,
 }
 use HashMode::{Correct, OptimizedDynamic, OptimizedStatic};
-
-#[derive(Debug, PartialEq)]
-enum PartialRound {
-    FirstUnpreprocessed,
-    InternalUnpreprocessed,
-    LastUnpreprocessedAlpha,
-    LastUnpreprocessedBeta,
-    Preprocessed,
-}
-use PartialRound::{
-    FirstUnpreprocessed, InternalUnpreprocessed, LastUnpreprocessedAlpha, LastUnpreprocessedBeta,
-    Preprocessed,
-};
 
 pub const DEFAULT_HASH_MODE: HashMode = Correct;
 
@@ -98,41 +84,33 @@ where
 
         let (full_rounds, partial_rounds) = round_numbers(arity);
         let round_constants = round_constants::<E>(arity);
-
-        // These succeed:
-        //let partial_preprocessed = 0;
-        //let partial_preprocessed = 1;
-        //let partial_preprocessed = 53;
-        let partial_preprocessed = partial_rounds; // partial_rounds = 55
-
-        // Although annoying, this is a very special case — when only a single round is not preprocessed.
-        // That strongly suggests this failure is an artifact of the test scaffolding we have erected
-        // to aid refactoring. For now, we will just avoid this case.
-        // These fail:
-        // let partial_preprocessed = 54;
-
-        let preprocessed_round_constants = preprocess_round_constants::<E>(
+        let compressed_round_constants = compress_round_constants::<E>(
             width,
             full_rounds,
             partial_rounds,
             &round_constants,
             &mds_matrices,
-            partial_preprocessed,
+            partial_rounds,
         );
+
         // Ensure we have enough constants for the sbox rounds
         assert!(
             width * (full_rounds + partial_rounds) <= round_constants.len(),
             "Not enough round constants"
         );
 
+        assert_eq!(
+            full_rounds * width + partial_rounds,
+            compressed_round_constants.len()
+        );
+
         Self {
             mds_matrices,
             round_constants,
-            preprocessed_round_constants,
+            compressed_round_constants,
             arity_tag: arity_tag::<E, Arity>(),
             full_rounds,
             partial_rounds,
-            partial_preprocessed,
             _a: PhantomData::<Arity>,
         }
     }
@@ -360,40 +338,13 @@ where
 
         self.debug("Before first partial round (static)");
 
-        let unpreprocessed = self.constants.partial_rounds - self.constants.partial_preprocessed;
-        if unpreprocessed > 0 {
-            dbg!(unpreprocessed);
-            self.partial_round_static(FirstUnpreprocessed);
-            for i in 1..(unpreprocessed - 1) {
-                self.partial_round_static(InternalUnpreprocessed);
-
-                if i == 0 {
-                    self.debug("After first partial round (static)");
-                }
-                if i == 1 {
-                    self.debug("After second partial round (static)");
-                }
-                if i == unpreprocessed - 2 {
-                    self.debug("Before second-to-last unpreprocessed partial round (static)");
-                    dbg!(self.constants.preprocessed_round_constants[self.constants_offset]);
-                }
-            }
-            dbg!("before last unpreprocessed partial round (static)");
-            // We need both pre and post round-keys added at the seam.
-            if self.constants.partial_preprocessed > 0 {
-                self.partial_round_static(LastUnpreprocessedBeta);
-            } else {
-                self.partial_round_static(LastUnpreprocessedAlpha);
-            }
-        }
-
-        for i in unpreprocessed..self.constants.partial_rounds {
+        for i in 0..self.constants.partial_rounds {
             if i == (self.constants.partial_rounds - 1) {
                 self.debug("Before last preprocessed partial round (static)");
-                dbg!(self.constants.preprocessed_round_constants[self.constants_offset]);
+                dbg!(self.constants.compressed_round_constants[self.constants_offset]);
             }
             //self.partial_round_static(true, false, false);
-            self.partial_round_static(Preprocessed);
+            self.partial_round_static();
         }
 
         self.debug("After last partial round (static)");
@@ -413,81 +364,24 @@ where
 
         assert_eq!(
             self.constants_offset,
-            self.constants.preprocessed_round_constants.len(),
+            self.constants.compressed_round_constants.len(),
             "Constants consumed ({}) must equal preprocessed constants provided ({}).",
             self.constants_offset,
-            self.constants.preprocessed_round_constants.len()
+            self.constants.compressed_round_constants.len()
         );
 
         self.elements[1]
     }
 
     /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
-    fn partial_round_static(&mut self, round_type: PartialRound) {
-        match &round_type {
-            Preprocessed => {
-                let post_round_key =
-                    self.constants.preprocessed_round_constants[self.constants_offset];
-                dbg!(&post_round_key);
-                // Apply the quintic S-Box to the first element
-                quintic_s_box::<E>(&mut self.elements[0], None, Some(&post_round_key));
-                self.constants_offset += 1;
-                self.debug("After adding partial key post S-box.");
-                // assert!(!skip_constants);
-            }
-            FirstUnpreprocessed => {
-                self.debug("before s-box (FirstUnpreprocessed)");
-                quintic_s_box::<E>(&mut self.elements[0], None, None);
-            }
-            LastUnpreprocessedAlpha => {
-                self.add_round_constants_static();
-                self.debug("before s-box");
-                quintic_s_box::<E>(&mut self.elements[0], None, None);
+    fn partial_round_static(&mut self) {
+        let post_round_key = self.constants.compressed_round_constants[self.constants_offset];
 
-                self.debug("initial_state"); // This is the initial_state from preprocessing dev tests.
-                                             // Actually, it's from one round later.
+        // Apply the quintic S-Box to the first element
+        quintic_s_box::<E>(&mut self.elements[0], None, Some(&post_round_key));
+        self.constants_offset += 1;
 
-                self.debug("after round constants (and s-box)");
-                self.add_round_constants_static();
-            }
-            LastUnpreprocessedBeta => {
-                self.add_round_constants_static();
-                self.debug("before s-box");
-                quintic_s_box::<E>(&mut self.elements[0], None, None);
-
-                self.debug("initial_state"); // This is the initial_state from preprocessing dev tests.
-
-                // dbg!("multiplying by m_prime");
-                // self.product_mds(&self.constants.mds_matrices.m_prime);
-
-                self.debug("after round constants (and s-box)");
-                self.add_round_constants_static();
-            }
-
-            _ => {
-                dbg!(
-                    "adding round constants in partial_round_static",
-                    &round_type
-                );
-                self.add_round_constants_static();
-                self.debug("before s-box");
-                quintic_s_box::<E>(&mut self.elements[0], None, None);
-                self.debug("after s-box");
-            }
-        };
-
-        match &round_type {
-            // Preprocessed => {
-            //     dbg!("Applying m_double_prime!");
-            //     self.product_mds(&self.constants.mds_matrices.m_double_prime)
-            // }
-            // LastUnpreprocessedBeta => {
-            //     self.product_mds(&self.constants.mds_matrices.m);
-            //     // self.debug("Applying m_prime!");
-            //     // self.product_mds(&self.constants.mds_matrices.m_prime);
-            // }
-            _ => self.product_mds(&self.constants.mds_matrices.m),
-        };
+        self.product_mds(&self.constants.mds_matrices.m);
     }
 
     pub fn full_round(&mut self, add_current_round_keys: bool, absorb_next_round_keys: bool) {
@@ -594,7 +488,7 @@ where
         let to_take = self.elements.len();
         let post_round_keys = self
             .constants
-            .preprocessed_round_constants
+            .compressed_round_constants
             .iter()
             .skip(self.constants_offset)
             .take(to_take);
@@ -602,9 +496,9 @@ where
         if !last_round {
             let needed = self.constants_offset + to_take;
             assert!(
-                needed <= self.constants.preprocessed_round_constants.len(),
+                needed <= self.constants.compressed_round_constants.len(),
                 "Not enough preprocessed round constants ({}), need {}.",
-                self.constants.preprocessed_round_constants.len(),
+                self.constants.compressed_round_constants.len(),
                 needed
             );
         }
@@ -673,7 +567,7 @@ where
     fn add_round_constants_static(&mut self) {
         for (element, round_constant) in self.elements.iter_mut().zip(
             self.constants
-                .preprocessed_round_constants
+                .compressed_round_constants
                 .iter()
                 .skip(self.constants_offset),
         ) {
@@ -708,28 +602,6 @@ where
         dbg!(msg, &self.constants_offset, &self.elements);
     }
 }
-
-/// Apply the quintic S-Box (s^5) to a given item
-// fn quintic_s_box<E: ScalarEngine>(
-//     l: &mut E::Fr,
-//     pre_add: Option<&E::Fr>,
-//     post_add: Option<&E::Fr>,
-// ) {
-//     if let Some(x) = pre_add {
-//         l.add_assign(x);
-//     }
-//     // dbg!("S-box input", &l);
-//     let c = *l;
-//     let mut tmp = l.clone();
-//     tmp.mul_assign(&c);
-//     tmp.mul_assign(&tmp.clone());
-//     l.mul_assign(&tmp);
-//     // dbg!("S-box output", &l);
-//     if let Some(x) = post_add {
-//         l.add_assign(x);
-//         //  dbg!("After S-box post-add", &l);
-//     }
-// }
 
 /// Poseidon convenience hash function.
 /// NOTE: this is expensive, since it computes all constants when initializing hasher struct.

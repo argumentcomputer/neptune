@@ -3,7 +3,7 @@ use crate::mds::MDSMatrices;
 use crate::quintic_s_box;
 use ff::{Field, ScalarEngine};
 
-pub(crate) fn preprocess_round_constants<E: ScalarEngine>(
+pub(crate) fn compress_round_constants<E: ScalarEngine>(
     width: usize,
     full_rounds: usize,
     partial_rounds: usize,
