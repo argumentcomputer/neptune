@@ -238,33 +238,15 @@ fn preprocess_matrices<E: ScalarEngine>(
     let round_acc = (0..partial_preprocessed)
         .map(|i| round_keys(final_round - i - 1))
         .fold(final_round_key, |acc, previous_round_keys| {
-            //let mut inverted = apply_matrix::<E>(inverse_matrix, &acc);
             let mut inverted = apply_matrix::<E>(m_double_prime_inv, &acc);
 
             partial_keys.push(inverted[0]);
-            dbg!("partial_key", &inverted[0]);
             inverted = apply_matrix::<E>(m_prime_inv, &inverted);
             inverted[0] = E::Fr::zero();
 
             let res1 = vec_add::<E>(&previous_round_keys, &inverted);
-            //res1
             apply_matrix::<E>(m_prime, &res1)
         });
-
-    // let _round_acc = (0..partial_preprocessed)
-    //     .map(|i| round_keys(final_round - i - 1))
-    //     .fold(final_round_key, |acc, previous_round_keys| {
-    //         let mut inverted = apply_matrix::<E>(inverse_matrix, &acc);
-    //         //let mut inverted = apply_matrix::<E>(m_double_prime_inv, &acc);
-
-    //         partial_keys.push(inverted[0]);
-    //         //            inverted = apply_matrix::<E>(m_prime_inv, &inverted);
-    //         inverted[0] = E::Fr::zero();
-
-    //         let res1 = vec_add::<E>(&previous_round_keys, &inverted);
-    //         res1
-    //         //apply_matrix::<E>(m_prime, &res1)
-    //     });
 
     // Everything in here is dev-driven testing.
     // Dev test case only checks one deep.

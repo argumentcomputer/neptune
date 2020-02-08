@@ -1,10 +1,8 @@
 use crate::matrix::Matrix;
+use crate::mds::{create_mds_matrices, factor_to_sparse_matrices, MDSMatrices};
 use crate::preprocessing::compress_round_constants;
 use crate::{matrix, quintic_s_box};
-use crate::{
-    mds::create_mds_matrices, mds::MDSMatrices, round_constants, round_numbers, scalar_from_u64,
-    Error,
-};
+use crate::{round_constants, round_numbers, scalar_from_u64, Error};
 use ff::{Field, ScalarEngine};
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
 use std::marker::PhantomData;
@@ -45,6 +43,7 @@ where
     pub mds_matrices: MDSMatrices<E>,
     pub round_constants: Vec<E::Fr>,
     pub compressed_round_constants: Vec<E::Fr>,
+    pub sparse_matrices: Vec<Matrix<E::Fr>>,
     pub arity_tag: E::Fr,
     pub full_rounds: usize,
     pub partial_rounds: usize,
@@ -93,6 +92,9 @@ where
             partial_rounds,
         );
 
+        let sparse_matrices =
+            factor_to_sparse_matrices::<E>(mds_matrices.m.clone(), partial_rounds);
+
         // Ensure we have enough constants for the sbox rounds
         assert!(
             width * (full_rounds + partial_rounds) <= round_constants.len(),
@@ -108,6 +110,7 @@ where
             mds_matrices,
             round_constants,
             compressed_round_constants,
+            sparse_matrices,
             arity_tag: arity_tag::<E, Arity>(),
             full_rounds,
             partial_rounds,
