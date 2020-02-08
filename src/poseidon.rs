@@ -24,6 +24,7 @@ where
     typenum::Add1<Arity>: ArrayLength<E::Fr>,
 {
     constants_offset: usize,
+    current_round: usize, // Used in static optimization only for now.
     /// the elements to permute
     pub elements: GenericArray<E::Fr, typenum::Add1<Arity>>,
     pos: usize,
@@ -150,6 +151,7 @@ where
         });
         Poseidon {
             constants_offset: 0,
+            current_round: 0,
             elements,
             pos: 1,
             constants,
@@ -174,6 +176,7 @@ where
 
         Poseidon {
             constants_offset: 0,
+            current_round: 0,
             elements,
             pos: width,
             constants,
@@ -194,6 +197,7 @@ where
     /// Restore the initial state
     pub fn reset(&mut self) {
         self.constants_offset = 0;
+        self.current_round = 0;
         self.elements[1..]
             .iter_mut()
             .for_each(|l| *l = scalar_from_u64::<E>(0u64));
@@ -330,12 +334,11 @@ where
         self.add_round_constants_static();
 
         for i in 0..self.constants.full_rounds / 2 {
-            self.full_round_static(false);
-            if i == 1 {
-                self.debug("After second full round (static)");
-            }
             if i == (self.constants.full_rounds / 2) - 2 {
                 self.debug("Before last full round (static)");
+                self.full_round_static(false);
+            } else {
+                self.full_round_static(false);
             }
         }
 
@@ -346,7 +349,6 @@ where
                 self.debug("Before last preprocessed partial round (static)");
                 dbg!(self.constants.compressed_round_constants[self.constants_offset]);
             }
-            //self.partial_round_static(true, false, false);
             self.partial_round_static();
         }
 
@@ -384,7 +386,7 @@ where
         quintic_s_box::<E>(&mut self.elements[0], None, Some(&post_round_key));
         self.constants_offset += 1;
 
-        self.product_mds(&self.constants.mds_matrices.m);
+        self.product_mds_static();
     }
 
     pub fn full_round(&mut self, add_current_round_keys: bool, absorb_next_round_keys: bool) {
@@ -477,7 +479,7 @@ where
         // else
         //   M(B)
         // Multiply the elements by the constant MDS matrix
-        self.product_mds(&self.constants.mds_matrices.m);
+        self.product_mds();
 
         let applied = matrix::apply_matrix::<E>(&self.constants.mds_matrices.m, &stashed.to_vec());
         assert_eq!(
@@ -510,7 +512,7 @@ where
             .zip(post_round_keys)
             .for_each(|(l, post)| {
                 // Be explicit that no round key is added after last round of S-boxes.
-                dbg!(&post);
+                //dbg!(&post);
                 let post_key = if last_round {
                     panic!("Trying to skip last full round, but there is a key here! ({})");
                 } else {
@@ -528,7 +530,7 @@ where
         if !last_round {
             self.constants_offset += self.elements.len();
         }
-        self.product_mds(&self.constants.mds_matrices.m);
+        self.product_mds_static();
     }
 
     /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
@@ -544,7 +546,7 @@ where
         quintic_s_box::<E>(&mut self.elements[0], None, None);
 
         // Multiply the elements by the constant MDS matrix
-        self.product_mds(&self.constants.mds_matrices.m);
+        self.product_mds();
     }
 
     /// For every leaf, add the round constants with index defined by the constants offset, and increment the
@@ -586,8 +588,9 @@ where
     }
 
     /// Set the provided elements with the result of the product between the elements and the constant
-    /// MDS matrix. If `use_mds_double_prime` is true, then use M'' in the M = M' x M'' decomposition.
-    fn product_mds(&mut self, matrix: &Matrix<E::Fr>) {
+    /// MDS matrix.
+    fn product_mds(&mut self) {
+        let matrix = &self.constants.mds_matrices.m;
         let mut result = GenericArray::<E::Fr, typenum::Add1<Arity>>::generate(|_| E::Fr::zero());
 
         for (j, val) in result.iter_mut().enumerate() {
@@ -599,6 +602,37 @@ where
         }
 
         std::mem::replace(&mut self.elements, result);
+    }
+
+    /// Set the provided elements with the result of the product between the elements and the appropriate
+    /// MDS matrix.
+    fn product_mds_static(&mut self) {
+        let full_half = self.constants.full_rounds / 2;
+        let sparse_offset = full_half - 1;
+        let matrix = if (self.current_round >= sparse_offset)
+            && (self.current_round < full_half + self.constants.partial_rounds)
+        {
+            let index = self.current_round - sparse_offset;
+            let matrix = &self.constants.sparse_matrices[index];
+            dbg!("taking sparse matrix", &index, matrix);
+
+            matrix
+        } else {
+            &self.constants.mds_matrices.m
+        };
+
+        let mut result = GenericArray::<E::Fr, typenum::Add1<Arity>>::generate(|_| E::Fr::zero());
+
+        for (j, val) in result.iter_mut().enumerate() {
+            for (i, row) in matrix.iter().enumerate() {
+                let mut tmp = row[j];
+                tmp.mul_assign(&self.elements[i]);
+                val.add_assign(&tmp);
+            }
+        }
+
+        std::mem::replace(&mut self.elements, result);
+        self.current_round += 1;
     }
 
     fn debug(&self, msg: &str) {
