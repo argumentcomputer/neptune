@@ -70,15 +70,12 @@ fn quintic_s_box<E: ScalarEngine>(
     if let Some(x) = pre_add {
         l.add_assign(x);
     }
-    // dbg!("S-box input", &l);
     let c = *l;
     let mut tmp = l.clone();
     tmp.mul_assign(&c);
     tmp.mul_assign(&tmp.clone());
     l.mul_assign(&tmp);
-    // dbg!("S-box output", &l);
     if let Some(x) = post_add {
         l.add_assign(x);
-        //  dbg!("After S-box post-add", &l);
     }
 }

@@ -6,27 +6,30 @@ use crate::{round_constants, round_numbers, scalar_from_u64, Error};
 use ff::{Field, ScalarEngine};
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
 use std::marker::PhantomData;
+use std::ops::Add;
+use typenum::bit::B1;
+use typenum::marker_traits::Unsigned;
+use typenum::uint::{UInt, UTerm};
+use typenum::{Add1, U2};
 
 /// The arity tag is the first element of a Poseidon permutation.
 /// This extra element is necessary for 128-bit security.
-pub fn arity_tag<E: ScalarEngine, Arity: typenum::Unsigned>() -> E::Fr {
+pub fn arity_tag<E: ScalarEngine, Arity: Unsigned>() -> E::Fr {
     scalar_from_u64::<E>((1 << Arity::to_usize()) - 1)
 }
 
 /// The `Poseidon` structure will accept a number of inputs equal to the arity.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Poseidon<'a, E, Arity = typenum::U2>
+pub struct Poseidon<'a, E, Arity = U2>
 where
     E: ScalarEngine,
-    Arity: typenum::Unsigned
-        + std::ops::Add<typenum::bit::B1>
-        + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
-    typenum::Add1<Arity>: ArrayLength<E::Fr>,
+    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>>,
+    Add1<Arity>: ArrayLength<E::Fr>,
 {
     constants_offset: usize,
     current_round: usize, // Used in static optimization only for now.
     /// the elements to permute
-    pub elements: GenericArray<E::Fr, typenum::Add1<Arity>>,
+    pub elements: GenericArray<E::Fr, Add1<Arity>>,
     pos: usize,
     constants: &'a PoseidonConstants<E, Arity>,
     _e: PhantomData<E>,
@@ -36,10 +39,8 @@ where
 pub struct PoseidonConstants<E, Arity>
 where
     E: ScalarEngine,
-    Arity: typenum::Unsigned
-        + std::ops::Add<typenum::bit::B1>
-        + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
-    typenum::Add1<Arity>: ArrayLength<E::Fr>,
+    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>>,
+    Add1<Arity>: ArrayLength<E::Fr>,
 {
     pub mds_matrices: MDSMatrices<E>,
     pub round_constants: Vec<E::Fr>,
@@ -47,6 +48,7 @@ where
     pub sparse_matrices: Vec<Matrix<E::Fr>>,
     pub arity_tag: E::Fr,
     pub full_rounds: usize,
+    pub half_full_rounds: usize,
     pub partial_rounds: usize,
     _a: PhantomData<Arity>,
 }
@@ -69,10 +71,8 @@ pub const DEFAULT_HASH_MODE: HashMode = Correct;
 impl<'a, E, Arity> PoseidonConstants<E, Arity>
 where
     E: ScalarEngine,
-    Arity: typenum::Unsigned
-        + std::ops::Add<typenum::bit::B1>
-        + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
-    typenum::Add1<Arity>: ArrayLength<E::Fr>,
+    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>>,
+    Add1<Arity>: ArrayLength<E::Fr>,
 {
     pub fn new() -> Self {
         let arity = Arity::to_usize();
@@ -83,6 +83,7 @@ where
         // let m_inv = matrix::invert::<E>(&mds_matrix).unwrap();
 
         let (full_rounds, partial_rounds) = round_numbers(arity);
+        let half_full_rounds = full_rounds / 2;
         let round_constants = round_constants::<E>(arity);
         let compressed_round_constants = compress_round_constants::<E>(
             width,
@@ -114,6 +115,7 @@ where
             sparse_matrices,
             arity_tag: arity_tag::<E, Arity>(),
             full_rounds,
+            half_full_rounds,
             partial_rounds,
             _a: PhantomData::<Arity>,
         }
@@ -128,18 +130,15 @@ where
     /// Returns the width.
     #[inline]
     pub fn width(&self) -> usize {
-        use typenum::Unsigned;
-        typenum::Add1::<Arity>::to_usize()
+        Add1::<Arity>::to_usize()
     }
 }
 
 impl<'a, E, Arity> Poseidon<'a, E, Arity>
 where
     E: ScalarEngine,
-    Arity: typenum::Unsigned
-        + std::ops::Add<typenum::bit::B1>
-        + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
-    typenum::Add1<Arity>: ArrayLength<E::Fr>,
+    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>>,
+    Add1<Arity>: ArrayLength<E::Fr>,
 {
     pub fn new(constants: &'a PoseidonConstants<E, Arity>) -> Self {
         let elements = GenericArray::generate(|i| {
@@ -235,137 +234,68 @@ where
     ///
     /// The returned element is the second poseidon element, the first is the arity tag.
     pub fn hash_correct(&mut self) -> E::Fr {
-        self.debug("Hash Correct");
-
         // This counter is incremented when a round constants is read. Therefore, the round constants never
         // repeat
         // The first full round should use the initial constants.
-        self.full_round(true, false);
+        self.full_round();
 
-        self.debug("After first full round (Correct)");
-
-        for i in 1..self.constants.full_rounds / 2 {
-            self.full_round(true, false);
-            if i == 1 {
-                self.debug("After second full round (Correct)");
-            }
+        for _ in 1..self.constants.half_full_rounds {
+            self.full_round();
         }
-
-        self.debug("Before first partial round");
 
         // Constants were added in the previous full round, so skip them here (false argument).
-        self.partial_round(true, false);
-
-        self.debug("After first partial round (Correct)");
+        self.partial_round();
 
         for _ in 1..self.constants.partial_rounds {
-            self.partial_round(true, false);
+            self.partial_round();
         }
 
-        self.debug("After last partial round (Correct)");
-
-        for _ in 0..self.constants.full_rounds / 2 {
-            self.full_round(true, false);
+        for _ in 0..self.constants.half_full_rounds {
+            self.full_round();
         }
-
-        self.debug("After last full round (Correct)");
 
         self.elements[1]
     }
 
     pub fn hash_optimized_dynamic(&mut self) -> E::Fr {
-        // This counter is incremented when a round constants is read. Therefore, the round constants never
-        // repeat
-
-        self.debug("Hash OptimizedDynamic");
-        dbg!(&self.constants.round_constants);
-
         // The first full round should use the initial constants.
-        self.full_round(true, true);
+        self.full_round_dynamic(true, true);
 
-        self.debug("After first full round (dynamic)");
-
-        for i in 1..(self.constants.full_rounds / 2) {
-            self.full_round(false, true);
-            if i == 1 {
-                self.debug("After second full round (dynamic)");
-            }
-            if i == (self.constants.full_rounds / 2) - 2 {
-                self.debug("Before last full round (dynamic)");
-            }
+        for _ in 1..(self.constants.half_full_rounds) {
+            self.full_round_dynamic(false, true);
         }
-
-        self.debug("Before first partial round (dynamic)");
 
         // Constants were added in the previous full round, so skip them here (false argument).
-        self.partial_round(false, false);
+        self.partial_round_dynamic();
 
-        self.debug("After first partial round (dynamic)");
-
-        for i in 1..self.constants.partial_rounds {
-            self.partial_round(true, false);
-            if i == 1 {
-                self.debug("After second partial round (dynamic)");
-            }
+        for _ in 1..self.constants.partial_rounds {
+            self.partial_round();
         }
 
-        self.debug("After last partial round (dynamic)");
-
-        for i in 0..self.constants.full_rounds / 2 {
-            self.full_round(true, false);
-
-            if i == (self.constants.full_rounds / 2) - 2 {
-                self.debug("Before last full round (dynamic)");
-            }
+        for _ in 0..self.constants.half_full_rounds {
+            self.full_round_dynamic(true, false);
         }
-
-        self.debug("After last full round (dynamic)");
 
         self.elements[1]
     }
 
     pub fn hash_optimized_static(&mut self) -> E::Fr {
-        // This counter is incremented when a round constants is read. Therefore, the round constants never
-        // repeat
-
-        self.debug("Hash OptimizedStatic");
-
         // The first full round should use the initial constants.
         self.add_round_constants_static();
 
-        for i in 0..self.constants.full_rounds / 2 {
-            if i == (self.constants.full_rounds / 2) - 2 {
-                self.debug("Before last full round (static)");
-                self.full_round_static(false);
-            } else {
-                self.full_round_static(false);
-            }
+        for _ in 0..self.constants.half_full_rounds {
+            self.full_round_static(false);
         }
 
-        self.debug("Before first partial round (static)");
-
-        for i in 0..self.constants.partial_rounds {
-            if i == (self.constants.partial_rounds - 1) {
-                self.debug("Before last preprocessed partial round (static)");
-                dbg!(self.constants.compressed_round_constants[self.constants_offset]);
-            }
+        for _ in 0..self.constants.partial_rounds {
             self.partial_round_static();
         }
 
-        self.debug("After last partial round (static)");
-
         // All but last full round.
-        for i in 0..self.constants.full_rounds / 2 {
-            if i == (self.constants.full_rounds / 2) - 1 {
-                self.debug("Before last full round (static)");
-                self.full_round_static(true);
-            } else {
-                dbg!(i);
-                self.full_round_static(false);
-            }
+        for _ in 1..self.constants.half_full_rounds {
+            self.full_round_static(false);
         }
-
-        self.debug("After last full round (static)");
+        self.full_round_static(true);
 
         assert_eq!(
             self.constants_offset,
@@ -378,18 +308,7 @@ where
         self.elements[1]
     }
 
-    /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
-    fn partial_round_static(&mut self) {
-        let post_round_key = self.constants.compressed_round_constants[self.constants_offset];
-
-        // Apply the quintic S-Box to the first element
-        quintic_s_box::<E>(&mut self.elements[0], None, Some(&post_round_key));
-        self.constants_offset += 1;
-
-        self.product_mds_static();
-    }
-
-    pub fn full_round(&mut self, add_current_round_keys: bool, absorb_next_round_keys: bool) {
+    pub fn full_round(&mut self) {
         // NOTE: decrease in performance is expected during this refactoring.
         // We seek to preserve correctness while transforming the algorithm to an eventually more performant one.
 
@@ -397,6 +316,37 @@ where
         // Round keys are added in the S-box to match circuits (where the addition is free)
         // and in preparation for the shift to adding round keys after (rather than before) applying the S-box.
 
+        let pre_round_keys = self
+            .constants
+            .round_constants
+            .iter()
+            .skip(self.constants_offset)
+            .map(|x| Some(x));
+
+        self.elements
+            .iter_mut()
+            .zip(pre_round_keys)
+            .for_each(|(l, pre)| {
+                quintic_s_box::<E>(l, pre, None);
+            });
+
+        self.constants_offset += self.elements.len();
+
+        // M(B)
+        // Multiply the elements by the constant MDS matrix
+        self.product_mds();
+    }
+
+    pub fn full_round_dynamic(
+        &mut self,
+        add_current_round_keys: bool,
+        absorb_next_round_keys: bool,
+    ) {
+        // NOTE: decrease in performance is expected when using this pathway.
+        // We seek to preserve correctness while transforming the algorithm to an eventually more performant one.
+
+        // Round keys are added in the S-box to match circuits (where the addition is free).
+        // If requested, add round keys synthesized from following round after (rather than before) applying the S-box.
         let pre_round_keys = self
             .constants
             .round_constants
@@ -412,7 +362,6 @@ where
 
         if absorb_next_round_keys {
             // Using the notation from `test_inverse` in matrix.rs:
-
             // S
             let post_vec = self
                 .constants
@@ -451,7 +400,6 @@ where
                 .iter_mut()
                 .zip(pre_round_keys.zip(post_round_keys))
                 .for_each(|(l, (pre, post))| {
-                    //dbg!("a");
                     quintic_s_box::<E>(l, pre, Some(post));
                 });
         } else {
@@ -459,7 +407,6 @@ where
                 .iter_mut()
                 .zip(pre_round_keys)
                 .for_each(|(l, pre)| {
-                    //dbg!("b");
                     quintic_s_box::<E>(l, pre, None);
                 });
         }
@@ -472,21 +419,12 @@ where
         };
         self.constants_offset += consumed;
 
-        let stashed = self.elements.clone();
-
         // If absorb_next_round_keys
         //   M(B + M^-1(S)
         // else
         //   M(B)
         // Multiply the elements by the constant MDS matrix
         self.product_mds();
-
-        let applied = matrix::apply_matrix::<E>(&self.constants.mds_matrices.m, &stashed.to_vec());
-        assert_eq!(
-            applied[..],
-            self.elements[..],
-            "product_mds gives different result than matrix application",
-        );
     }
 
     fn full_round_static(&mut self, last_round: bool) {
@@ -512,7 +450,6 @@ where
             .zip(post_round_keys)
             .for_each(|(l, post)| {
                 // Be explicit that no round key is added after last round of S-boxes.
-                //dbg!(&post);
                 let post_key = if last_round {
                     panic!("Trying to skip last full round, but there is a key here! ({})");
                 } else {
@@ -525,28 +462,41 @@ where
             self.elements
                 .iter_mut()
                 .for_each(|l| quintic_s_box::<E>(l, None, None));
-        }
-
-        if !last_round {
+        } else {
             self.constants_offset += self.elements.len();
         }
         self.product_mds_static();
     }
 
     /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
-    pub fn partial_round(&mut self, add_current_round_keys: bool, absorb_next_round_keys: bool) {
-        assert!(!absorb_next_round_keys); // Not yet implemented.
-
-        if add_current_round_keys {
-            // Every element of the hash buffer is incremented by the round constants
-            self.add_round_constants();
-        }
+    pub fn partial_round(&mut self) {
+        // Every element of the hash buffer is incremented by the round constants
+        self.add_round_constants();
 
         // Apply the quintic S-Box to the first element
         quintic_s_box::<E>(&mut self.elements[0], None, None);
 
         // Multiply the elements by the constant MDS matrix
         self.product_mds();
+    }
+
+    pub fn partial_round_dynamic(&mut self) {
+        // Apply the quintic S-Box to the first element
+        quintic_s_box::<E>(&mut self.elements[0], None, None);
+
+        // Multiply the elements by the constant MDS matrix
+        self.product_mds();
+    }
+
+    /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first (arity tag) poseidon leaf.
+    fn partial_round_static(&mut self) {
+        let post_round_key = self.constants.compressed_round_constants[self.constants_offset];
+
+        // Apply the quintic S-Box to the first element
+        quintic_s_box::<E>(&mut self.elements[0], None, Some(&post_round_key));
+        self.constants_offset += 1;
+
+        self.product_mds_static();
     }
 
     /// For every leaf, add the round constants with index defined by the constants offset, and increment the
@@ -558,11 +508,6 @@ where
                 .iter()
                 .skip(self.constants_offset),
         ) {
-            // dbg!(
-            //     "adding round constant:",
-            //     &round_constant,
-            //     &self.constants_offset
-            // );
             element.add_assign(round_constant);
         }
 
@@ -576,11 +521,6 @@ where
                 .iter()
                 .skip(self.constants_offset),
         ) {
-            dbg!(
-                "adding round constant (static):",
-                &round_constant,
-                &self.constants_offset
-            );
             element.add_assign(round_constant);
         }
 
@@ -591,7 +531,7 @@ where
     /// MDS matrix.
     fn product_mds(&mut self) {
         let matrix = &self.constants.mds_matrices.m;
-        let mut result = GenericArray::<E::Fr, typenum::Add1<Arity>>::generate(|_| E::Fr::zero());
+        let mut result = GenericArray::<E::Fr, Add1<Arity>>::generate(|_| E::Fr::zero());
 
         for (j, val) in result.iter_mut().enumerate() {
             for (i, row) in matrix.iter().enumerate() {
@@ -607,21 +547,19 @@ where
     /// Set the provided elements with the result of the product between the elements and the appropriate
     /// MDS matrix.
     fn product_mds_static(&mut self) {
-        let full_half = self.constants.full_rounds / 2;
+        let full_half = self.constants.half_full_rounds;
         let sparse_offset = full_half - 1;
         let matrix = if (self.current_round >= sparse_offset)
             && (self.current_round < full_half + self.constants.partial_rounds)
         {
             let index = self.current_round - sparse_offset;
             let matrix = &self.constants.sparse_matrices[index];
-            dbg!("taking sparse matrix", &index, matrix);
-
             matrix
         } else {
             &self.constants.mds_matrices.m
         };
 
-        let mut result = GenericArray::<E::Fr, typenum::Add1<Arity>>::generate(|_| E::Fr::zero());
+        let mut result = GenericArray::<E::Fr, Add1<Arity>>::generate(|_| E::Fr::zero());
 
         for (j, val) in result.iter_mut().enumerate() {
             for (i, row) in matrix.iter().enumerate() {
@@ -645,10 +583,8 @@ where
 pub fn poseidon<E, Arity>(preimage: &[E::Fr]) -> E::Fr
 where
     E: ScalarEngine,
-    Arity: typenum::Unsigned
-        + std::ops::Add<typenum::bit::B1>
-        + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
-    typenum::Add1<Arity>: ArrayLength<E::Fr>,
+    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>>,
+    Add1<Arity>: ArrayLength<E::Fr>,
 {
     let constants = PoseidonConstants::<E, Arity>::new();
     Poseidon::<E, Arity>::new_with_preimage(preimage, &constants).hash()
@@ -659,7 +595,6 @@ mod tests {
     use super::*;
     use crate::*;
     use ff::Field;
-    //    use generic_array::typenum::{U2, U4, U8};
     use generic_array::typenum::U2;
     use paired::bls12_381::Bls12;
 
@@ -708,12 +643,20 @@ mod tests {
     }
 
     #[test]
-    /// Simple test vectors to ensure results don't change unintentionally in development.
     fn hash_values() {
+        hash_values_aux::<U2>();
+    }
+
+    /// Simple test vectors to ensure results don't change unintentionally in development.
+    fn hash_values_aux<Arity>()
+    where
+        Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>>,
+        Add1<Arity>: ArrayLength<<Bls12 as ScalarEngine>::Fr>,
+    {
         // NOTE: For now, type parameters on constants, p, and in the final assertion below need to be updated manually when testing different arities.
         // TODO: Mechanism to run all tests every time. (Previously only a single arity was compiled in.)
-        let constants = PoseidonConstants::<Bls12, U2>::new();
-        let mut p = Poseidon::<Bls12, U2>::new(&constants);
+        let constants = PoseidonConstants::<Bls12, Arity>::new();
+        let mut p = Poseidon::<Bls12, Arity>::new(&constants);
         let test_arity = constants.arity();
         let mut preimage = vec![Scalar::zero(); test_arity];
         for n in 0..test_arity {
@@ -751,7 +694,7 @@ mod tests {
 
         assert_eq!(
             digest,
-            poseidon::<Bls12, U2>(&preimage),
+            poseidon::<Bls12, Arity>(&preimage),
             "Poseidon wrapper disagrees with element-at-a-time invocation."
         );
     }
