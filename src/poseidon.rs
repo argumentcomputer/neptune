@@ -1,5 +1,6 @@
-use crate::matrix;
-use crate::matrix::{apply_matrix, vec_add, Matrix};
+use crate::matrix::Matrix;
+use crate::preprocessing::preprocess_round_constants;
+use crate::{matrix, quintic_s_box};
 use crate::{
     mds::create_mds_matrices, mds::MDSMatrices, round_constants, round_numbers, scalar_from_u64,
     Error,
@@ -100,9 +101,9 @@ where
 
         // These succeed:
         //let partial_preprocessed = 0;
-        let partial_preprocessed = 1;
+        //let partial_preprocessed = 1;
         //let partial_preprocessed = 53;
-        //let partial_preprocessed = partial_rounds; // partial_rounds = 55
+        let partial_preprocessed = partial_rounds; // partial_rounds = 55
 
         // Although annoying, this is a very special case — when only a single round is not preprocessed.
         // That strongly suggests this failure is an artifact of the test scaffolding we have erected
@@ -148,188 +149,6 @@ where
         use typenum::Unsigned;
         typenum::Add1::<Arity>::to_usize()
     }
-}
-
-fn preprocess_round_constants<E: ScalarEngine>(
-    width: usize,
-    full_rounds: usize,
-    partial_rounds: usize,
-    round_constants: &Vec<E::Fr>,
-    mds_matrices: &MDSMatrices<E>,
-    partial_preprocessed: usize,
-) -> Vec<E::Fr> {
-    let mds_matrix = &mds_matrices.m;
-    let inverse_matrix = &mds_matrices.m_inv;
-
-    let mut res = Vec::new();
-
-    let round_keys = |r: usize| &round_constants[r * width..(r + 1) * width];
-
-    let half_full_rounds = full_rounds / 2; // Not half-full rounds; half full-rounds.
-
-    // First round constants are unchanged.
-    res.extend(round_keys(0));
-
-    let unpreprocessed = partial_rounds - partial_preprocessed;
-
-    // Post S-box adds for the first set of full rounds should be 'inverted' from next round.
-    // The final round is skipped when fully preprocessing because that value must be obtained from the result of preprocesing the partial rounds.
-    let end = if unpreprocessed > 0 {
-        half_full_rounds
-    } else {
-        half_full_rounds - 1
-    };
-    for i in 0..end {
-        let next_round = round_keys(i + 1); // First round was added before any S-boxes.
-        let inverted = apply_matrix::<E>(inverse_matrix, next_round);
-        res.extend(inverted);
-    }
-
-    // The plan:
-    // - Work backwards from last row in this group
-    // - Invert the row.
-    // - Save first constant (corresponding to the one S-box performed).
-    // - Add inverted result to previous row.
-    // - Repeat until all partial round key rows have been consumed.
-    // - Extend the preprocessed result by the final resultant row.
-    // - Move the accumulated list of single round keys to the preprocessed result.
-    //   - (Last produced should be first applied, so either pop until empty, or reverse and extend, etc.
-
-    // `partial_keys` will accumulate the single post-S-box constant for each partial-round, in reverse order.
-    let mut partial_keys: Vec<E::Fr> = Vec::new();
-
-    let final_round = half_full_rounds + partial_rounds;
-    let final_round_key = round_keys(final_round).to_vec();
-
-    let m_prime = &mds_matrices.m_prime;
-    let m_prime_inv = &mds_matrices.m_prime_inv;
-    let m_double_prime = &mds_matrices.m_double_prime;
-    let m_double_prime_inv = &mds_matrices.m_double_prime_inv;
-
-    // `round_acc` holds the accumulated result of inverting and adding subsequent round constants (in reverse).
-    let round_acc = (0..partial_preprocessed)
-        .map(|i| round_keys(final_round - i - 1))
-        .fold(final_round_key, |acc, previous_round_keys| {
-            let mut inverted = apply_matrix::<E>(inverse_matrix, &acc);
-            //let mut inverted = apply_matrix::<E>(m_double_prime_inv, &acc);
-
-            partial_keys.push(inverted[0]);
-            //inverted = apply_matrix::<E>(m_prime_inv, &inverted);
-            inverted[0] = E::Fr::zero();
-
-            let res1 = vec_add::<E>(&previous_round_keys, &inverted);
-            res1
-            //apply_matrix::<E>(m_prime, &res1)
-        });
-
-    // Everything in here is dev-driven testing.
-    // Dev test case only checks one deep.
-    if partial_preprocessed == 111 {
-        // Check assumptions about how the fold calculating round_acc  manifested.
-
-        // The last round containing unpreprocessed constants which should be compressed.
-        let terminal_constants_round = half_full_rounds + partial_rounds;
-
-        // Constants from the last round (of two) which should be compressed.
-        // T
-        let terminal_round_keys = round_keys(terminal_constants_round);
-
-        // Constants from the first round (of two) which should be compressed.
-        // I
-        let initial_round_keys = round_keys(terminal_constants_round - 1);
-
-        // M^-1(T)
-        let mut inv = apply_matrix::<E>(m_double_prime_inv, terminal_round_keys);
-
-        // M^-1(T)[0]
-        let pk = inv[0];
-
-        inv = apply_matrix::<E>(m_prime_inv, &inv);
-        // M^-1(T) - pk (kinda)
-        inv[0] = E::Fr::zero();
-
-        //let irk_prime = matrix::apply_matrix::<E>(m_prime, &initial_round_keys);
-        // (M^-1(T) - pk) - I
-        let result_key1 = vec_add::<E>(&initial_round_keys, &inv);
-        let result_key = apply_matrix::<E>(&m_prime, &result_key1);
-
-        dbg!(&result_key, &round_acc);
-        assert_eq!(&result_key, &round_acc, "Acc assumption failed.");
-        assert_eq!(pk, partial_keys[0], "Partial-key assumption failed.");
-        assert_eq!(
-            1,
-            partial_keys.len(),
-            "Partial-keys length assumption failed."
-        );
-
-        ////////////////////////////////////////////////////////////////////////////////
-        // Shared between branches, an arbitrary initial state representing the output of a previous round's S-Box layer.
-        // X
-        let initial_state = vec![E::Fr::one(); width];
-
-        ////////////////////////////////////////////////////////////////////////////////
-        // Compute one step with the given (unpreprocessed) constants.
-
-        // ARK
-        // I + X
-        let mut q_state = vec_add::<E>(initial_round_keys, &initial_state);
-
-        // S-Box (partial layer)
-        // S((I + X)[0]) = S(I[0] + X[0])
-        quintic_s_box::<E>(&mut q_state[0], None, None);
-
-        // Mix with mds_matrix
-        let mixed = apply_matrix::<E>(mds_matrix, &q_state);
-
-        // Ark
-        let plain_result = vec_add::<E>(terminal_round_keys, &mixed);
-
-        ////////////////////////////////////////////////////////////////////////////////
-        // Compute the same step using the preprocessed constants.
-        // M'(initial_state) + (inverted_id - initial_state) = inverted_id
-        let initial_state1 = apply_matrix::<E>(&m_prime, &initial_state);
-        let mut p_state = vec_add::<E>(&result_key, &initial_state1);
-
-        // In order for the S-box result to be correct, it must have the same input as in the plain path.
-        // That means its input (the first component of the state) must have been constructed by
-        // adding the same single round constant in that position.
-        // NOTE: this asssertion uncovered a bug which was causing failure.
-        assert_eq!(
-            &result_key[0], &initial_round_keys[0],
-            "S-box inputs did not match."
-        );
-
-        quintic_s_box::<E>(&mut p_state[0], None, Some(&pk));
-
-        let preprocessed_result = apply_matrix::<E>(&m_double_prime, &p_state);
-
-        assert_eq!(
-            plain_result, preprocessed_result,
-            "Single preprocessing step couldn't be verified."
-        );
-    }
-
-    for i in 1..unpreprocessed {
-        res.extend(round_keys(half_full_rounds + i));
-    }
-    res.extend(matrix::apply_matrix::<E>(inverse_matrix, &round_acc));
-
-    dbg!(&partial_keys.len());
-
-    while let Some(x) = partial_keys.pop() {
-        res.push(x)
-    }
-
-    // Post S-box adds for the first set of full rounds should be 'inverted' from next round.
-    for i in 1..(half_full_rounds) {
-        let start = half_full_rounds + partial_rounds;
-        let next_round = round_keys(i + start);
-        let inverted = apply_matrix::<E>(inverse_matrix, next_round);
-        res.extend(inverted);
-    }
-
-    dbg!(&res.len(), &res);
-    res
 }
 
 impl<'a, E, Arity> Poseidon<'a, E, Arity>
@@ -620,6 +439,31 @@ where
                 self.debug("before s-box (FirstUnpreprocessed)");
                 quintic_s_box::<E>(&mut self.elements[0], None, None);
             }
+            LastUnpreprocessedAlpha => {
+                self.add_round_constants_static();
+                self.debug("before s-box");
+                quintic_s_box::<E>(&mut self.elements[0], None, None);
+
+                self.debug("initial_state"); // This is the initial_state from preprocessing dev tests.
+                                             // Actually, it's from one round later.
+
+                self.debug("after round constants (and s-box)");
+                self.add_round_constants_static();
+            }
+            LastUnpreprocessedBeta => {
+                self.add_round_constants_static();
+                self.debug("before s-box");
+                quintic_s_box::<E>(&mut self.elements[0], None, None);
+
+                self.debug("initial_state"); // This is the initial_state from preprocessing dev tests.
+
+                // dbg!("multiplying by m_prime");
+                // self.product_mds(&self.constants.mds_matrices.m_prime);
+
+                self.debug("after round constants (and s-box)");
+                self.add_round_constants_static();
+            }
+
             _ => {
                 dbg!(
                     "adding round constants in partial_round_static",
@@ -628,23 +472,20 @@ where
                 self.add_round_constants_static();
                 self.debug("before s-box");
                 quintic_s_box::<E>(&mut self.elements[0], None, None);
+                self.debug("after s-box");
             }
         };
+
         match &round_type {
-            LastUnpreprocessedAlpha | LastUnpreprocessedBeta => {
-                self.debug("after round constants (and s-box)");
-                self.add_round_constants_static();
-            }
-            // LastUnpreprocessedBeta => {
-            //     dbg!("multiplying by m_prime");
-            //     self.product_mds(&self.constants.mds_matrices.m_prime);
-            //     self.debug("after round constants (and s-box)");
-            //     self.add_round_constants_static();
+            // Preprocessed => {
+            //     dbg!("Applying m_double_prime!");
+            //     self.product_mds(&self.constants.mds_matrices.m_double_prime)
             // }
-            _ => {}
-        };
-        match &round_type {
-            //            Preprocessed => self.product_mds(&self.constants.mds_matrices.m_double_prime),
+            // LastUnpreprocessedBeta => {
+            //     self.product_mds(&self.constants.mds_matrices.m);
+            //     // self.debug("Applying m_prime!");
+            //     // self.product_mds(&self.constants.mds_matrices.m_prime);
+            // }
             _ => self.product_mds(&self.constants.mds_matrices.m),
         };
     }
@@ -836,11 +677,11 @@ where
                 .iter()
                 .skip(self.constants_offset),
         ) {
-            // dbg!(
-            //     "adding round constant (static):",
-            //     &round_constant,
-            //     &self.constants_offset
-            // );
+            dbg!(
+                "adding round constant (static):",
+                &round_constant,
+                &self.constants_offset
+            );
             element.add_assign(round_constant);
         }
 
@@ -869,26 +710,26 @@ where
 }
 
 /// Apply the quintic S-Box (s^5) to a given item
-fn quintic_s_box<E: ScalarEngine>(
-    l: &mut E::Fr,
-    pre_add: Option<&E::Fr>,
-    post_add: Option<&E::Fr>,
-) {
-    if let Some(x) = pre_add {
-        l.add_assign(x);
-    }
-    // dbg!("S-box input", &l);
-    let c = *l;
-    let mut tmp = l.clone();
-    tmp.mul_assign(&c);
-    tmp.mul_assign(&tmp.clone());
-    l.mul_assign(&tmp);
-    // dbg!("S-box output", &l);
-    if let Some(x) = post_add {
-        l.add_assign(x);
-        //  dbg!("After S-box post-add", &l);
-    }
-}
+// fn quintic_s_box<E: ScalarEngine>(
+//     l: &mut E::Fr,
+//     pre_add: Option<&E::Fr>,
+//     post_add: Option<&E::Fr>,
+// ) {
+//     if let Some(x) = pre_add {
+//         l.add_assign(x);
+//     }
+//     // dbg!("S-box input", &l);
+//     let c = *l;
+//     let mut tmp = l.clone();
+//     tmp.mul_assign(&c);
+//     tmp.mul_assign(&tmp.clone());
+//     l.mul_assign(&tmp);
+//     // dbg!("S-box output", &l);
+//     if let Some(x) = post_add {
+//         l.add_assign(x);
+//         //  dbg!("After S-box post-add", &l);
+//     }
+// }
 
 /// Poseidon convenience hash function.
 /// NOTE: this is expensive, since it computes all constants when initializing hasher struct.

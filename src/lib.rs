@@ -3,7 +3,7 @@
 pub use crate::poseidon::Poseidon;
 use crate::round_constants::generate_constants;
 pub use error::Error;
-use ff::{PrimeField, ScalarEngine};
+use ff::{Field, PrimeField, ScalarEngine};
 pub use paired::bls12_381::Fr as Scalar;
 use paired::bls12_381::FrRepr;
 
@@ -14,6 +14,7 @@ mod matrix;
 mod mds;
 /// Poseidon hash
 pub mod poseidon;
+mod preprocessing;
 mod round_constants;
 mod test;
 
@@ -58,4 +59,26 @@ fn round_constants<E: ScalarEngine>(arity: usize) -> Vec<E::Fr> {
     let r_f = full_rounds as u16;
     let r_p = partial_rounds as u16;
     generate_constants::<E>(FIELD, SBOX, n as u16, t as u16, r_f, r_p)
+}
+
+/// Apply the quintic S-Box (s^5) to a given item
+fn quintic_s_box<E: ScalarEngine>(
+    l: &mut E::Fr,
+    pre_add: Option<&E::Fr>,
+    post_add: Option<&E::Fr>,
+) {
+    if let Some(x) = pre_add {
+        l.add_assign(x);
+    }
+    // dbg!("S-box input", &l);
+    let c = *l;
+    let mut tmp = l.clone();
+    tmp.mul_assign(&c);
+    tmp.mul_assign(&tmp.clone());
+    l.mul_assign(&tmp);
+    // dbg!("S-box output", &l);
+    if let Some(x) = post_add {
+        l.add_assign(x);
+        //  dbg!("After S-box post-add", &l);
+    }
 }
