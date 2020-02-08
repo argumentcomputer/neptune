@@ -530,7 +530,35 @@ where
     /// Set the provided elements with the result of the product between the elements and the constant
     /// MDS matrix.
     fn product_mds(&mut self) {
-        let matrix = &self.constants.mds_matrices.m;
+        self.product_mds_with_matrix(&self.constants.mds_matrices.m);
+    }
+
+    /// Set the provided elements with the result of the product between the elements and the appropriate
+    /// MDS matrix.
+    fn product_mds_static(&mut self) {
+        let full_half = self.constants.half_full_rounds;
+        let sparse_offset = full_half - 1;
+        if self.current_round == sparse_offset {
+            // FIXME: the first matrix is not sparse. It shouldn't be in sparse_matrices.
+            self.product_mds_with_matrix(&self.constants.sparse_matrices[0]);
+        } else {
+            if (self.current_round > sparse_offset)
+                && (self.current_round < full_half + self.constants.partial_rounds)
+            {
+                let index = self.current_round - sparse_offset;
+                let sparse_matrix = &self.constants.sparse_matrices[index];
+
+                self.product_mds_with_sparse_matrix(&sparse_matrix);
+            //self.product_mds_with_matrix(&sparse_matrix);
+            } else {
+                self.product_mds();
+            }
+        };
+
+        self.current_round += 1;
+    }
+
+    fn product_mds_with_matrix(&mut self, matrix: &Matrix<E::Fr>) {
         let mut result = GenericArray::<E::Fr, Add1<Arity>>::generate(|_| E::Fr::zero());
 
         for (j, val) in result.iter_mut().enumerate() {
@@ -544,33 +572,28 @@ where
         std::mem::replace(&mut self.elements, result);
     }
 
-    /// Set the provided elements with the result of the product between the elements and the appropriate
-    /// MDS matrix.
-    fn product_mds_static(&mut self) {
-        let full_half = self.constants.half_full_rounds;
-        let sparse_offset = full_half - 1;
-        let matrix = if (self.current_round >= sparse_offset)
-            && (self.current_round < full_half + self.constants.partial_rounds)
-        {
-            let index = self.current_round - sparse_offset;
-            let matrix = &self.constants.sparse_matrices[index];
-            matrix
-        } else {
-            &self.constants.mds_matrices.m
-        };
-
+    // Sparse matrix in this context means one of the form, M''.
+    fn product_mds_with_sparse_matrix(&mut self, matrix: &Matrix<E::Fr>) {
         let mut result = GenericArray::<E::Fr, Add1<Arity>>::generate(|_| E::Fr::zero());
 
-        for (j, val) in result.iter_mut().enumerate() {
-            for (i, row) in matrix.iter().enumerate() {
-                let mut tmp = row[j];
-                tmp.mul_assign(&self.elements[i]);
-                val.add_assign(&tmp);
-            }
+        // First column is dense.
+        for (i, row) in matrix.iter().enumerate() {
+            let mut tmp = row[0];
+            tmp.mul_assign(&self.elements[i]);
+            result[0].add_assign(&tmp);
+        }
+
+        for (j, val) in result.iter_mut().enumerate().skip(1) {
+            // Except for first row/column, diagonals are one.
+            val.add_assign(&self.elements[j]);
+
+            // First row is dense.
+            let mut tmp = matrix[0][j];
+            tmp.mul_assign(&self.elements[0]);
+            val.add_assign(&tmp);
         }
 
         std::mem::replace(&mut self.elements, result);
-        self.current_round += 1;
     }
 
     fn debug(&self, msg: &str) {
