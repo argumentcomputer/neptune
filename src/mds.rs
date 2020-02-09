@@ -35,6 +35,12 @@ pub fn derive_mds_matrices<'a, E: ScalarEngine>(m: Matrix<Scalar<E>>) -> MDSMatr
     }
 }
 
+// - Having effectively moved the round-key additions into the S-boxes, refactor MDS matrices used for partial-round mix layer to use sparse matrices.
+// - This requires using a different (sparse) matrix at each partial round, rather than the same dense matrix at each.
+//   - The MDS matrix, M, for each such round, starting from the last, is factored into two components, such that M' x M'' = M.
+//   - M'' is sparse and replaces M for the round.
+//   - The previous layer's M is then replaced by M x M' = M*.
+//   - M* is likewise factored into M*' and M*'', and the process continues.
 pub fn factor_to_sparse_matrices<E: ScalarEngine>(
     base_matrix: Matrix<Scalar<E>>,
     n: usize,
