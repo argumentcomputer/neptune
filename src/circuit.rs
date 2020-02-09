@@ -467,6 +467,7 @@ fn scalar_product<E: Engine, CS: ConstraintSystem<E>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::poseidon::HashMode;
     use crate::test::TestConstraintSystem;
     use crate::{scalar_from_u64, Poseidon};
     use bellperson::ConstraintSystem;
@@ -513,7 +514,7 @@ mod tests {
             let out = poseidon_hash(&mut cs, data, &constants).expect("poseidon hashing failed");
 
             let mut p = Poseidon::<Bls12>::new_with_preimage(&fr_data, &constants);
-            let expected: Fr = p.hash();
+            let expected: Fr = p.hash_in_mode(HashMode::Correct);
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
 

@@ -66,7 +66,7 @@ pub enum HashMode {
 }
 use HashMode::{Correct, OptimizedDynamic, OptimizedStatic};
 
-pub const DEFAULT_HASH_MODE: HashMode = Correct;
+pub const DEFAULT_HASH_MODE: HashMode = OptimizedStatic;
 
 impl<'a, E, Arity> PoseidonConstants<E, Arity>
 where
@@ -681,14 +681,30 @@ mod tests {
         // TODO: Mechanism to run all tests every time. (Previously only a single arity was compiled in.)
         let constants = PoseidonConstants::<Bls12, Arity>::new();
         let mut p = Poseidon::<Bls12, Arity>::new(&constants);
+        let mut p2 = Poseidon::<Bls12, Arity>::new(&constants);
+        let mut p3 = Poseidon::<Bls12, Arity>::new(&constants);
+        let mut p4 = Poseidon::<Bls12, Arity>::new(&constants);
+
         let test_arity = constants.arity();
         let mut preimage = vec![Scalar::zero(); test_arity];
         for n in 0..test_arity {
             let scalar = scalar_from_u64::<Bls12>(n as u64);
             p.input(scalar).unwrap();
+            p2.input(scalar).unwrap();
+            p3.input(scalar).unwrap();
+            p4.input(scalar).unwrap();
+
             preimage[n] = scalar;
         }
+
         let digest = p.hash();
+        let digest2 = p2.hash_in_mode(Correct);
+        let digest3 = p3.hash_in_mode(OptimizedStatic);
+        let digest4 = p4.hash_in_mode(OptimizedDynamic);
+        assert_eq!(digest, digest2);
+        assert_eq!(digest, digest3);
+        assert_eq!(digest, digest4);
+
         let expected = match test_arity {
             2 => scalar_from_u64s([
                 0x7179d3495ac25e92,
