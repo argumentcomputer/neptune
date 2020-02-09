@@ -26,19 +26,6 @@ fn columns<T>(matrix: &Matrix<T>) -> usize {
     }
 }
 
-/// This is very inefficient as matrices grow. However, we only need it for preprocessing constants,
-/// and it is (for now) sufficient for the relatively small widths we need to support.
-/// TODO: Use a more efficient method.
-pub(crate) fn invert_with_cofactors<E: ScalarEngine>(
-    matrix: &Matrix<Scalar<E>>,
-) -> Option<Matrix<Scalar<E>>> {
-    let cofactor_matrix = cofactor_matrix::<E>(matrix);
-    let determinant = determinant_with_cofactor_matrix::<E>(matrix, &cofactor_matrix);
-    let adjugate = transpose::<E>(&cofactor_matrix);
-
-    Some(scalar_mul::<E>(determinant.inverse()?, &adjugate))
-}
-
 // This wastefully discards the actual inverse, if it exists, so in general callers should
 // just call `invert` if that result will be needed.
 pub(crate) fn is_invertible<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> bool {
@@ -68,20 +55,6 @@ fn scalar_vec_mul<E: ScalarEngine>(scalar: Scalar<E>, vec: &[Scalar<E>]) -> Vec<
             prod
         })
         .collect::<Vec<_>>()
-}
-
-// Multiply two vectors element-wise
-pub fn hadamard_vec_mul<E: ScalarEngine>(a: &[Scalar<E>], b: &[Scalar<E>]) -> Vec<Scalar<E>> {
-    assert_eq!(a.len(), b.len());
-
-    a.iter()
-        .zip(b.iter())
-        .map(|(x, y)| {
-            let mut res = x.clone();
-            res.mul_assign(y);
-            res
-        })
-        .collect()
 }
 
 pub fn mat_mul<E: ScalarEngine>(
@@ -224,64 +197,6 @@ fn is_square<T>(matrix: &Matrix<T>) -> bool {
     rows(matrix) == columns(matrix)
 }
 
-pub fn determinant<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> Scalar<E> {
-    let mut acc = Scalar::<E>::zero();
-
-    for j in 0..columns(matrix) {
-        let mut tmp = matrix[0][j];
-        let cofactor = cofactor::<E>(&matrix, 0, j);
-        tmp.mul_assign(&cofactor);
-        acc.add_assign(&tmp);
-    }
-    acc
-}
-
-fn determinant_with_cofactor_matrix<E: ScalarEngine>(
-    matrix: &Matrix<Scalar<E>>,
-    cofactor_matrix: &Matrix<Scalar<E>>,
-) -> Scalar<E> {
-    matrix[0]
-        .iter()
-        .zip(&cofactor_matrix[0])
-        .fold(Scalar::<E>::zero(), |mut acc, (a, b)| {
-            let mut tmp = a.clone();
-            tmp.mul_assign(&b);
-            acc.add_assign(&tmp);
-            acc
-        })
-}
-
-fn cofactor_matrix<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> Matrix<Scalar<E>> {
-    assert!(is_square(matrix));
-    let size = rows(matrix);
-    let mut m = Vec::with_capacity(size);
-    for i in 0..size {
-        let mut row = Vec::with_capacity(size);
-        for j in 0..size {
-            row.push(cofactor::<E>(matrix, i, j));
-        }
-        m.push(row);
-    }
-    m
-}
-
-fn cofactor<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>, i: usize, j: usize) -> Scalar<E> {
-    let minor_det = if rows(matrix) == 1 {
-        Scalar::<E>::one()
-    } else {
-        let m = minor::<E>(matrix, i, j);
-        determinant::<E>(&m)
-    };
-
-    let mut acc = Scalar::<E>::zero();
-    if (i + j) % 2 == 0 {
-        acc.add_assign(&minor_det);
-    } else {
-        acc.sub_assign(&minor_det);
-    }
-    acc
-}
-
 pub fn minor<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>, i: usize, j: usize) -> Matrix<Scalar<E>> {
     assert!(is_square(matrix));
     let size = rows(matrix);
@@ -381,7 +296,7 @@ fn upper_triangular<E: ScalarEngine>(
 }
 
 // `matrix` must be upper triangular.
-fn solve<E: ScalarEngine>(
+fn reduce_to_identity<E: ScalarEngine>(
     matrix: &Matrix<Scalar<E>>,
     shadow: &mut Matrix<Scalar<E>>,
 ) -> Option<Matrix<Scalar<E>>> {
@@ -426,7 +341,7 @@ pub(crate) fn invert<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> Option<Matr
     let mut shadow = make_identity::<E>(columns(matrix));
     let ut = upper_triangular::<E>(&matrix, &mut shadow);
 
-    ut.and_then(|x| solve::<E>(&x, &mut shadow))
+    ut.and_then(|x| reduce_to_identity::<E>(&x, &mut shadow))
         .and(Some(shadow))
 }
 
@@ -470,43 +385,6 @@ mod tests {
 
             assert_eq!(*expected, result);
         }
-    }
-
-    #[test]
-    fn test_determinant() {
-        let one = scalar_from_u64::<Bls12>(1);
-        let two = scalar_from_u64::<Bls12>(2);
-        let three = scalar_from_u64::<Bls12>(3);
-        let four = scalar_from_u64::<Bls12>(4);
-        let five = scalar_from_u64::<Bls12>(5);
-        let six = scalar_from_u64::<Bls12>(6);
-        let seven = scalar_from_u64::<Bls12>(7);
-        let eight = scalar_from_u64::<Bls12>(8);
-
-        let m1 = vec![
-            vec![one, two, three],
-            vec![four, five, six],
-            vec![seven, eight, eight],
-        ];
-
-        let res1 = determinant::<Bls12>(&m1);
-        // + 1 * (40 - 48)
-        // - 2 * (32 - 42)
-        // + 3 * (32 - 35)
-
-        // + 1 * -8
-        // - 2 * -10
-        // + 3 * -3
-
-        // = -8 + 20 - 9 = 3
-        assert_eq!(three, res1);
-
-        let m2 = vec![vec![one, two], vec![three, eight]];
-        let res2 = determinant::<Bls12>(&m2);
-        // 1 * 8 - 2 * 3
-        // = 8 - 6 = 2
-
-        assert_eq!(two, res2);
     }
 
     #[test]
@@ -696,7 +574,7 @@ mod tests {
     }
 
     #[test]
-    fn test_solve() {
+    fn test_reduce_to_identity() {
         //        let one = scalar_from_u64::<Bls12>(1);
         let two = scalar_from_u64::<Bls12>(2);
         let three = scalar_from_u64::<Bls12>(3);
@@ -716,7 +594,9 @@ mod tests {
         let mut shadow = make_identity::<Bls12>(columns(&m));
         let ut = upper_triangular::<Bls12>(&m, &mut shadow);
 
-        let res = ut.and_then(|x| solve::<Bls12>(&x, &mut shadow)).unwrap();
+        let res = ut
+            .and_then(|x| reduce_to_identity::<Bls12>(&x, &mut shadow))
+            .unwrap();
 
         assert!(is_identity::<Bls12>(&res));
         let prod = mat_mul::<Bls12>(&m, &shadow).unwrap();
