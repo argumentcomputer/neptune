@@ -70,16 +70,6 @@ fn generate_mds<E: ScalarEngine>(t: usize) -> Matrix<Scalar<E>> {
         ys.push(y);
     }
 
-    // for i in 0..t {
-    //     let mut row: Vec<Scalar> = Vec::with_capacity(t);
-    //     for j in 0..t {
-    //         // Generate the entry at (i,j)
-    //         let entry = (xs[i] + ys[j]).invert();
-    //         row.insert(j, entry);
-    //     }
-    //     matrix.push(row);
-    // }
-    // Adapted from source above to use E::Fr.
     for i in 0..t {
         let mut row: Vec<E::Fr> = Vec::with_capacity(t);
         for j in 0..t {
@@ -92,10 +82,9 @@ fn generate_mds<E: ScalarEngine>(t: usize) -> Matrix<Scalar<E>> {
         matrix.push(row);
     }
 
-    //assert!(is_invertible::<E>(&matrix));
-    // FIXME: Use performant method here.
-
     // To ensure correctness, we would check all sub-matrices for invertibility. Meanwhile, this is a simple sanity check.
+    assert!(is_invertible::<E>(&matrix));
+
     matrix
 }
 

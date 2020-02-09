@@ -39,8 +39,10 @@ pub(crate) fn invert_with_cofactors<E: ScalarEngine>(
     Some(scalar_mul::<E>(determinant.inverse()?, &adjugate))
 }
 
+// This wastefully discards the actual inverse, if it exists, so in general callers should
+// just call `invert` if that result will be needed.
 pub(crate) fn is_invertible<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> bool {
-    is_square(matrix) && determinant::<E>(matrix) != Scalar::<E>::zero()
+    is_square(matrix) && invert::<E>(matrix).is_some()
 }
 
 fn scalar_mul<E: ScalarEngine>(scalar: Scalar<E>, matrix: &Matrix<Scalar<E>>) -> Matrix<Scalar<E>> {
@@ -302,22 +304,24 @@ pub fn minor<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>, i: usize, j: usize) ->
     new
 }
 
-// Assumes matrix is partially reduced to upper triangular. `column` is the column to eliminate from all rows
-//but `pivot_index`, which will become the new first row.
+// Assumes matrix is partially reduced to upper triangular. `column` is the column to eliminate from all rows.
+// Returns `None` if either:
+//   - no non-zero pivot can be found for `column`
+//   - `column` is not the first
 fn eliminate<E: ScalarEngine>(
     matrix: &Matrix<Scalar<E>>,
     column: usize,
-    pivot_index: usize,
     shadow: &mut Matrix<Scalar<E>>,
-) -> Matrix<Scalar<E>> {
+) -> Option<Matrix<Scalar<E>>> {
     let zero = Scalar::<E>::zero();
+    let pivot_index = (0..rows(matrix))
+        .find(|&i| matrix[i][column] != zero && (0..column).all(|j| matrix[i][j] == zero))?;
+
     let pivot = &matrix[pivot_index];
     let pivot_val = pivot[column];
 
-    assert!(pivot_val != zero);
-    let inv_pivot = pivot_val.inverse().unwrap(); // non-zero pivot_val has an inverse.
+    let inv_pivot = pivot_val.inverse()?; // This should never fail since we have a non-zero `pivot_val` if we got here.
     let mut result = Vec::with_capacity(matrix.len());
-
     result.push(pivot.clone());
 
     for (i, row) in matrix.iter().enumerate() {
@@ -342,27 +346,24 @@ fn eliminate<E: ScalarEngine>(
             shadow[i] = vec_sub::<E>(shadow_row, &scaled_shadow_pivot);
         }
     }
-
-    result
+    Some(result)
 }
 
 // `matrix` must be square.
 fn upper_triangular<E: ScalarEngine>(
     matrix: &Matrix<Scalar<E>>,
     mut shadow: &mut Matrix<Scalar<E>>,
-) -> Matrix<Scalar<E>> {
+) -> Option<Matrix<Scalar<E>>> {
     assert!(is_square(matrix));
     let mut result = Vec::with_capacity(matrix.len());
     let mut shadow_result = Vec::with_capacity(matrix.len());
 
     let mut curr = matrix.clone();
     let mut column = 0;
-    let pivot = 0;
     while curr.len() > 1 {
         let initial_rows = curr.len();
 
-        // Pivot might need adjusting in the general case
-        curr = eliminate::<E>(&curr, column, pivot, &mut shadow);
+        curr = eliminate::<E>(&curr, column, &mut shadow)?;
         result.push(curr[0].clone());
         shadow_result.push(shadow[0].clone());
         column += 1;
@@ -376,14 +377,14 @@ fn upper_triangular<E: ScalarEngine>(
 
     *shadow = shadow_result;
 
-    result
+    Some(result)
 }
 
 // `matrix` must be upper triangular.
 fn solve<E: ScalarEngine>(
     matrix: &Matrix<Scalar<E>>,
     shadow: &mut Matrix<Scalar<E>>,
-) -> Matrix<Scalar<E>> {
+) -> Option<Matrix<Scalar<E>>> {
     let size = rows(matrix);
     let mut result: Matrix<Scalar<E>> = Vec::new();
     let mut shadow_result: Matrix<Scalar<E>> = Vec::new();
@@ -394,7 +395,7 @@ fn solve<E: ScalarEngine>(
         let shadow_row = &shadow[idx];
 
         let val = row[idx];
-        let inv = val.inverse().unwrap(); // If this is zero, then we are trying to invert a singular matrix.
+        let inv = val.inverse()?; // If `val` is zero, then there is no inverse, and we cannot compute a result.
 
         let mut normalized = scalar_vec_mul::<E>(inv, &row);
         let mut shadow_normalized = scalar_vec_mul::<E>(inv, &shadow_row);
@@ -417,7 +418,7 @@ fn solve<E: ScalarEngine>(
     shadow_result.reverse();
 
     *shadow = shadow_result;
-    result
+    Some(result)
 }
 
 //
@@ -425,9 +426,8 @@ pub(crate) fn invert<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> Option<Matr
     let mut shadow = make_identity::<E>(columns(matrix));
     let ut = upper_triangular::<E>(&matrix, &mut shadow);
 
-    let _res = solve::<E>(&ut, &mut shadow);
-
-    Some(shadow)
+    ut.and_then(|x| solve::<E>(&x, &mut shadow))
+        .and(Some(shadow))
 }
 
 #[cfg(test)]
@@ -602,7 +602,6 @@ mod tests {
         let m_inv = invert::<Bls12>(&m).unwrap();
 
         let computed_identity = mat_mul::<Bls12>(&m, &m_inv).unwrap();
-
         assert!(is_identity::<Bls12>(&computed_identity));
 
         // S
@@ -653,12 +652,24 @@ mod tests {
             vec![seven, eight, eight],
         ];
 
-        let mut shadow = make_identity::<Bls12>(columns(&m));
-        let res = eliminate::<Bls12>(&m, 0, 0, &mut shadow);
+        for i in 0..rows(&m) {
+            let mut shadow = make_identity::<Bls12>(columns(&m));
+            let res = eliminate::<Bls12>(&m, i, &mut shadow);
+            if i > 0 {
+                assert!(res.is_none());
+                continue;
+            } else {
+                assert!(res.is_some());
+            }
 
-        let prod = mat_mul::<Bls12>(&res, &shadow).unwrap();
-
-        dbg!(&m, &res, &shadow, &prod);
+            assert_eq!(
+                1,
+                res.unwrap()
+                    .iter()
+                    .filter(|&row| row[i] != <Bls12 as ScalarEngine>::Fr::zero())
+                    .count()
+            );
+        }
     }
     #[test]
     fn test_upper_triangular() {
@@ -705,7 +716,7 @@ mod tests {
         let mut shadow = make_identity::<Bls12>(columns(&m));
         let ut = upper_triangular::<Bls12>(&m, &mut shadow);
 
-        let res = solve::<Bls12>(&ut, &mut shadow);
+        let res = ut.and_then(|x| solve::<Bls12>(&x, &mut shadow)).unwrap();
 
         assert!(is_identity::<Bls12>(&res));
         let prod = mat_mul::<Bls12>(&m, &shadow).unwrap();

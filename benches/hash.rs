@@ -23,47 +23,47 @@ where
 
     let mut group = c.benchmark_group(format!("hash-{}", Arity::to_usize() * 32));
 
-    group.bench_with_input(
-        BenchmarkId::new("Sha2 256", "Generated scalars"),
-        &scalars,
-        |b, s| {
-            b.iter(|| {
-                let mut h = Sha256::new();
+    // group.bench_with_input(
+    //     BenchmarkId::new("Sha2 256", "Generated scalars"),
+    //     &scalars,
+    //     |b, s| {
+    //         b.iter(|| {
+    //             let mut h = Sha256::new();
 
-                std::iter::repeat(())
-                    .take(Arity::to_usize())
-                    .map(|_| s.choose(&mut OsRng).unwrap())
-                    .for_each(|scalar| {
-                        for val in scalar.into_repr().as_ref() {
-                            h.input(&val.to_le_bytes());
-                        }
-                    });
+    //             std::iter::repeat(())
+    //                 .take(Arity::to_usize())
+    //                 .map(|_| s.choose(&mut OsRng).unwrap())
+    //                 .for_each(|scalar| {
+    //                     for val in scalar.into_repr().as_ref() {
+    //                         h.input(&val.to_le_bytes());
+    //                     }
+    //                 });
 
-                h.result();
-            })
-        },
-    );
+    //             h.result();
+    //         })
+    //     },
+    // );
 
-    group.bench_with_input(
-        BenchmarkId::new("Sha2 512", "Generated scalars"),
-        &scalars,
-        |b, s| {
-            b.iter(|| {
-                let mut h = Sha512::new();
+    // group.bench_with_input(
+    //     BenchmarkId::new("Sha2 512", "Generated scalars"),
+    //     &scalars,
+    //     |b, s| {
+    //         b.iter(|| {
+    //             let mut h = Sha512::new();
 
-                std::iter::repeat(())
-                    .take(Arity::to_usize())
-                    .map(|_| s.choose(&mut OsRng).unwrap())
-                    .for_each(|scalar| {
-                        for val in scalar.into_repr().as_ref() {
-                            h.input(&val.to_le_bytes());
-                        }
-                    });
+    //             std::iter::repeat(())
+    //                 .take(Arity::to_usize())
+    //                 .map(|_| s.choose(&mut OsRng).unwrap())
+    //                 .for_each(|scalar| {
+    //                     for val in scalar.into_repr().as_ref() {
+    //                         h.input(&val.to_le_bytes());
+    //                     }
+    //                 });
 
-                h.result();
-            })
-        },
-    );
+    //             h.result();
+    //         })
+    //     },
+    // );
 
     group.bench_with_input(
         BenchmarkId::new("Poseidon hash", "Generated scalars"),
@@ -113,6 +113,7 @@ criterion_group! {
 
     config = Criterion::default();
 
-    targets = bench_hash::<typenum::U2>, bench_hash::<typenum::U4>, bench_hash::<typenum::U8>, bench_hash::<typenum::U11>
+//    targets = bench_hash::<typenum::U2>, bench_hash::<typenum::U4>, bench_hash::<typenum::U8>, bench_hash::<typenum::U11>
+    targets = bench_hash::<typenum::U23>
 }
 criterion_main!(hash);

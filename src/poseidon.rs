@@ -79,8 +79,6 @@ where
         let width = arity + 1;
 
         let mds_matrices = create_mds_matrices::<E>(width);
-        // let mds_matrix = generate_mds::<E>(width);
-        // let m_inv = matrix::invert::<E>(&mds_matrix).unwrap();
 
         let (full_rounds, partial_rounds) = round_numbers(arity);
         let half_full_rounds = full_rounds / 2;
@@ -618,7 +616,7 @@ mod tests {
     use super::*;
     use crate::*;
     use ff::Field;
-    use generic_array::typenum::{U2, U4, U8};
+    use generic_array::typenum::{U11, U2, U4, U8};
     use paired::bls12_381::Bls12;
 
     #[test]
@@ -670,6 +668,7 @@ mod tests {
         hash_values_aux::<U2>();
         hash_values_aux::<U4>();
         hash_values_aux::<U8>();
+        hash_values_aux::<U11>();
     }
 
     /// Simple test vectors to ensure results don't change unintentionally in development.
@@ -708,6 +707,13 @@ mod tests {
                 0xfb1eb8f641dd9dc3,
                 0xfd2a373272ebf604,
                 0x433c1e9e8de226e5,
+            ]),
+
+            11 => scalar_from_u64s([
+                0x3ea151bdba419d91,
+                0x861e5b917b9025aa,
+                0xfbd9089c1dda8c8a,
+                0x229f5e566b78ee21,
             ]),
             _ => {
                 dbg!(digest);
