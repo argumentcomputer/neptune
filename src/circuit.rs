@@ -115,7 +115,7 @@ where
         let mut result: Vec<AllocatedNum<E>> = Vec::with_capacity(self.constants.width());
 
         for j in 0..self.constants.width() {
-            let column = self.constants.mds_matrix[j].to_vec();
+            let column = self.constants.mds_matrices.m[j].to_vec();
             // TODO: This could be cached per round to save synthesis time.
             let constant_term = if add_round_keys {
                 let mut acc = E::Fr::zero();
@@ -223,7 +223,7 @@ where
     p.hash(cs)
 }
 
-pub fn create_poseidon_parameters<E, Arity>() -> PoseidonConstants<E, Arity>
+pub fn create_poseidon_parameters<'a, E, Arity>() -> PoseidonConstants<E, Arity>
 where
     E: Engine,
     Arity: typenum::Unsigned
@@ -478,6 +478,14 @@ mod tests {
     fn test_poseidon_hash() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
+        // TODO: add this exact calculation into the test.
+        // (It correctly yields the values in the cases below.)
+        // (defun constraints (arity rp &optional (rf 8))
+        //  (let* ((width (1+ arity))
+        //         (s-boxes (+ (* width rf) rp))
+        //         (s-box-constraints (* 3 s-boxes))
+        //         (mds-constraints (* width (+ rf rp))))
+        //   (+ s-box-constraints mds-constraints)))
         let cases = [(2, 426), (4, 608), (8, 972)];
 
         // TODO: test multiple arities.
