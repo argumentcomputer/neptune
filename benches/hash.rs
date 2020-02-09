@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ff::PrimeField;
 use generic_array::{typenum, ArrayLength};
-use neptune::poseidon::PoseidonConstants;
+use neptune::poseidon::{HashMode, PoseidonConstants};
 use neptune::*;
 use paired::bls12_381::{Bls12, Fr};
 use rand::rngs::OsRng;
@@ -80,7 +80,27 @@ where
                         h.input(*scalar).unwrap();
                     });
 
-                h.hash();
+                h.hash_in_mode(HashMode::Correct);
+            })
+        },
+    );
+
+    group.bench_with_input(
+        BenchmarkId::new("Poseidon hash optimized", "Generated scalars"),
+        &scalars,
+        |b, s| {
+            let constants = PoseidonConstants::new();
+            let mut h = Poseidon::<Bls12, Arity>::new(&constants);
+            b.iter(|| {
+                h.reset();
+                std::iter::repeat(())
+                    .take(Arity::to_usize())
+                    .map(|_| s.choose(&mut OsRng).unwrap())
+                    .for_each(|scalar| {
+                        h.input(*scalar).unwrap();
+                    });
+
+                h.hash_in_mode(HashMode::OptimizedStatic);
             })
         },
     );

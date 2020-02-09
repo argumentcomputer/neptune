@@ -92,7 +92,9 @@ fn generate_mds<E: ScalarEngine>(t: usize) -> Matrix<Scalar<E>> {
         matrix.push(row);
     }
 
-    assert!(is_invertible::<E>(&matrix));
+    //assert!(is_invertible::<E>(&matrix));
+    // FIXME: Use performant method here.
+
     // To ensure correctness, we would check all sub-matrices for invertibility. Meanwhile, this is a simple sanity check.
     matrix
 }

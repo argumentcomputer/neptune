@@ -29,7 +29,9 @@ fn columns<T>(matrix: &Matrix<T>) -> usize {
 /// This is very inefficient as matrices grow. However, we only need it for preprocessing constants,
 /// and it is (for now) sufficient for the relatively small widths we need to support.
 /// TODO: Use a more efficient method.
-pub(crate) fn invert<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> Option<Matrix<Scalar<E>>> {
+pub(crate) fn invert_with_cofactors<E: ScalarEngine>(
+    matrix: &Matrix<Scalar<E>>,
+) -> Option<Matrix<Scalar<E>>> {
     let cofactor_matrix = cofactor_matrix::<E>(matrix);
     let determinant = determinant_with_cofactor_matrix::<E>(matrix, &cofactor_matrix);
     let adjugate = transpose::<E>(&cofactor_matrix);
@@ -52,6 +54,16 @@ fn scalar_mul<E: ScalarEngine>(scalar: Scalar<E>, matrix: &Matrix<Scalar<E>>) ->
                     prod
                 })
                 .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>()
+}
+
+fn scalar_vec_mul<E: ScalarEngine>(scalar: Scalar<E>, vec: &[Scalar<E>]) -> Vec<Scalar<E>> {
+    vec.iter()
+        .map(|val| {
+            let mut prod = scalar.clone();
+            prod.mul_assign(val);
+            prod
         })
         .collect::<Vec<_>>()
 }
@@ -183,6 +195,14 @@ pub fn transpose<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> Matrix<Scalar<E
     new
 }
 
+pub fn make_identity<E: ScalarEngine>(size: usize) -> Matrix<Scalar<E>> {
+    let mut result = vec![vec![Scalar::<E>::zero(); size]; size];
+    for i in 0..size {
+        result[i][i] = Scalar::<E>::one();
+    }
+    result
+}
+
 pub fn is_identity<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> bool {
     let one = Scalar::<E>::one();
     let zero = Scalar::<E>::zero();
@@ -282,6 +302,134 @@ pub fn minor<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>, i: usize, j: usize) ->
     new
 }
 
+// Assumes matrix is partially reduced to upper triangular. `column` is the column to eliminate from all rows
+//but `pivot_index`, which will become the new first row.
+fn eliminate<E: ScalarEngine>(
+    matrix: &Matrix<Scalar<E>>,
+    column: usize,
+    pivot_index: usize,
+    shadow: &mut Matrix<Scalar<E>>,
+) -> Matrix<Scalar<E>> {
+    let zero = Scalar::<E>::zero();
+    let pivot = &matrix[pivot_index];
+    let pivot_val = pivot[column];
+
+    assert!(pivot_val != zero);
+    let inv_pivot = pivot_val.inverse().unwrap(); // non-zero pivot_val has an inverse.
+    let mut result = Vec::with_capacity(matrix.len());
+
+    result.push(pivot.clone());
+
+    for (i, row) in matrix.iter().enumerate() {
+        if i == pivot_index {
+            continue;
+        };
+        let val = row[column];
+        if val == zero {
+            // Value is already eliminated.
+            result.push(row.to_vec());
+        } else {
+            let mut factor = val.clone();
+            factor.mul_assign(&inv_pivot);
+
+            let scaled_pivot = scalar_vec_mul::<E>(factor, &pivot);
+            let eliminated = vec_sub::<E>(row, &scaled_pivot);
+            result.push(eliminated);
+
+            let shadow_pivot = &shadow[pivot_index];
+            let scaled_shadow_pivot = scalar_vec_mul::<E>(factor, shadow_pivot);
+            let shadow_row = &shadow[i];
+            shadow[i] = vec_sub::<E>(shadow_row, &scaled_shadow_pivot);
+        }
+    }
+
+    result
+}
+
+// `matrix` must be square.
+fn upper_triangular<E: ScalarEngine>(
+    matrix: &Matrix<Scalar<E>>,
+    mut shadow: &mut Matrix<Scalar<E>>,
+) -> Matrix<Scalar<E>> {
+    assert!(is_square(matrix));
+    let mut result = Vec::with_capacity(matrix.len());
+    let mut shadow_result = Vec::with_capacity(matrix.len());
+
+    let mut curr = matrix.clone();
+    let mut column = 0;
+    let pivot = 0;
+    while curr.len() > 1 {
+        let initial_rows = curr.len();
+
+        // Pivot might need adjusting in the general case
+        curr = eliminate::<E>(&curr, column, pivot, &mut shadow);
+        result.push(curr[0].clone());
+        shadow_result.push(shadow[0].clone());
+        column += 1;
+
+        curr = curr[1..].to_vec();
+        *shadow = shadow[1..].to_vec();
+        assert_eq!(curr.len(), initial_rows - 1);
+    }
+    result.push(curr[0].clone());
+    shadow_result.push(shadow[0].clone());
+
+    *shadow = shadow_result;
+
+    result
+}
+
+// `matrix` must be upper triangular.
+fn solve<E: ScalarEngine>(
+    matrix: &Matrix<Scalar<E>>,
+    shadow: &mut Matrix<Scalar<E>>,
+) -> Matrix<Scalar<E>> {
+    let size = rows(matrix);
+    let mut result: Matrix<Scalar<E>> = Vec::new();
+    let mut shadow_result: Matrix<Scalar<E>> = Vec::new();
+
+    for i in 0..size {
+        let idx = size - i - 1;
+        let row = &matrix[idx];
+        let shadow_row = &shadow[idx];
+
+        let val = row[idx];
+        let inv = val.inverse().unwrap(); // If this is zero, then we are trying to invert a singular matrix.
+
+        let mut normalized = scalar_vec_mul::<E>(inv, &row);
+        let mut shadow_normalized = scalar_vec_mul::<E>(inv, &shadow_row);
+
+        for j in 0..i {
+            let idx = size - j - 1;
+            let val = normalized[idx];
+            let subtracted = scalar_vec_mul::<E>(val, &result[j]);
+            let result_subtracted = scalar_vec_mul::<E>(val, &shadow_result[j]);
+
+            normalized = vec_sub::<E>(&normalized, &subtracted);
+            shadow_normalized = vec_sub::<E>(&shadow_normalized, &result_subtracted);
+        }
+
+        result.push(normalized);
+        shadow_result.push(shadow_normalized);
+    }
+
+    result.reverse();
+    shadow_result.reverse();
+
+    *shadow = shadow_result;
+    result
+}
+
+//
+pub(crate) fn invert<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> Option<Matrix<Scalar<E>>> {
+    let mut shadow = make_identity::<E>(columns(matrix));
+    let ut = upper_triangular::<E>(&matrix, &mut shadow);
+
+    let _res = solve::<E>(&ut, &mut shadow);
+
+    Some(shadow)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -322,7 +470,6 @@ mod tests {
 
             assert_eq!(*expected, result);
         }
-        //        assert_eq!(, minor::<Bls12>(&vec![vec![one]], 0, 0));
     }
 
     #[test]
@@ -486,5 +633,83 @@ mod tests {
 
         // S + M(B) = M(B + M^-1(S))
         assert_eq!(add_after_apply, apply_after_add, "breakin' the law");
+    }
+
+    #[test]
+    fn test_eliminate() {
+        //let one = scalar_from_u64::<Bls12>(1);
+        let two = scalar_from_u64::<Bls12>(2);
+        let three = scalar_from_u64::<Bls12>(3);
+        let four = scalar_from_u64::<Bls12>(4);
+        let five = scalar_from_u64::<Bls12>(5);
+        let six = scalar_from_u64::<Bls12>(6);
+        let seven = scalar_from_u64::<Bls12>(7);
+        let eight = scalar_from_u64::<Bls12>(8);
+        //        let nine = scalar_from_u64::<Bls12>(9);
+
+        let m = vec![
+            vec![two, three, four],
+            vec![four, five, six],
+            vec![seven, eight, eight],
+        ];
+
+        let mut shadow = make_identity::<Bls12>(columns(&m));
+        let res = eliminate::<Bls12>(&m, 0, 0, &mut shadow);
+
+        let prod = mat_mul::<Bls12>(&res, &shadow).unwrap();
+
+        dbg!(&m, &res, &shadow, &prod);
+    }
+    #[test]
+    fn test_upper_triangular() {
+        //        let one = scalar_from_u64::<Bls12>(1);
+        let two = scalar_from_u64::<Bls12>(2);
+        let three = scalar_from_u64::<Bls12>(3);
+        let four = scalar_from_u64::<Bls12>(4);
+        let five = scalar_from_u64::<Bls12>(5);
+        let six = scalar_from_u64::<Bls12>(6);
+        let seven = scalar_from_u64::<Bls12>(7);
+        let eight = scalar_from_u64::<Bls12>(8);
+        //        let nine = scalar_from_u64::<Bls12>(9);
+
+        let m = vec![
+            vec![two, three, four],
+            vec![four, five, six],
+            vec![seven, eight, eight],
+        ];
+
+        let mut shadow = make_identity::<Bls12>(columns(&m));
+        let _res = upper_triangular::<Bls12>(&m, &mut shadow);
+
+        // Actually assert things.
+    }
+
+    #[test]
+    fn test_solve() {
+        //        let one = scalar_from_u64::<Bls12>(1);
+        let two = scalar_from_u64::<Bls12>(2);
+        let three = scalar_from_u64::<Bls12>(3);
+        let four = scalar_from_u64::<Bls12>(4);
+        let five = scalar_from_u64::<Bls12>(5);
+        let six = scalar_from_u64::<Bls12>(6);
+        let seven = scalar_from_u64::<Bls12>(7);
+        let eight = scalar_from_u64::<Bls12>(8);
+        //        let nine = scalar_from_u64::<Bls12>(9);
+
+        let m = vec![
+            vec![two, three, four],
+            vec![four, five, six],
+            vec![seven, eight, eight],
+        ];
+
+        let mut shadow = make_identity::<Bls12>(columns(&m));
+        let ut = upper_triangular::<Bls12>(&m, &mut shadow);
+
+        let res = solve::<Bls12>(&ut, &mut shadow);
+
+        assert!(is_identity::<Bls12>(&res));
+        let prod = mat_mul::<Bls12>(&m, &shadow).unwrap();
+
+        assert!(is_identity::<Bls12>(&prod));
     }
 }

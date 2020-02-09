@@ -618,7 +618,7 @@ mod tests {
     use super::*;
     use crate::*;
     use ff::Field;
-    use generic_array::typenum::U2;
+    use generic_array::typenum::{U2, U4, U8};
     use paired::bls12_381::Bls12;
 
     #[test]
@@ -668,6 +668,8 @@ mod tests {
     #[test]
     fn hash_values() {
         hash_values_aux::<U2>();
+        hash_values_aux::<U4>();
+        hash_values_aux::<U8>();
     }
 
     /// Simple test vectors to ensure results don't change unintentionally in development.
