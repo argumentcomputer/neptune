@@ -1,14 +1,153 @@
 use crate::poseidon::PoseidonConstants;
 
 use bellperson::gadgets::num::AllocatedNum;
-use bellperson::{ConstraintSystem, SynthesisError};
+use bellperson::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 use ff::Field;
 use ff::ScalarEngine as Engine;
 use generic_array::typenum;
 use generic_array::ArrayLength;
+use std::collections::HashMap;
 use std::marker::PhantomData;
 
-#[derive(Clone)]
+/// Similar to `num::Num`, we use `Elt` to accumulate both values and linear combinations, then eventually
+/// extract into a `num::Allocatednum`, enforcing that the linear combination corresponds to the result.
+/// In this way, all intermediate calculations are accounted for, with the restriction that we can only
+/// accumulate linear (not polynomial) constraints. The set of operations provided here ensure this invariant is maintained.
+enum Elt<E: Engine> {
+    Var(AllocatedNum<E>),
+    Num(E::Fr, LinearCombination<E>),
+}
+
+impl<E: Engine> Elt<E> {
+    fn num_from_fr<CS: ConstraintSystem<E>>(fr: E::Fr) -> Self {
+        Elt::Num(fr, LinearCombination::zero() + (fr, CS::one()))
+    }
+
+    fn var<CS: ConstraintSystem<E>>(&self, cs: &mut CS) -> Result<AllocatedNum<E>, SynthesisError> {
+        match self {
+            Elt::Var(v) => Ok(v.clone()),
+            Elt::Num(fr, lc) => {
+                let v = AllocatedNum::alloc(cs.namespace(|| "allocate for Elt::Num"), || Ok(*fr))?;
+
+                cs.enforce(
+                    || format!("enforce num allocation preserves lc"),
+                    |_| lc.clone(),
+                    |lc| lc + CS::one(),
+                    |lc| lc + v.get_variable(),
+                );
+                Ok(v)
+            }
+        }
+    }
+
+    fn val(&self) -> Option<E::Fr> {
+        match self {
+            Elt::Var(v) => v.get_value(),
+            Elt::Num(fr, _lc) => Some(*fr),
+        }
+    }
+
+    fn add<CS: ConstraintSystem<E>>(self, other: Elt<E>) -> Elt<E> {
+        if let Elt::Num(fr, lc) = self {
+            if let Elt::Num(fr2, lc2) = other {
+                let mut new_fr = fr.clone();
+                new_fr.add_assign(&fr2);
+
+                // Coalesce like terms after adding, to prevent combinatorial explosion of successive multiplications.
+                let new_lc = simplify_lc(lc + &lc2);
+
+                Elt::Num(new_fr, new_lc)
+            } else {
+                unimplemented!("unsupported path")
+            }
+        } else {
+            unimplemented!("unsupported path")
+        }
+    }
+
+    fn scale<CS: ConstraintSystem<E>>(&self, scalar: E::Fr) -> Elt<E> {
+        match self {
+            Elt::Num(fr, lc) => {
+                let mut tmp = fr.clone();
+                tmp.mul_assign(&scalar);
+
+                let new_lc = lc.as_ref().iter().fold(
+                    LinearCombination::zero(),
+                    |acc, (variable, mut fr)| {
+                        fr.mul_assign(&scalar);
+                        acc + (fr, *variable)
+                    },
+                );
+                Elt::Num(tmp, new_lc)
+            }
+            Elt::Var(v) => {
+                let lc = LinearCombination::<E>::zero() + v.get_variable();
+                let val = v.get_value().expect("Element::Var(v) had no value.");
+                Elt::Num(val, lc).scale::<CS>(scalar)
+            }
+        }
+    }
+}
+
+fn add<E: Engine, CS: ConstraintSystem<E>>(
+    mut cs: CS,
+    a: &AllocatedNum<E>,
+    b: &E::Fr,
+    enforce: bool,
+) -> Result<AllocatedNum<E>, SynthesisError> {
+    let sum = AllocatedNum::alloc(cs.namespace(|| "add"), || {
+        let mut tmp = a
+            .get_value()
+            .ok_or_else(|| SynthesisError::AssignmentMissing)?;
+        tmp.add_assign(b);
+
+        Ok(tmp)
+    })?;
+
+    if enforce {
+        // a + b = sum
+        cs.enforce(
+            || "sum constraint",
+            |lc| lc + a.get_variable() + (*b, CS::one()),
+            |lc| lc + CS::one(),
+            |lc| lc + sum.get_variable(),
+        );
+    }
+
+    Ok(sum)
+}
+
+#[derive(PartialEq, Eq, Debug, std::hash::Hash)]
+enum Idx {
+    Input(usize),
+    Aux(usize),
+}
+fn simplify_lc<E: Engine>(lc: LinearCombination<E>) -> LinearCombination<E> {
+    let mut map: HashMap<Idx, E::Fr> = HashMap::new();
+
+    lc.as_ref().iter().for_each(|(var, fr)| {
+        let key = match var.get_unchecked() {
+            Index::Input(i) => Idx::Input(i),
+            Index::Aux(i) => Idx::Aux(i),
+        };
+
+        let val = map.entry(key).or_insert(E::Fr::zero());
+        val.add_assign(fr)
+    });
+
+    let simplified = map
+        .iter()
+        .fold(LinearCombination::<E>::zero(), |acc, (idx, &fr)| {
+            let index = match idx {
+                Idx::Input(i) => Index::Input(*i),
+                Idx::Aux(i) => Index::Aux(*i),
+            };
+            acc + (fr, Variable::new_unchecked(index))
+        });
+    simplified
+}
+
+//#[derive(Clone)]
 /// Circuit for Poseidon hash.
 pub struct PoseidonCircuit<'a, E, Arity>
 where
@@ -20,7 +159,7 @@ where
 {
     constants_offset: usize,
     width: usize,
-    elements: Vec<AllocatedNum<E>>,
+    elements: Vec<Elt<E>>,
     pos: usize,
     constants: &'a PoseidonConstants<E, Arity>,
     _w: PhantomData<Arity>,
@@ -36,9 +175,15 @@ where
     typenum::Add1<Arity>: ArrayLength<E::Fr>,
 {
     /// Create a new Poseidon hasher for `preimage`.
-    pub fn new(elements: Vec<AllocatedNum<E>>, constants: &'a PoseidonConstants<E, Arity>) -> Self {
+    pub fn new(
+        allocated_nums: Vec<AllocatedNum<E>>,
+        constants: &'a PoseidonConstants<E, Arity>,
+    ) -> Self {
         let width = constants.width();
-
+        let elements = allocated_nums
+            .iter()
+            .map(|a| Elt::Var(a.to_owned()))
+            .collect();
         PoseidonCircuit {
             constants_offset: 0,
             width,
@@ -53,8 +198,6 @@ where
         &mut self,
         mut cs: CS,
     ) -> Result<AllocatedNum<E>, SynthesisError> {
-        // This counter is incremented when a round constants is read. Therefore, the round constants never
-        // repeat
         for i in 0..self.constants.full_rounds / 2 {
             self.full_round(cs.namespace(|| format!("initial full round {}", i)))?;
         }
@@ -67,7 +210,7 @@ where
             self.full_round(cs.namespace(|| format!("final full round {}", i)))?;
         }
 
-        Ok(self.elements[1].clone())
+        self.elements[1].var(&mut cs.namespace(|| "hash result"))
     }
 
     fn full_round<CS: ConstraintSystem<E>>(&mut self, mut cs: CS) -> Result<(), SynthesisError> {
@@ -81,13 +224,13 @@ where
             self.elements[i] = quintic_s_box(
                 cs.namespace(|| format!("quintic s-box {}", i)),
                 &self.elements[i],
-                Some(round_key),
+                round_key,
             )?
         }
         self.constants_offset = constants_offset;
 
         // Multiply the elements by the constant MDS matrix
-        self.product_mds(cs.namespace(|| "mds matrix product"), false)?;
+        self.product_mds::<CS>(false)?;
         Ok(())
     }
 
@@ -98,26 +241,25 @@ where
         self.elements[0] = quintic_s_box(
             cs.namespace(|| "solitary quintic s-box"),
             &self.elements[0],
-            Some(round_key),
+            round_key,
         )?;
 
         // Multiply the elements by the constant MDS matrix
-        self.product_mds(cs.namespace(|| "mds matrix product"), true)?;
+        self.product_mds::<CS>(true)?;
 
         Ok(())
     }
 
     fn product_mds<CS: ConstraintSystem<E>>(
         &mut self,
-        mut cs: CS,
-        add_round_keys: bool,
+        partial_round: bool,
     ) -> Result<(), SynthesisError> {
-        let mut result: Vec<AllocatedNum<E>> = Vec::with_capacity(self.constants.width());
+        let mut result: Vec<Elt<E>> = Vec::with_capacity(self.constants.width());
 
         for j in 0..self.constants.width() {
             let column = self.constants.mds_matrices.m[j].to_vec();
             // TODO: This could be cached per round to save synthesis time.
-            let constant_term = if add_round_keys {
+            let constant_term = if partial_round {
                 let mut acc = E::Fr::zero();
                 // Dot product of column and this round's keys.
                 for k in 1..self.constants.width() {
@@ -131,15 +273,11 @@ where
                 None
             };
 
-            let product = scalar_product(
-                cs.namespace(|| format!("scalar product {}", j)),
-                self.elements.as_slice(),
-                &column,
-                constant_term,
-            )?;
+            let product =
+                scalar_product::<E, CS>(self.elements.as_slice(), &column, constant_term)?;
             result.push(product);
         }
-        if add_round_keys {
+        if partial_round {
             self.constants_offset += self.constants.width() - 1;
         }
         self.elements = result;
@@ -148,54 +286,8 @@ where
     }
 
     fn debug(&self) {
-        let element_frs: Vec<_> = self.elements.iter().map(|n| n.get_value()).collect();
+        let element_frs: Vec<_> = self.elements.iter().map(|n| n.val()).collect::<Vec<_>>();
         dbg!(element_frs, self.constants_offset);
-    }
-
-    /// This works but is inefficient. Retained for reference.
-    fn partial_round_with_explicit_round_constants<CS: ConstraintSystem<E>>(
-        &mut self,
-        mut cs: CS,
-    ) -> Result<(), SynthesisError> {
-        let round_key = self.constants.round_constants[self.constants_offset];
-        self.constants_offset += 1;
-        // Apply the quintic S-Box to the first element.
-        self.elements[0] = quintic_s_box(
-            cs.namespace(|| "solitary quintic s-box"),
-            &self.elements[0],
-            Some(round_key),
-        )?;
-
-        self.add_round_constants(cs.namespace(|| "add round keys"), true)?;
-
-        // Multiply the elements by the constant MDS matrix
-        self.product_mds(cs.namespace(|| "mds matrix product"), false)?;
-
-        Ok(())
-    }
-
-    fn add_round_constants<CS: ConstraintSystem<E>>(
-        &mut self,
-        mut cs: CS,
-        skip_first: bool,
-    ) -> Result<(), SynthesisError> {
-        let mut constants_offset = self.constants_offset;
-        let start = if skip_first { 1 } else { 0 };
-
-        for i in start..self.elements.len() {
-            let constant = &self.constants.round_constants[constants_offset];
-            constants_offset += 1;
-
-            self.elements[i] = add(
-                cs.namespace(|| format!("add round key {}", i)),
-                &self.elements[i],
-                constant,
-            )?;
-        }
-
-        self.constants_offset = constants_offset;
-
-        Ok(())
     }
 }
 
@@ -252,23 +344,17 @@ where
 /// Compute l^5 and enforce constraint. If round_key is supplied, add it to l first.
 fn quintic_s_box<CS: ConstraintSystem<E>, E: Engine>(
     mut cs: CS,
-    l: &AllocatedNum<E>,
-    round_key: Option<E::Fr>,
-) -> Result<AllocatedNum<E>, SynthesisError> {
-    // If round_key was supplied, add it to l before squaring.
-    let l2 = if let Some(rk) = round_key {
-        square_sum(cs.namespace(|| "(l+rk)^2"), rk, l)?
-    } else {
-        l.square(cs.namespace(|| "l^2"))?
-    };
-    let l4 = l2.square(cs.namespace(|| "l^4"))?;
-    let l5 = if let Some(rk) = round_key {
-        mul_sum(cs.namespace(|| "l4 * (l + rk)"), &l4, &l, rk)
-    } else {
-        l4.mul(cs.namespace(|| "l^5"), &l)
-    };
+    e: &Elt<E>,
+    round_key: E::Fr,
+) -> Result<Elt<E>, SynthesisError> {
+    let l = e.var(&mut cs.namespace(|| "S-box input"))?;
 
-    l5
+    // If round_key was supplied, add it to l before squaring.
+    let l2 = square_sum(cs.namespace(|| "(l+rk)^2"), round_key, &l, true)?;
+    let l4 = l2.square(cs.namespace(|| "l^4"))?;
+    let l5 = mul_sum(cs.namespace(|| "l4 * (l + rk)"), &l4, &l, round_key, true);
+
+    Ok(Elt::Var(l5?))
 }
 
 /// Calculates square of sum and enforces that constraint.
@@ -276,6 +362,7 @@ pub fn square_sum<CS: ConstraintSystem<E>, E: Engine>(
     mut cs: CS,
     to_add: E::Fr,
     num: &AllocatedNum<E>,
+    enforce: bool,
 ) -> Result<AllocatedNum<E>, SynthesisError>
 where
     CS: ConstraintSystem<E>,
@@ -290,12 +377,14 @@ where
         Ok(tmp)
     })?;
 
-    cs.enforce(
-        || "squared sum constraint",
-        |lc| lc + num.get_variable() + (to_add, CS::one()),
-        |lc| lc + num.get_variable() + (to_add, CS::one()),
-        |lc| lc + res.get_variable(),
-    );
+    if enforce {
+        cs.enforce(
+            || "squared sum constraint",
+            |lc| lc + num.get_variable() + (to_add, CS::one()),
+            |lc| lc + num.get_variable() + (to_add, CS::one()),
+            |lc| lc + res.get_variable(),
+        );
+    }
     Ok(res)
 }
 
@@ -305,6 +394,7 @@ pub fn mul_sum<CS: ConstraintSystem<E>, E: Engine>(
     a: &AllocatedNum<E>,
     b: &AllocatedNum<E>,
     to_add: E::Fr,
+    enforce: bool,
 ) -> Result<AllocatedNum<E>, SynthesisError>
 where
     CS: ConstraintSystem<E>,
@@ -322,146 +412,34 @@ where
         Ok(tmp)
     })?;
 
-    cs.enforce(
-        || "mul sum constraint",
-        |lc| lc + b.get_variable() + (to_add, CS::one()),
-        |lc| lc + a.get_variable(),
-        |lc| lc + res.get_variable(),
-    );
-    Ok(res)
-}
-
-/// Adds a constraint to CS, enforcing that a + b = sum.
-///
-/// a + b = sum
-fn sum<E: Engine, A, AR, CS: ConstraintSystem<E>>(
-    cs: &mut CS,
-    annotation: A,
-    a: &AllocatedNum<E>,
-    b: &AllocatedNum<E>,
-    sum: &AllocatedNum<E>,
-) where
-    A: FnOnce() -> AR,
-    AR: Into<String>,
-{
-    // (a + b) * 1 = sum
-    cs.enforce(
-        annotation,
-        |lc| lc + a.get_variable() + b.get_variable(),
-        |lc| lc + CS::one(),
-        |lc| lc + sum.get_variable(),
-    );
-}
-
-/// Adds a constraint to CS, enforcing that sum is the sum of nums.
-fn multi_sum<E: Engine, A, AR, CS: ConstraintSystem<E>>(
-    cs: &mut CS,
-    annotation: A,
-    nums: &[AllocatedNum<E>],
-    sum: &AllocatedNum<E>,
-) where
-    A: FnOnce() -> AR,
-    AR: Into<String>,
-{
-    // (num[0] + num[1] + … + num[n]) * 1 = sum
-    cs.enforce(
-        annotation,
-        |lc| nums.iter().fold(lc, |acc, num| acc + num.get_variable()),
-        |lc| lc + CS::one(),
-        |lc| lc + sum.get_variable(),
-    );
-}
-
-fn add<E: Engine, CS: ConstraintSystem<E>>(
-    mut cs: CS,
-    a: &AllocatedNum<E>,
-    b: &E::Fr,
-) -> Result<AllocatedNum<E>, SynthesisError> {
-    let sum = AllocatedNum::alloc(cs.namespace(|| "add"), || {
-        let mut tmp = a
-            .get_value()
-            .ok_or_else(|| SynthesisError::AssignmentMissing)?;
-        tmp.add_assign(b);
-
-        Ok(tmp)
-    })?;
-
-    // a + b = sum
-    cs.enforce(
-        || "sum constraint",
-        |lc| lc + a.get_variable() + (*b, CS::one()),
-        |lc| lc + CS::one(),
-        |lc| lc + sum.get_variable(),
-    );
-
-    Ok(sum)
-}
-
-fn multi_add<E: Engine, CS: ConstraintSystem<E>>(
-    mut cs: CS,
-    nums: &[AllocatedNum<E>],
-) -> Result<AllocatedNum<E>, SynthesisError> {
-    let res = AllocatedNum::alloc(cs.namespace(|| "multi_add"), || {
-        nums.iter().try_fold(E::Fr::zero(), |mut acc, num| {
-            acc.add_assign(
-                &num.get_value()
-                    .ok_or_else(|| SynthesisError::AssignmentMissing)?,
-            );
-            Ok(acc)
-        })
-    })?;
-
-    // a + b = res
-    multi_sum(&mut cs, || "sum constraint", nums, &res);
-
+    if enforce {
+        cs.enforce(
+            || "mul sum constraint",
+            |lc| lc + b.get_variable() + (to_add, CS::one()),
+            |lc| lc + a.get_variable(),
+            |lc| lc + res.get_variable(),
+        );
+    }
     Ok(res)
 }
 
 fn scalar_product<E: Engine, CS: ConstraintSystem<E>>(
-    mut cs: CS,
-    nums: &[AllocatedNum<E>],
+    elts: &[Elt<E>],
     scalars: &[E::Fr],
     to_add: Option<E::Fr>,
-) -> Result<AllocatedNum<E>, SynthesisError> {
-    let product = AllocatedNum::alloc(cs.namespace(|| "scalar product"), || {
-        let tmp: Result<E::Fr, SynthesisError> =
-            nums.iter()
-                .zip(scalars)
-                .try_fold(E::Fr::zero(), |mut acc, (num, scalar)| {
-                    let mut x = num
-                        .get_value()
-                        .ok_or_else(|| SynthesisError::AssignmentMissing)?;
-                    x.mul_assign(scalar);
-                    acc.add_assign(&x);
-                    Ok(acc)
-                });
-
-        let mut tmp2 = tmp?;
-        if let Some(a) = to_add {
-            tmp2.add_assign(&a);
-        }
-        Ok(tmp2)
-    })?;
-
-    cs.enforce(
-        || "scalar product constraint",
-        |lc| {
-            let base = scalars
-                .iter()
-                .zip(nums)
-                .fold(lc, |acc, (scalar, num)| acc + (*scalar, num.get_variable()));
-
-            if let Some(a) = to_add {
-                base + (a, CS::one())
-            } else {
-                base
-            }
-        },
-        |lc| lc + CS::one(),
-        |lc| lc + product.get_variable(),
+) -> Result<Elt<E>, SynthesisError> {
+    let tmp: Elt<E> = elts.iter().zip(scalars).fold(
+        Elt::Num(E::Fr::zero(), { LinearCombination::<E>::zero() }),
+        |acc, (elt, &scalar)| acc.add::<CS>(elt.scale::<CS>(scalar)),
     );
 
-    Ok(product)
+    let tmp2 = if let Some(a) = to_add {
+        tmp.add::<CS>(Elt::<E>::num_from_fr::<CS>(a))
+    } else {
+        tmp
+    };
+
+    Ok(tmp2)
 }
 
 #[cfg(test)]
@@ -471,6 +449,7 @@ mod tests {
     use crate::test::TestConstraintSystem;
     use crate::{scalar_from_u64, Poseidon};
     use bellperson::ConstraintSystem;
+    use generic_array::typenum::U4;
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
@@ -479,18 +458,10 @@ mod tests {
     fn test_poseidon_hash() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
-        // TODO: add this exact calculation into the test.
-        // (It correctly yields the values in the cases below.)
-        // (defun constraints (arity rp &optional (rf 8))
-        //  (let* ((width (1+ arity))
-        //         (s-boxes (+ (* width rf) rp))
-        //         (s-box-constraints (* 3 s-boxes))
-        //         (mds-constraints (* width (+ rf rp))))
-        //   (+ s-box-constraints mds-constraints)))
-        let cases = [(2, 426), (4, 608), (8, 972)];
+        let cases = [(2, 314), (4, 380), (8, 508), (16, 764)];
 
         // TODO: test multiple arities.
-        let test_arity = 2;
+        let test_arity = 4;
 
         for (arity, constraints) in &cases {
             if *arity != test_arity {
@@ -513,7 +484,18 @@ mod tests {
             let constants = PoseidonConstants::new();
             let out = poseidon_hash(&mut cs, data, &constants).expect("poseidon hashing failed");
 
-            let mut p = Poseidon::<Bls12>::new_with_preimage(&fr_data, &constants);
+            let expected_constraints_calculated = {
+                let width = 1 + arity;
+                let s_boxes = (width * constants.full_rounds) + constants.partial_rounds;
+                let s_box_constraints = 3 * s_boxes;
+                let mds_constraints =
+                    (width * constants.full_rounds) + constants.partial_rounds - arity;
+                let total_constraints = s_box_constraints + mds_constraints;
+
+                total_constraints
+            };
+
+            let mut p = Poseidon::<Bls12, U4>::new_with_preimage(&fr_data, &constants);
             let expected: Fr = p.hash_in_mode(HashMode::Correct);
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
@@ -525,9 +507,15 @@ mod tests {
             );
 
             assert_eq!(
+                expected_constraints_calculated,
                 cs.num_constraints(),
+                "constraint number miscalculated"
+            );
+
+            assert_eq!(
                 *constraints,
-                "constraint size changed",
+                cs.num_constraints(),
+                "constraint number changed",
             );
         }
     }
@@ -541,7 +529,7 @@ mod tests {
             Ok(scalar_from_u64::<Bls12>(3))
         })
         .unwrap();
-        let res = square_sum(cs1, two, &three).unwrap();
+        let res = square_sum(cs1, two, &three, true).unwrap();
 
         let twenty_five: Fr = scalar_from_u64::<Bls12>(25);
         assert_eq!(twenty_five, res.get_value().unwrap());
@@ -549,17 +537,11 @@ mod tests {
 
     #[test]
     fn test_scalar_product() {
-        let mut cs = TestConstraintSystem::<Bls12>::new();
-        let two = AllocatedNum::alloc(cs.namespace(|| "two"), || Ok(scalar_from_u64::<Bls12>(2)))
-            .unwrap();
-        let three =
-            AllocatedNum::alloc(cs.namespace(|| "three"), || Ok(scalar_from_u64::<Bls12>(3)))
-                .unwrap();
-        let four = AllocatedNum::alloc(cs.namespace(|| "four"), || Ok(scalar_from_u64::<Bls12>(4)))
-            .unwrap();
+        let two = Elt::num_from_fr::<TestConstraintSystem<Bls12>>(scalar_from_u64::<Bls12>(2));
+        let three = Elt::num_from_fr::<TestConstraintSystem<Bls12>>(scalar_from_u64::<Bls12>(3));
+        let four = Elt::num_from_fr::<TestConstraintSystem<Bls12>>(scalar_from_u64::<Bls12>(4));
 
-        let res = scalar_product(
-            cs,
+        let res = scalar_product::<Bls12, TestConstraintSystem<Bls12>>(
             &[two, three, four],
             &[
                 scalar_from_u64::<Bls12>(5),
@@ -570,21 +552,15 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(scalar_from_u64::<Bls12>(56), res.get_value().unwrap());
+        assert_eq!(scalar_from_u64::<Bls12>(56), res.val().unwrap());
     }
     #[test]
     fn test_scalar_product_with_add() {
-        let mut cs = TestConstraintSystem::<Bls12>::new();
-        let two = AllocatedNum::alloc(cs.namespace(|| "two"), || Ok(scalar_from_u64::<Bls12>(2)))
-            .unwrap();
-        let three =
-            AllocatedNum::alloc(cs.namespace(|| "three"), || Ok(scalar_from_u64::<Bls12>(3)))
-                .unwrap();
-        let four = AllocatedNum::alloc(cs.namespace(|| "four"), || Ok(scalar_from_u64::<Bls12>(4)))
-            .unwrap();
+        let two = Elt::num_from_fr::<TestConstraintSystem<Bls12>>(scalar_from_u64::<Bls12>(2));
+        let three = Elt::num_from_fr::<TestConstraintSystem<Bls12>>(scalar_from_u64::<Bls12>(3));
+        let four = Elt::num_from_fr::<TestConstraintSystem<Bls12>>(scalar_from_u64::<Bls12>(4));
 
-        let res = scalar_product(
-            cs,
+        let res = scalar_product::<Bls12, TestConstraintSystem<Bls12>>(
             &[two, three, four],
             &[
                 scalar_from_u64::<Bls12>(5),
@@ -595,6 +571,6 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(scalar_from_u64::<Bls12>(59), res.get_value().unwrap());
+        assert_eq!(scalar_from_u64::<Bls12>(59), res.val().unwrap());
     }
 }
