@@ -15,7 +15,7 @@ use std::marker::PhantomData;
 /// accumulate linear (not polynomial) constraints. The set of operations provided here ensure this invariant is maintained.
 enum Elt<E: Engine> {
     Allocated(AllocatedNum<E>),
-    Num(E::Fr, LinearCombination<E>),
+    Num(Option<E::Fr>, LinearCombination<E>),
 }
 
 impl<E: Engine> Elt<E> {
@@ -36,7 +36,7 @@ impl<E: Engine> Elt<E> {
     }
 
     fn num_from_fr<CS: ConstraintSystem<E>>(fr: E::Fr) -> Self {
-        Self::Num(fr, LinearCombination::zero() + (fr, CS::one()))
+        Self::Num(Some(fr), LinearCombination::zero() + (fr, CS::one()))
     }
 
     fn ensure_allocated<CS: ConstraintSystem<E>>(
@@ -46,7 +46,7 @@ impl<E: Engine> Elt<E> {
     ) -> Result<AllocatedNum<E>, SynthesisError> {
         match self {
             Self::Allocated(v) => Ok(v.clone()),
-            Self::Num(fr, lc) => {
+            Self::Num(Some(fr), lc) => {
                 let v = AllocatedNum::alloc(cs.namespace(|| "allocate for Elt::Num"), || Ok(*fr))?;
 
                 if enforce {
@@ -59,13 +59,14 @@ impl<E: Engine> Elt<E> {
                 }
                 Ok(v)
             }
+            _ => Err(SynthesisError::AssignmentMissing),
         }
     }
 
     fn val(&self) -> Option<E::Fr> {
         match self {
             Self::Allocated(v) => v.get_value(),
-            Self::Num(fr, _lc) => Some(*fr),
+            Self::Num(fr, _lc) => *fr,
         }
     }
 
@@ -80,20 +81,22 @@ impl<E: Engine> Elt<E> {
     /// doe not include that path.
     fn add<CS: ConstraintSystem<E>>(self, other: Elt<E>) -> Result<Elt<E>, SynthesisError> {
         let res = match self {
-            Elt::Num(fr, lc) => {
+            Elt::Num(Some(fr), lc) => {
                 match other {
-                    Elt::Num(fr2, lc2) => {
+                    Elt::Num(Some(fr2), lc2) => {
                         let mut new_fr = fr.clone();
                         new_fr.add_assign(&fr2);
 
                         // Coalesce like terms after adding, to prevent combinatorial explosion of successive multiplications.
                         let new_lc = simplify_lc(lc + &lc2);
 
-                        Ok(Elt::Num(new_fr, new_lc))
+                        Ok(Elt::Num(Some(new_fr), new_lc))
                     }
+                    Elt::Num(_, _) => Err(SynthesisError::AssignmentMissing),
                     Elt::Allocated(_) => panic!("forbidden to add Elt::Allocated"),
                 }
             }
+            Elt::Num(_, _) => Err(SynthesisError::AssignmentMissing),
             Elt::Allocated(_) => panic!("forbidden to add Elt::Allocated"),
         };
         res
@@ -102,7 +105,7 @@ impl<E: Engine> Elt<E> {
     /// Scale
     fn scale<CS: ConstraintSystem<E>>(&self, scalar: E::Fr) -> Result<Elt<E>, SynthesisError> {
         match self {
-            Elt::Num(fr, lc) => {
+            Elt::Num(Some(fr), lc) => {
                 let mut tmp = fr.clone();
                 tmp.mul_assign(&scalar);
 
@@ -113,14 +116,15 @@ impl<E: Engine> Elt<E> {
                         acc + (fr, *variable)
                     },
                 );
-                Ok(Elt::Num(tmp, new_lc))
+                Ok(Elt::Num(Some(tmp), new_lc))
             }
+            Elt::Num(_, _) => Err(SynthesisError::AssignmentMissing),
             Elt::Allocated(_) => {
                 let lc = self.lc();
                 let val = self
                     .val()
                     .ok_or_else(|| SynthesisError::AssignmentMissing)?;
-                Elt::Num(val, lc).scale::<CS>(scalar)
+                Elt::Num(Some(val), lc).scale::<CS>(scalar)
             }
         }
     }
@@ -190,10 +194,7 @@ where
         constants: &'a PoseidonConstants<E, Arity>,
     ) -> Self {
         let width = constants.width();
-        let elements = allocated_nums
-            .iter()
-            .map(|a| Elt::Allocated(a.to_owned()))
-            .collect();
+        let elements = allocated_nums.into_iter().map(Elt::Allocated).collect();
         PoseidonCircuit {
             constants_offset: 0,
             width,
@@ -414,7 +415,7 @@ fn scalar_product<E: Engine, CS: ConstraintSystem<E>>(
     to_add: Option<E::Fr>,
 ) -> Result<Elt<E>, SynthesisError> {
     let tmp: Result<Elt<E>, SynthesisError> = elts.iter().zip(scalars).try_fold(
-        Elt::Num(E::Fr::zero(), { LinearCombination::<E>::zero() }),
+        Elt::Num(Some(E::Fr::zero()), { LinearCombination::<E>::zero() }),
         |acc, (elt, &scalar)| acc.add::<CS>(elt.scale::<CS>(scalar)?),
     );
 
