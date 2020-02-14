@@ -35,8 +35,12 @@ impl<E: Engine> Elt<E> {
         }
     }
 
-    fn num_from_fr<CS: ConstraintSystem<E>>(fr: E::Fr) -> Self {
-        Self::Num(Some(fr), LinearCombination::zero() + (fr, CS::one()))
+    fn num_from_fr<CS: ConstraintSystem<E>>(fr: Option<E::Fr>) -> Self {
+        let mut lc = LinearCombination::zero();
+        if let Some(fr) = fr {
+            lc = lc + (fr, CS::one());
+        }
+        Self::Num(fr, lc)
     }
 
     fn ensure_allocated<CS: ConstraintSystem<E>>(
@@ -46,8 +50,10 @@ impl<E: Engine> Elt<E> {
     ) -> Result<AllocatedNum<E>, SynthesisError> {
         match self {
             Self::Allocated(v) => Ok(v.clone()),
-            Self::Num(Some(fr), lc) => {
-                let v = AllocatedNum::alloc(cs.namespace(|| "allocate for Elt::Num"), || Ok(*fr))?;
+            Self::Num(fr, lc) => {
+                let v = AllocatedNum::alloc(cs.namespace(|| "allocate for Elt::Num"), || {
+                    fr.ok_or_else(|| SynthesisError::AssignmentMissing)
+                })?;
 
                 if enforce {
                     cs.enforce(
@@ -59,7 +65,6 @@ impl<E: Engine> Elt<E> {
                 }
                 Ok(v)
             }
-            _ => Err(SynthesisError::AssignmentMissing),
         }
     }
 
@@ -80,52 +85,51 @@ impl<E: Engine> Elt<E> {
     /// Add two Nums and return a Num tracking the calculation. It is forbidden to invoke on an Allocated because the intended computation
     /// doe not include that path.
     fn add<CS: ConstraintSystem<E>>(self, other: Elt<E>) -> Result<Elt<E>, SynthesisError> {
-        let res = match self {
-            Elt::Num(Some(fr), lc) => {
+        match self {
+            Elt::Num(fr, lc) => {
                 match other {
-                    Elt::Num(Some(fr2), lc2) => {
-                        let mut new_fr = fr.clone();
-                        new_fr.add_assign(&fr2);
+                    Elt::Num(fr2, lc2) => {
+                        if let Some(fr) = fr {
+                            if let Some(fr2) = fr2 {
+                                let mut new_fr = fr;
+                                new_fr.add_assign(&fr2);
 
-                        // Coalesce like terms after adding, to prevent combinatorial explosion of successive multiplications.
-                        let new_lc = simplify_lc(lc + &lc2);
-
-                        Ok(Elt::Num(Some(new_fr), new_lc))
+                                // Coalesce like terms after adding, to prevent combinatorial
+                                // explosion of successive multiplications.
+                                let new_lc = simplify_lc(lc + &lc2);
+                                return Ok(Elt::Num(Some(new_fr), new_lc));
+                            }
+                        }
+                        Ok(Elt::Num(None, LinearCombination::<E>::zero()))
                     }
-                    Elt::Num(_, _) => Err(SynthesisError::AssignmentMissing),
                     Elt::Allocated(_) => panic!("forbidden to add Elt::Allocated"),
                 }
             }
-            Elt::Num(_, _) => Err(SynthesisError::AssignmentMissing),
             Elt::Allocated(_) => panic!("forbidden to add Elt::Allocated"),
-        };
-        res
+        }
     }
 
     /// Scale
     fn scale<CS: ConstraintSystem<E>>(&self, scalar: E::Fr) -> Result<Elt<E>, SynthesisError> {
         match self {
-            Elt::Num(Some(fr), lc) => {
-                let mut tmp = fr.clone();
-                tmp.mul_assign(&scalar);
+            Elt::Num(fr, lc) => {
+                if let Some(fr) = fr {
+                    let mut tmp = *fr;
+                    tmp.mul_assign(&scalar);
 
-                let new_lc = lc.as_ref().iter().fold(
-                    LinearCombination::zero(),
-                    |acc, (variable, mut fr)| {
-                        fr.mul_assign(&scalar);
-                        acc + (fr, *variable)
-                    },
-                );
-                Ok(Elt::Num(Some(tmp), new_lc))
+                    let new_lc = lc.as_ref().iter().fold(
+                        LinearCombination::zero(),
+                        |acc, (variable, mut fr)| {
+                            fr.mul_assign(&scalar);
+                            acc + (fr, *variable)
+                        },
+                    );
+                    return Ok(Elt::Num(Some(tmp), new_lc));
+                }
+
+                Ok(Elt::Num(None, LinearCombination::zero()))
             }
-            Elt::Num(_, _) => Err(SynthesisError::AssignmentMissing),
-            Elt::Allocated(_) => {
-                let lc = self.lc();
-                let val = self
-                    .val()
-                    .ok_or_else(|| SynthesisError::AssignmentMissing)?;
-                Elt::Num(Some(val), lc).scale::<CS>(scalar)
-            }
+            Elt::Allocated(_) => Elt::Num(self.val(), self.lc()).scale::<CS>(scalar),
         }
     }
 }
@@ -270,7 +274,7 @@ where
         for j in 0..self.constants.width() {
             let column = self.constants.mds_matrices.m[j].to_vec();
             // TODO: This could be cached per round to save synthesis time.
-            let constant_term = if partial_round {
+            let product = if partial_round {
                 let mut acc = E::Fr::zero();
                 // Dot product of column and this round's keys.
                 for k in 1..self.constants.width() {
@@ -279,13 +283,12 @@ where
                     tmp.mul_assign(&rk);
                     acc.add_assign(&tmp);
                 }
-                Some(acc)
-            } else {
-                None
-            };
 
-            let product =
-                scalar_product::<E, CS>(self.elements.as_slice(), &column, constant_term)?;
+                scalar_product_with_add::<E, CS>(self.elements.as_slice(), &column, acc)
+            } else {
+                scalar_product::<E, CS>(self.elements.as_slice(), &column)
+            }?;
+
             result.push(product);
         }
         if partial_round {
@@ -409,23 +412,25 @@ where
     Ok(res)
 }
 
+fn scalar_product_with_add<E: Engine, CS: ConstraintSystem<E>>(
+    elts: &[Elt<E>],
+    scalars: &[E::Fr],
+    to_add: E::Fr,
+) -> Result<Elt<E>, SynthesisError> {
+    let tmp = scalar_product::<E, CS>(elts, scalars)?;
+    let tmp2 = tmp.add::<CS>(Elt::<E>::num_from_fr::<CS>(Some(to_add)))?;
+
+    Ok(tmp2)
+}
+
 fn scalar_product<E: Engine, CS: ConstraintSystem<E>>(
     elts: &[Elt<E>],
     scalars: &[E::Fr],
-    to_add: Option<E::Fr>,
 ) -> Result<Elt<E>, SynthesisError> {
-    let tmp: Result<Elt<E>, SynthesisError> = elts.iter().zip(scalars).try_fold(
+    elts.iter().zip(scalars).try_fold(
         Elt::Num(Some(E::Fr::zero()), { LinearCombination::<E>::zero() }),
         |acc, (elt, &scalar)| acc.add::<CS>(elt.scale::<CS>(scalar)?),
-    );
-
-    let tmp2 = if let Some(a) = to_add {
-        tmp?.add::<CS>(Elt::<E>::num_from_fr::<CS>(a))?
-    } else {
-        tmp?
-    };
-
-    Ok(tmp2)
+    )
 }
 
 #[cfg(test)]
@@ -514,7 +519,7 @@ mod tests {
     }
 
     fn efr(n: u64) -> Elt<Bls12> {
-        Elt::num_from_fr::<TestConstraintSystem<Bls12>>(fr(n))
+        Elt::num_from_fr::<TestConstraintSystem<Bls12>>(Some(fr(n)))
     }
 
     #[test]
@@ -544,7 +549,6 @@ mod tests {
             let res = scalar_product::<Bls12, TestConstraintSystem<Bls12>>(
                 &[two, three, four],
                 &[fr(5), fr(6), fr(7)],
-                None,
             )
             .unwrap();
 
@@ -569,7 +573,6 @@ mod tests {
             let res = scalar_product::<Bls12, TestConstraintSystem<Bls12>>(
                 &[two, three, four],
                 &[fr(5), fr(6), fr(7)],
-                None,
             )
             .unwrap();
 
@@ -608,7 +611,6 @@ mod tests {
             let res = scalar_product::<Bls12, TestConstraintSystem<Bls12>>(
                 &[two, three, four],
                 &[fr(5), fr(6), fr(7)],
-                None,
             )
             .unwrap();
 
@@ -632,7 +634,6 @@ mod tests {
             let res2 = scalar_product::<Bls12, TestConstraintSystem<Bls12>>(
                 &res_vec,
                 &[fr(7), fr(8), fr(9)],
-                None,
             )
             .unwrap();
 
@@ -660,10 +661,10 @@ mod tests {
         let three = efr(3);
         let four = efr(4);
 
-        let res = scalar_product::<Bls12, TestConstraintSystem<Bls12>>(
+        let res = scalar_product_with_add::<Bls12, TestConstraintSystem<Bls12>>(
             &[two, three, four],
             &[fr(5), fr(6), fr(7)],
-            Some(fr(3)),
+            fr(3),
         )
         .unwrap();
 
