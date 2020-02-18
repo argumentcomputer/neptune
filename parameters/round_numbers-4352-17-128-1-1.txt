@@ -1,13 +1,13 @@
-N: 9472
+N: 4352
 Security level M: 128
 Field: Prime
 S-box: f(x) = x^5
-[8, 60, 356, 91136]
-Recommendation for N=9472, t=37:
+[8, 59, 195, 49920]
+Recommendation for N=4352, t=17:
 R_F = 8
-R_P = 60
-S-box cost = 356
-Size cost = 91136
+R_P = 59
+S-box cost = 195
+Size cost = 49920
 --- Round numbers (with security margin) ---
 Format: [Security Level, Field Size, # Elements, Field, S-Box, R_F, R_P]
 ['45', '45', '3', 'GF(2^n)', 'x^3', '8', '28']
