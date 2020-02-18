@@ -35,12 +35,10 @@ impl<E: Engine> Elt<E> {
         }
     }
 
-    fn num_from_fr<CS: ConstraintSystem<E>>(fr: Option<E::Fr>) -> Self {
+    fn num_from_fr<CS: ConstraintSystem<E>>(fr: E::Fr) -> Self {
         let mut lc = LinearCombination::zero();
-        if let Some(fr) = fr {
-            lc = lc + (fr, CS::one());
-        }
-        Self::Num(fr, lc)
+        lc = lc + (fr, CS::one());
+        Self::Num(Some(fr), lc)
     }
 
     fn ensure_allocated<CS: ConstraintSystem<E>>(
@@ -85,50 +83,38 @@ impl<E: Engine> Elt<E> {
     /// Add two Nums and return a Num tracking the calculation. It is forbidden to invoke on an Allocated because the intended computation
     /// doe not include that path.
     fn add<CS: ConstraintSystem<E>>(self, other: Elt<E>) -> Result<Elt<E>, SynthesisError> {
-        match self {
-            Elt::Num(fr, lc) => {
-                match other {
-                    Elt::Num(fr2, lc2) => {
-                        if let Some(fr) = fr {
-                            if let Some(fr2) = fr2 {
-                                let mut new_fr = fr;
-                                new_fr.add_assign(&fr2);
+        match (self, other) {
+            (Elt::Num(Some(fr), lc), Elt::Num(Some(fr2), lc2)) => {
+                let mut new_fr = fr;
+                new_fr.add_assign(&fr2);
 
-                                // Coalesce like terms after adding, to prevent combinatorial
-                                // explosion of successive multiplications.
-                                let new_lc = simplify_lc(lc + &lc2);
-                                return Ok(Elt::Num(Some(new_fr), new_lc));
-                            }
-                        }
-                        Ok(Elt::Num(None, LinearCombination::<E>::zero()))
-                    }
-                    Elt::Allocated(_) => panic!("forbidden to add Elt::Allocated"),
-                }
+                // Coalesce like terms after adding, to prevent combinatorial
+                // explosion of successive multiplications.
+                let new_lc = simplify_lc(lc + &lc2);
+                return Ok(Elt::Num(Some(new_fr), new_lc));
             }
-            Elt::Allocated(_) => panic!("forbidden to add Elt::Allocated"),
+
+            _ => panic!("only two numbers may be added"),
         }
     }
 
     /// Scale
     fn scale<CS: ConstraintSystem<E>>(&self, scalar: E::Fr) -> Result<Elt<E>, SynthesisError> {
         match self {
-            Elt::Num(fr, lc) => {
-                if let Some(fr) = fr {
-                    let mut tmp = *fr;
-                    tmp.mul_assign(&scalar);
+            Elt::Num(Some(fr), lc) => {
+                let mut tmp = *fr;
+                tmp.mul_assign(&scalar);
 
-                    let new_lc = lc.as_ref().iter().fold(
-                        LinearCombination::zero(),
-                        |acc, (variable, mut fr)| {
-                            fr.mul_assign(&scalar);
-                            acc + (fr, *variable)
-                        },
-                    );
-                    return Ok(Elt::Num(Some(tmp), new_lc));
-                }
-
-                Ok(Elt::Num(None, LinearCombination::zero()))
+                let new_lc = lc.as_ref().iter().fold(
+                    LinearCombination::zero(),
+                    |acc, (variable, mut fr)| {
+                        fr.mul_assign(&scalar);
+                        acc + (fr, *variable)
+                    },
+                );
+                Ok(Elt::Num(Some(tmp), new_lc))
             }
+            Elt::Num(None, _) => Ok(Elt::Num(None, LinearCombination::zero())),
             Elt::Allocated(_) => Elt::Num(self.val(), self.lc()).scale::<CS>(scalar),
         }
     }
@@ -418,7 +404,7 @@ fn scalar_product_with_add<E: Engine, CS: ConstraintSystem<E>>(
     to_add: E::Fr,
 ) -> Result<Elt<E>, SynthesisError> {
     let tmp = scalar_product::<E, CS>(elts, scalars)?;
-    let tmp2 = tmp.add::<CS>(Elt::<E>::num_from_fr::<CS>(Some(to_add)))?;
+    let tmp2 = tmp.add::<CS>(Elt::<E>::num_from_fr::<CS>(to_add))?;
 
     Ok(tmp2)
 }
@@ -519,7 +505,7 @@ mod tests {
     }
 
     fn efr(n: u64) -> Elt<Bls12> {
-        Elt::num_from_fr::<TestConstraintSystem<Bls12>>(Some(fr(n)))
+        Elt::num_from_fr::<TestConstraintSystem<Bls12>>(fr(n))
     }
 
     #[test]
