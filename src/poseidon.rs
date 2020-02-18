@@ -616,7 +616,7 @@ mod tests {
     use super::*;
     use crate::*;
     use ff::Field;
-    use generic_array::typenum::{U11, U2, U4, U8};
+    use generic_array::typenum;
     use paired::bls12_381::Bls12;
 
     #[test]
@@ -665,10 +665,13 @@ mod tests {
 
     #[test]
     fn hash_values() {
-        hash_values_aux::<U2>();
-        hash_values_aux::<U4>();
-        hash_values_aux::<U8>();
-        hash_values_aux::<U11>();
+        hash_values_aux::<typenum::U2>();
+        hash_values_aux::<typenum::U4>();
+        hash_values_aux::<typenum::U8>();
+        hash_values_aux::<typenum::U11>();
+        hash_values_aux::<typenum::U16>();
+        hash_values_aux::<typenum::U24>();
+        hash_values_aux::<typenum::U36>();
     }
 
     /// Simple test vectors to ensure results don't change unintentionally in development.
@@ -731,8 +734,26 @@ mod tests {
                 0xfbd9089c1dda8c8a,
                 0x229f5e566b78ee21,
             ]),
+            16 => scalar_from_u64s([
+                0x81d1dc7ead3c6ba7,
+                0x6448223dbb283a4d,
+                0x4058d210db60dfef,
+                0x723abedc311399f6,
+            ]),
+            24 => scalar_from_u64s([
+                0x93dc53ed55a673e9,
+                0x93014b86f8aff242,
+                0xa17079126f6b86d7,
+                0x5512c19c8ee7bf5f,
+            ]),
+            36 => scalar_from_u64s([
+                0xc06cb420430314eb,
+                0x7f1b2f5723569f4e,
+                0x237c952c81cdbdb5,
+                0x1cd41b75dd413798,
+            ]),
             _ => {
-                dbg!(digest);
+                dbg!(digest, test_arity);
                 panic!("Arity lacks test vector: {}", test_arity)
             }
         };

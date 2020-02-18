@@ -487,7 +487,14 @@ mod tests {
         //         (s-box-constraints (* 3 s-boxes))
         //         (mds-constraints (* width (+ rf rp))))
         //   (+ s-box-constraints mds-constraints)))
-        let cases = [(2, 426), (4, 608), (8, 972)];
+        let cases = [
+            (2, 426),
+            (4, 608),
+            (8, 972),
+            (16, 764),
+            (24, 1012),
+            (36, 1388),
+        ];
 
         // TODO: test multiple arities.
         let test_arity = 2;
