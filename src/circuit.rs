@@ -91,7 +91,19 @@ impl<E: Engine> Elt<E> {
                 // Coalesce like terms after adding, to prevent combinatorial
                 // explosion of successive multiplications.
                 let new_lc = simplify_lc(lc + &lc2);
-                return Ok(Elt::Num(Some(new_fr), new_lc));
+                Ok(Elt::Num(Some(new_fr), new_lc))
+            }
+            (Elt::Num(Some(fr), lc), Elt::Num(None, lc2)) => {
+                let new_lc = simplify_lc(lc + &lc2);
+                Ok(Elt::Num(Some(fr), new_lc))
+            }
+            (Elt::Num(None, lc), Elt::Num(Some(fr2), lc2)) => {
+                let new_lc = simplify_lc(lc + &lc2);
+                Ok(Elt::Num(Some(fr2), new_lc))
+            }
+            (Elt::Num(None, lc), Elt::Num(None, lc2)) => {
+                let new_lc = simplify_lc(lc + &lc2);
+                Ok(Elt::Num(None, new_lc))
             }
 
             _ => panic!("only two numbers may be added"),
