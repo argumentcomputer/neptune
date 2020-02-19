@@ -18,6 +18,15 @@ enum Elt<E: Engine> {
     Num(Option<E::Fr>, LinearCombination<E>),
 }
 
+impl<E: Engine> Clone for Elt<E> {
+    fn clone(&self) -> Self {
+        match self {
+            Elt::Allocated(a) => Elt::Allocated(a.clone()),
+            Elt::Num(fr, lc) => Elt::Num(fr.clone(), simplify_lc(lc)),
+        }
+    }
+}
+
 impl<E: Engine> Elt<E> {
     fn is_allocated(&self) -> bool {
         if let Self::Allocated(_) = self {
@@ -90,19 +99,19 @@ impl<E: Engine> Elt<E> {
 
                 // Coalesce like terms after adding, to prevent combinatorial
                 // explosion of successive multiplications.
-                let new_lc = simplify_lc(lc + &lc2);
+                let new_lc = simplify_lc(&(lc + &lc2));
                 Ok(Elt::Num(Some(new_fr), new_lc))
             }
             (Elt::Num(Some(fr), lc), Elt::Num(None, lc2)) => {
-                let new_lc = simplify_lc(lc + &lc2);
+                let new_lc = simplify_lc(&(lc + &lc2));
                 Ok(Elt::Num(Some(fr), new_lc))
             }
             (Elt::Num(None, lc), Elt::Num(Some(fr2), lc2)) => {
-                let new_lc = simplify_lc(lc + &lc2);
+                let new_lc = simplify_lc(&(lc + &lc2));
                 Ok(Elt::Num(Some(fr2), new_lc))
             }
             (Elt::Num(None, lc), Elt::Num(None, lc2)) => {
-                let new_lc = simplify_lc(lc + &lc2);
+                let new_lc = simplify_lc(&(lc + &lc2));
                 Ok(Elt::Num(None, new_lc))
             }
             _ => panic!("only two numbers may be added"),
@@ -141,7 +150,7 @@ impl<E: Engine> Elt<E> {
     }
 }
 
-fn simplify_lc<E: Engine>(lc: LinearCombination<E>) -> LinearCombination<E> {
+fn simplify_lc<E: Engine>(lc: &LinearCombination<E>) -> LinearCombination<E> {
     #[derive(PartialEq, Eq, Debug, std::hash::Hash)]
     enum Idx {
         Input(usize),
@@ -220,34 +229,92 @@ where
         &mut self,
         mut cs: CS,
     ) -> Result<AllocatedNum<E>, SynthesisError> {
-        for i in 0..self.constants.full_rounds / 2 {
-            self.full_round(cs.namespace(|| format!("initial full round {}", i)))?;
+        self.full_round(cs.namespace(|| "first round"), true, false)?;
+
+        for i in 1..self.constants.full_rounds / 2 {
+            self.full_round(
+                cs.namespace(|| format!("initial full round {}", i)),
+                false,
+                false,
+            )?;
         }
 
         for i in 0..self.constants.partial_rounds {
             self.partial_round(cs.namespace(|| format!("partial round {}", i)))?;
         }
 
-        for i in 0..self.constants.full_rounds / 2 {
-            self.full_round(cs.namespace(|| format!("final full round {}", i)))?;
+        for i in 0..(self.constants.full_rounds / 2) - 1 {
+            self.full_round(
+                cs.namespace(|| format!("final full round {}", i)),
+                false,
+                false,
+            )?;
         }
+        self.full_round(cs.namespace(|| "terminal full round"), false, true)?;
 
         self.elements[1].ensure_allocated(&mut cs.namespace(|| "hash result"), true)
     }
 
-    fn full_round<CS: ConstraintSystem<E>>(&mut self, mut cs: CS) -> Result<(), SynthesisError> {
+    fn full_round<CS: ConstraintSystem<E>>(
+        &mut self,
+        mut cs: CS,
+        first_round: bool,
+        last_round: bool,
+    ) -> Result<(), SynthesisError> {
         let mut constants_offset = self.constants_offset;
+
+        let pre_round_keys = if first_round {
+            (0..self.width)
+                .map(|i| self.constants.compressed_round_constants[constants_offset + i])
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        constants_offset += pre_round_keys.len();
+
+        let post_round_keys = if first_round || !last_round {
+            (0..self.width)
+                .map(|i| self.constants.compressed_round_constants[constants_offset + i])
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        constants_offset += post_round_keys.len();
 
         // Apply the quintic S-Box to all elements
         for i in 0..self.elements.len() {
-            let round_key = self.constants.round_constants[constants_offset];
-            constants_offset += 1;
+            let pre_round_key = if first_round {
+                // let rk = self.constants.compressed_round_constants[constants_offset];
+                // constants_offset += 1;
+                let rk = pre_round_keys[i];
+                Some(rk)
+            } else {
+                None
+            };
 
-            self.elements[i] = quintic_s_box(
-                cs.namespace(|| format!("quintic s-box {}", i)),
-                &self.elements[i],
-                round_key,
-            )?
+            let post_round_key = if first_round || !last_round {
+                // let rk = self.constants.compressed_round_constants[constants_offset];
+                // constants_offset += 1;
+                let rk = post_round_keys[i];
+                Some(rk)
+            } else {
+                None
+            };
+
+            if first_round {
+                self.elements[i] = quintic_s_box_pre_add(
+                    cs.namespace(|| format!("quintic s-box {}", i)),
+                    &self.elements[i],
+                    pre_round_key,
+                    post_round_key,
+                )?;
+            } else {
+                self.elements[i] = quintic_s_box(
+                    cs.namespace(|| format!("quintic s-box {}", i)),
+                    &self.elements[i],
+                    post_round_key,
+                )?;
+            }
         }
         self.constants_offset = constants_offset;
 
@@ -257,13 +324,13 @@ where
     }
 
     fn partial_round<CS: ConstraintSystem<E>>(&mut self, mut cs: CS) -> Result<(), SynthesisError> {
-        let round_key = self.constants.round_constants[self.constants_offset];
+        let round_key = self.constants.compressed_round_constants[self.constants_offset];
         self.constants_offset += 1;
         // Apply the quintic S-Box to the first element.
         self.elements[0] = quintic_s_box(
             cs.namespace(|| "solitary quintic s-box"),
             &self.elements[0],
-            round_key,
+            Some(round_key),
         )?;
 
         // Multiply the elements by the constant MDS matrix
@@ -274,33 +341,18 @@ where
 
     fn product_mds<CS: ConstraintSystem<E>>(
         &mut self,
-        partial_round: bool,
+        _partial_round: bool,
     ) -> Result<(), SynthesisError> {
         let mut result: Vec<Elt<E>> = Vec::with_capacity(self.constants.width());
 
         for j in 0..self.constants.width() {
             let column = self.constants.mds_matrices.m[j].to_vec();
             // TODO: This could be cached per round to save synthesis time.
-            let product = if partial_round {
-                let mut acc = E::Fr::zero();
-                // Dot product of column and this round's keys.
-                for k in 1..self.constants.width() {
-                    let mut tmp = column[k];
-                    let rk = self.constants.round_constants[self.constants_offset + k - 1];
-                    tmp.mul_assign(&rk);
-                    acc.add_assign(&tmp);
-                }
-
-                scalar_product_with_add::<E, CS>(self.elements.as_slice(), &column, acc)
-            } else {
-                scalar_product::<E, CS>(self.elements.as_slice(), &column)
-            }?;
+            let product = scalar_product::<E, CS>(self.elements.as_slice(), &column)?;
 
             result.push(product);
         }
-        if partial_round {
-            self.constants_offset += self.constants.width() - 1;
-        }
+
         self.elements = result;
 
         Ok(())
@@ -337,20 +389,55 @@ where
     p.hash(cs)
 }
 
-/// Compute l^5 and enforce constraint. If round_key is supplied, add it to l first.
+/// Compute l^5 and enforce constraint. If round_key is supplied, add it to result.
 fn quintic_s_box<CS: ConstraintSystem<E>, E: Engine>(
     mut cs: CS,
     e: &Elt<E>,
-    round_key: E::Fr,
+    post_round_key: Option<E::Fr>,
 ) -> Result<Elt<E>, SynthesisError> {
     let l = e.ensure_allocated(&mut cs.namespace(|| "S-box input"), true)?;
 
-    // If round_key was supplied, add it to l before squaring.
-    let l2 = square_sum(cs.namespace(|| "(l+rk)^2"), round_key, &l, true)?;
+    // If round_key was supplied, add it after all exponentiation.
+    let l2 = l.square(cs.namespace(|| "l^2"))?;
     let l4 = l2.square(cs.namespace(|| "l^4"))?;
-    let l5 = mul_sum(cs.namespace(|| "l4 * (l + rk)"), &l4, &l, round_key, true);
+    let l5 = mul_sum(
+        cs.namespace(|| "(l4 * l) + rk)"),
+        &l4,
+        &l,
+        None,
+        post_round_key,
+        true,
+    );
 
     Ok(Elt::Allocated(l5?))
+}
+
+/// Compute l^5 and enforce constraint. If round_key is supplied, add it to l first.
+fn quintic_s_box_pre_add<CS: ConstraintSystem<E>, E: Engine>(
+    mut cs: CS,
+    e: &Elt<E>,
+    pre_round_key: Option<E::Fr>,
+    post_round_key: Option<E::Fr>,
+) -> Result<Elt<E>, SynthesisError> {
+    if let (Some(pre_round_key), Some(post_round_key)) = (pre_round_key, post_round_key) {
+        let l = e.ensure_allocated(&mut cs.namespace(|| "S-box input"), true)?;
+
+        // If round_key was supplied, add it to l before squaring.
+        let l2 = square_sum(cs.namespace(|| "(l+rk)^2"), pre_round_key, &l, true)?;
+        let l4 = l2.square(cs.namespace(|| "l^4"))?;
+        let l5 = mul_sum(
+            cs.namespace(|| "l4 * (l + rk)"),
+            &l4,
+            &l,
+            Some(pre_round_key),
+            Some(post_round_key),
+            true,
+        );
+
+        Ok(Elt::Allocated(l5?))
+    } else {
+        panic!("pre_round_key and post_round_key must both be provided.");
+    }
 }
 
 /// Calculates square of sum and enforces that constraint.
@@ -384,8 +471,79 @@ where
     Ok(res)
 }
 
-/// Calculates a * (b + to_add) — and enforces that constraint.
+/// Calculates (a * (pre_add + b)) + post_add — and enforces that constraint.
 pub fn mul_sum<CS: ConstraintSystem<E>, E: Engine>(
+    mut cs: CS,
+    a: &AllocatedNum<E>,
+    b: &AllocatedNum<E>,
+    pre_add: Option<E::Fr>,
+    post_add: Option<E::Fr>,
+    enforce: bool,
+) -> Result<AllocatedNum<E>, SynthesisError>
+where
+    CS: ConstraintSystem<E>,
+{
+    let res = AllocatedNum::alloc(cs.namespace(|| "mul_sum"), || {
+        let mut tmp = b
+            .get_value()
+            .ok_or_else(|| SynthesisError::AssignmentMissing)?;
+        if let Some(x) = pre_add {
+            tmp.add_assign(&x);
+        }
+        tmp.mul_assign(
+            &a.get_value()
+                .ok_or_else(|| SynthesisError::AssignmentMissing)?,
+        );
+        if let Some(x) = post_add {
+            tmp.add_assign(&x);
+        }
+
+        Ok(tmp)
+    })?;
+
+    if enforce {
+        if let Some(x) = post_add {
+            let mut neg = E::Fr::zero();
+            neg.sub_assign(&x);
+
+            if let Some(pre) = pre_add {
+                cs.enforce(
+                    || "mul sum constraint pre-post-add",
+                    |lc| lc + b.get_variable() + (pre, CS::one()),
+                    |lc| lc + a.get_variable(),
+                    |lc| lc + res.get_variable() + (neg, CS::one()),
+                );
+            } else {
+                cs.enforce(
+                    || "mul sum constraint post-add",
+                    |lc| lc + b.get_variable(),
+                    |lc| lc + a.get_variable(),
+                    |lc| lc + res.get_variable() + (neg, CS::one()),
+                );
+            }
+        } else {
+            if let Some(pre) = pre_add {
+                cs.enforce(
+                    || "mul sum constraint pre-add",
+                    |lc| lc + b.get_variable() + (pre, CS::one()),
+                    |lc| lc + a.get_variable(),
+                    |lc| lc + res.get_variable(),
+                );
+            } else {
+                cs.enforce(
+                    || "mul sum constraint",
+                    |lc| lc + b.get_variable(),
+                    |lc| lc + a.get_variable(),
+                    |lc| lc + res.get_variable(),
+                );
+            }
+        }
+    }
+    Ok(res)
+}
+
+/// Calculates a * (b + to_add) — and enforces that constraint.
+pub fn mul_pre_sum<CS: ConstraintSystem<E>, E: Engine>(
     mut cs: CS,
     a: &AllocatedNum<E>,
     b: &AllocatedNum<E>,
@@ -501,7 +659,7 @@ mod tests {
         let out = poseidon_hash(&mut cs, data, &constants).expect("poseidon hashing failed");
 
         let mut p = Poseidon::<Bls12, Arity>::new_with_preimage(&fr_data, &constants);
-        let expected: Fr = p.hash_in_mode(HashMode::Correct);
+        let expected: Fr = p.hash_in_mode(HashMode::OptimizedStatic);
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
