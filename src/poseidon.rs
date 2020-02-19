@@ -547,7 +547,6 @@ where
                 let sparse_matrix = &self.constants.sparse_matrices[index];
 
                 self.product_mds_with_sparse_matrix(&sparse_matrix);
-            //self.product_mds_with_matrix(&sparse_matrix);
             } else {
                 self.product_mds();
             }

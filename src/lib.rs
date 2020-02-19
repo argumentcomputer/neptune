@@ -32,6 +32,7 @@ pub fn round_numbers(arity: usize) -> (usize, usize) {
         8 | 9 | 10 | 11 | 12 => 57,
         17 | 25 => 59,
         37 => 60,
+        65 => 61,
         //24 => 42, // Just for a comparative benchmark — don't use this.
         _ => panic!(format!("unsupported arity {}", arity)),
     };
