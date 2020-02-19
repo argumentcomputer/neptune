@@ -105,7 +105,6 @@ impl<E: Engine> Elt<E> {
                 let new_lc = simplify_lc(lc + &lc2);
                 Ok(Elt::Num(None, new_lc))
             }
-
             _ => panic!("only two numbers may be added"),
         }
     }
@@ -124,9 +123,19 @@ impl<E: Engine> Elt<E> {
                         acc + (fr, *variable)
                     },
                 );
+
                 Ok(Elt::Num(Some(tmp), new_lc))
             }
-            Elt::Num(None, _) => Ok(Elt::Num(None, LinearCombination::zero())),
+            Elt::Num(None, lc) => {
+                let new_lc = lc.as_ref().iter().fold(
+                    LinearCombination::zero(),
+                    |acc, (variable, mut fr)| {
+                        fr.mul_assign(&scalar);
+                        acc + (fr, *variable)
+                    },
+                );
+                Ok(Elt::Num(None, new_lc))
+            }
             Elt::Allocated(_) => Elt::Num(self.val(), self.lc()).scale::<CS>(scalar),
         }
     }
