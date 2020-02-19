@@ -45,6 +45,7 @@ where
     pub mds_matrices: MDSMatrices<E>,
     pub round_constants: Vec<E::Fr>,
     pub compressed_round_constants: Vec<E::Fr>,
+    pub pre_sparse_matrix: Matrix<E::Fr>,
     pub sparse_matrices: Vec<Matrix<E::Fr>>,
     pub arity_tag: E::Fr,
     pub full_rounds: usize,
@@ -92,7 +93,7 @@ where
             partial_rounds,
         );
 
-        let sparse_matrices =
+        let (pre_sparse_matrix, sparse_matrices) =
             factor_to_sparse_matrices::<E>(mds_matrices.m.clone(), partial_rounds);
 
         // Ensure we have enough constants for the sbox rounds
@@ -110,6 +111,7 @@ where
             mds_matrices,
             round_constants,
             compressed_round_constants,
+            pre_sparse_matrix,
             sparse_matrices,
             arity_tag: arity_tag::<E, Arity>(),
             full_rounds,
@@ -537,13 +539,12 @@ where
         let full_half = self.constants.half_full_rounds;
         let sparse_offset = full_half - 1;
         if self.current_round == sparse_offset {
-            // FIXME: the first matrix is not sparse. It shouldn't be in sparse_matrices.
-            self.product_mds_with_matrix(&self.constants.sparse_matrices[0]);
+            self.product_mds_with_matrix(&self.constants.pre_sparse_matrix);
         } else {
             if (self.current_round > sparse_offset)
                 && (self.current_round < full_half + self.constants.partial_rounds)
             {
-                let index = self.current_round - sparse_offset;
+                let index = self.current_round - sparse_offset - 1;
                 let sparse_matrix = &self.constants.sparse_matrices[index];
 
                 self.product_mds_with_sparse_matrix(&sparse_matrix);

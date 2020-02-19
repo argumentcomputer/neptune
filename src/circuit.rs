@@ -348,12 +348,12 @@ where
         let sparse_offset = full_half - 1;
         if self.current_round == sparse_offset {
             // FIXME: the first matrix is not sparse. It shouldn't be in sparse_matrices.
-            self.product_mds_with_matrix::<CS>(&self.constants.sparse_matrices[0])?;
+            self.product_mds_with_matrix::<CS>(&self.constants.pre_sparse_matrix)?;
         } else {
             if (self.current_round > sparse_offset)
                 && (self.current_round < full_half + self.constants.partial_rounds)
             {
-                let index = self.current_round - sparse_offset;
+                let index = self.current_round - sparse_offset - 1;
                 let sparse_matrix = &self.constants.sparse_matrices[index];
 
                 self.product_mds_with_sparse_matrix::<CS>(&sparse_matrix)?;
@@ -716,7 +716,7 @@ mod tests {
         let out = poseidon_hash(&mut cs, data, &constants).expect("poseidon hashing failed");
 
         let mut p = Poseidon::<Bls12, Arity>::new_with_preimage(&fr_data, &constants);
-        let expected: Fr = p.hash_in_mode(HashMode::OptimizedStatic);
+        let expected: Fr = p.hash_in_mode(HashMode::Correct);
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
 

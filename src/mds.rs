@@ -44,16 +44,16 @@ pub fn derive_mds_matrices<'a, E: ScalarEngine>(m: Matrix<Scalar<E>>) -> MDSMatr
 pub fn factor_to_sparse_matrices<E: ScalarEngine>(
     base_matrix: Matrix<Scalar<E>>,
     n: usize,
-) -> Vec<Matrix<Scalar<E>>> {
-    let (last, mut all) = (0..n).fold((base_matrix.clone(), Vec::new()), |(curr, mut acc), _| {
-        let derived = derive_mds_matrices::<E>(curr);
-        acc.push(derived.m_double_prime);
-        let new = mat_mul::<E>(&base_matrix, &derived.m_prime).unwrap();
-        (new, acc)
-    });
-    all.push(last);
+) -> (Matrix<Scalar<E>>, Vec<Matrix<Scalar<E>>>) {
+    let (pre_sparse, mut all) =
+        (0..n).fold((base_matrix.clone(), Vec::new()), |(curr, mut acc), _| {
+            let derived = derive_mds_matrices::<E>(curr);
+            acc.push(derived.m_double_prime);
+            let new = mat_mul::<E>(&base_matrix, &derived.m_prime).unwrap();
+            (new, acc)
+        });
     all.reverse();
-    all
+    (pre_sparse, all)
 }
 
 fn generate_mds<E: ScalarEngine>(t: usize) -> Matrix<Scalar<E>> {
@@ -254,8 +254,8 @@ mod tests {
         let m = generate_mds::<Bls12>(width);
         let m2 = m.clone();
 
-        let sparse = factor_to_sparse_matrices::<Bls12>(m, n);
-        assert_eq!(n + 1, sparse.len());
+        let (pre_sparse, sparse) = factor_to_sparse_matrices::<Bls12>(m, n);
+        assert_eq!(n, sparse.len());
 
         let mut initial = Vec::with_capacity(width);
         for _ in 0..width {
@@ -276,14 +276,14 @@ mod tests {
             },
         );
 
-        let actual = sparse
-            .iter()
-            .zip(&round_keys)
-            .fold(initial.clone(), |mut acc, (m, rk)| {
+        let actual = sparse.iter().chain(&[pre_sparse]).zip(&round_keys).fold(
+            initial.clone(),
+            |mut acc, (m, rk)| {
                 apply_matrix::<Bls12>(&m, &acc);
                 quintic_s_box::<Bls12>(&mut acc[0], None, Some(&rk));
                 acc
-            });
+            },
+        );
         assert_eq!(expected, actual);
     }
 }
