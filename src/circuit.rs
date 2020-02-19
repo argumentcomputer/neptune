@@ -1,3 +1,4 @@
+use crate::matrix::Matrix;
 use crate::poseidon::PoseidonConstants;
 
 use bellperson::gadgets::num::AllocatedNum;
@@ -195,6 +196,7 @@ where
     width: usize,
     elements: Vec<Elt<E>>,
     pos: usize,
+    current_round: usize,
     constants: &'a PoseidonConstants<E, Arity>,
     _w: PhantomData<Arity>,
 }
@@ -220,6 +222,7 @@ where
             width,
             elements,
             pos: width,
+            current_round: 0,
             constants,
             _w: PhantomData::<Arity>,
         }
@@ -284,8 +287,6 @@ where
         // Apply the quintic S-Box to all elements
         for i in 0..self.elements.len() {
             let pre_round_key = if first_round {
-                // let rk = self.constants.compressed_round_constants[constants_offset];
-                // constants_offset += 1;
                 let rk = pre_round_keys[i];
                 Some(rk)
             } else {
@@ -293,8 +294,6 @@ where
             };
 
             let post_round_key = if first_round || !last_round {
-                // let rk = self.constants.compressed_round_constants[constants_offset];
-                // constants_offset += 1;
                 let rk = post_round_keys[i];
                 Some(rk)
             } else {
@@ -319,7 +318,7 @@ where
         self.constants_offset = constants_offset;
 
         // Multiply the elements by the constant MDS matrix
-        self.product_mds::<CS>(false)?;
+        self.product_mds::<CS>()?;
         Ok(())
     }
 
@@ -334,23 +333,81 @@ where
         )?;
 
         // Multiply the elements by the constant MDS matrix
-        self.product_mds::<CS>(true)?;
-
+        self.product_mds::<CS>()?;
         Ok(())
     }
 
-    fn product_mds<CS: ConstraintSystem<E>>(
+    fn product_mds_m<CS: ConstraintSystem<E>>(&mut self) -> Result<(), SynthesisError> {
+        self.product_mds_with_matrix::<CS>(&self.constants.mds_matrices.m)
+    }
+
+    /// Set the provided elements with the result of the product between the elements and the appropriate
+    /// MDS matrix.
+    fn product_mds<CS: ConstraintSystem<E>>(&mut self) -> Result<(), SynthesisError> {
+        let full_half = self.constants.half_full_rounds;
+        let sparse_offset = full_half - 1;
+        if self.current_round == sparse_offset {
+            // FIXME: the first matrix is not sparse. It shouldn't be in sparse_matrices.
+            self.product_mds_with_matrix::<CS>(&self.constants.sparse_matrices[0])?;
+        } else {
+            if (self.current_round > sparse_offset)
+                && (self.current_round < full_half + self.constants.partial_rounds)
+            {
+                let index = self.current_round - sparse_offset;
+                let sparse_matrix = &self.constants.sparse_matrices[index];
+
+                self.product_mds_with_sparse_matrix::<CS>(&sparse_matrix)?;
+            } else {
+                self.product_mds_m::<CS>()?;
+            }
+        };
+
+        self.current_round += 1;
+        Ok(())
+    }
+
+    fn product_mds_with_matrix<CS: ConstraintSystem<E>>(
         &mut self,
-        _partial_round: bool,
+        matrix: &Matrix<E::Fr>,
     ) -> Result<(), SynthesisError> {
         let mut result: Vec<Elt<E>> = Vec::with_capacity(self.constants.width());
 
         for j in 0..self.constants.width() {
-            let column = self.constants.mds_matrices.m[j].to_vec();
-            // TODO: This could be cached per round to save synthesis time.
+            let column = (0..self.constants.width())
+                .map(|i| matrix[i][j])
+                .collect::<Vec<_>>();
+
             let product = scalar_product::<E, CS>(self.elements.as_slice(), &column)?;
 
             result.push(product);
+        }
+
+        self.elements = result;
+
+        Ok(())
+    }
+
+    // Sparse matrix in this context means one of the form, M''.
+    fn product_mds_with_sparse_matrix<CS: ConstraintSystem<E>>(
+        &mut self,
+        matrix: &Matrix<E::Fr>,
+    ) -> Result<(), SynthesisError> {
+        let mut result: Vec<Elt<E>> = Vec::with_capacity(self.constants.width());
+
+        // First column is dense.
+        let column = (0..self.constants.width())
+            .map(|i| matrix[i][0])
+            .collect::<Vec<_>>();
+
+        result.push(scalar_product::<E, CS>(self.elements.as_slice(), &column)?);
+
+        for j in 1..self.width {
+            result.push(
+                self.elements[j].clone().add::<CS>(
+                    self.elements[0] // First row is dense.
+                        .scale::<CS>(matrix[0][j])?, // Except for first row/column, diagonals are one.
+                )?,
+            );
         }
 
         self.elements = result;

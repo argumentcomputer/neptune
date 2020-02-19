@@ -28,8 +28,7 @@ pub fn round_numbers(arity: usize) -> (usize, usize) {
     let full_rounds = 8;
     let partial_rounds = match width {
         2 | 3 => 55,
-        //4 | 5 | 6 | 7 => 56,
-        4 | 5 | 6 | 7 => 5,
+        4 | 5 | 6 | 7 => 56,
         8 | 9 | 10 | 11 | 12 => 57,
         17 | 25 => 59,
         37 => 60,
