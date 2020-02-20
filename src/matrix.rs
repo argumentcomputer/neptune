@@ -6,7 +6,7 @@ use ff::{Field, ScalarEngine};
 pub type Matrix<T> = Vec<Vec<T>>;
 pub type Scalar<E> = <E as ScalarEngine>::Fr;
 
-fn rows<T>(matrix: &Matrix<T>) -> usize {
+pub fn rows<T>(matrix: &Matrix<T>) -> usize {
     matrix.len()
 }
 
@@ -178,22 +178,26 @@ pub fn make_identity<E: ScalarEngine>(size: usize) -> Matrix<Scalar<E>> {
     result
 }
 
-pub fn is_identity<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> bool {
-    let one = Scalar::<E>::one();
-    let zero = Scalar::<E>::zero();
+pub fn kronecker_delta<E: ScalarEngine>(i: usize, j: usize) -> Scalar<E> {
+    if i == j {
+        Scalar::<E>::one()
+    } else {
+        Scalar::<E>::zero()
+    }
+}
 
+pub fn is_identity<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> bool {
     for i in 0..rows(matrix) {
         for j in 0..columns(matrix) {
-            let kronecker = matrix[i][j] == if i == j { one } else { zero };
-            if !kronecker {
+            if matrix[i][j] != kronecker_delta::<E>(i, j) {
                 return false;
-            };
+            }
         }
     }
     true
 }
 
-fn is_square<T>(matrix: &Matrix<T>) -> bool {
+pub fn is_square<T>(matrix: &Matrix<T>) -> bool {
     rows(matrix) == columns(matrix)
 }
 

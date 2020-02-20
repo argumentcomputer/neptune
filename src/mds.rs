@@ -1,6 +1,9 @@
 use ff::{Field, ScalarEngine};
 
-use crate::matrix::{apply_matrix, invert, is_invertible, mat_mul, minor, Matrix, Scalar};
+use crate::matrix;
+use crate::matrix::{
+    apply_matrix, invert, is_identity, is_invertible, is_square, mat_mul, minor, Matrix, Scalar,
+};
 use crate::scalar_from_u64;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -35,25 +38,81 @@ pub fn derive_mds_matrices<'a, E: ScalarEngine>(m: Matrix<Scalar<E>>) -> MDSMatr
     }
 }
 
+/// A `SparseMatrix` is specifically one of the form of M''.
+/// This means its first row and column are each dense, and the interior matrix
+/// (minor to the element in both the row and column) is the identity.
+/// We will pluralize this compact structure `sparse_matrixes` to distinguish from `sparse_matrices` from which they are created.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SparseMatrix<E: ScalarEngine> {
+    /// `w_hat` is the first column of the M'' matrix. It will be directly multiplied (scalar product) with a row of state elements.
+    pub w_hat: Vec<Scalar<E>>,
+    /// `v_rest` contains all but the first (already included in `w_hat`).
+    pub v_rest: Vec<Scalar<E>>,
+}
+
+impl<E: ScalarEngine> SparseMatrix<E> {
+    pub fn new(m_double_prime: Matrix<Scalar<E>>) -> Self {
+        assert!(Self::is_sparse_matrix(&m_double_prime));
+        let size = matrix::rows(&m_double_prime);
+
+        let w_hat = (0..size).map(|i| m_double_prime[i][0]).collect::<Vec<_>>();
+        let v_rest = m_double_prime[0][1..].to_vec();
+
+        Self { w_hat, v_rest }
+    }
+
+    pub fn is_sparse_matrix(m: &Matrix<Scalar<E>>) -> bool {
+        is_square(&m) && is_identity::<E>(&minor::<E>(&m, 0, 0))
+    }
+
+    pub fn size(&self) -> usize {
+        self.w_hat.len()
+    }
+
+    pub fn to_matrix(&self) -> Matrix<Scalar<E>> {
+        let mut m = matrix::make_identity::<E>(self.size());
+        for (j, elt) in self.w_hat.iter().enumerate() {
+            m[j][0] = *elt;
+        }
+        for (i, elt) in self.v_rest.iter().enumerate() {
+            m[0][i + 1] = *elt;
+        }
+        m
+    }
+}
+
 // - Having effectively moved the round-key additions into the S-boxes, refactor MDS matrices used for partial-round mix layer to use sparse matrices.
 // - This requires using a different (sparse) matrix at each partial round, rather than the same dense matrix at each.
 //   - The MDS matrix, M, for each such round, starting from the last, is factored into two components, such that M' x M'' = M.
 //   - M'' is sparse and replaces M for the round.
 //   - The previous layer's M is then replaced by M x M' = M*.
 //   - M* is likewise factored into M*' and M*'', and the process continues.
+pub fn factor_to_sparse_matrixes<E: ScalarEngine>(
+    base_matrix: Matrix<Scalar<E>>,
+    n: usize,
+) -> (Matrix<Scalar<E>>, Vec<SparseMatrix<E>>) {
+    let (pre_sparse, sparse_matrices) = factor_to_sparse_matrices::<E>(base_matrix, n);
+    let sparse_matrixes = sparse_matrices
+        .iter()
+        .map(|m| SparseMatrix::<E>::new(m.to_vec()))
+        .collect::<Vec<_>>();
+
+    (pre_sparse, sparse_matrixes)
+}
+
 pub fn factor_to_sparse_matrices<E: ScalarEngine>(
     base_matrix: Matrix<Scalar<E>>,
     n: usize,
-) -> Vec<Matrix<Scalar<E>>> {
-    let (last, mut all) = (0..n).fold((base_matrix.clone(), Vec::new()), |(curr, mut acc), _| {
-        let derived = derive_mds_matrices::<E>(curr);
-        acc.push(derived.m_double_prime);
-        let new = mat_mul::<E>(&base_matrix, &derived.m_prime).unwrap();
-        (new, acc)
-    });
-    all.push(last);
+) -> (Matrix<Scalar<E>>, Vec<Matrix<Scalar<E>>>) {
+    let (pre_sparse, mut all) =
+        (0..n).fold((base_matrix.clone(), Vec::new()), |(curr, mut acc), _| {
+            let derived = derive_mds_matrices::<E>(curr);
+            acc.push(derived.m_double_prime);
+            let new = mat_mul::<E>(&base_matrix, &derived.m_prime).unwrap();
+            (new, acc)
+        });
     all.reverse();
-    all
+    (pre_sparse, all)
 }
 
 fn generate_mds<E: ScalarEngine>(t: usize) -> Matrix<Scalar<E>> {
@@ -254,8 +313,8 @@ mod tests {
         let m = generate_mds::<Bls12>(width);
         let m2 = m.clone();
 
-        let sparse = factor_to_sparse_matrices::<Bls12>(m, n);
-        assert_eq!(n + 1, sparse.len());
+        let (pre_sparse, sparse) = factor_to_sparse_matrices::<Bls12>(m, n);
+        assert_eq!(n, sparse.len());
 
         let mut initial = Vec::with_capacity(width);
         for _ in 0..width {
@@ -276,14 +335,50 @@ mod tests {
             },
         );
 
-        let actual = sparse
-            .iter()
-            .zip(&round_keys)
-            .fold(initial.clone(), |mut acc, (m, rk)| {
+        let actual = sparse.iter().chain(&[pre_sparse]).zip(&round_keys).fold(
+            initial.clone(),
+            |mut acc, (m, rk)| {
                 apply_matrix::<Bls12>(&m, &acc);
                 quintic_s_box::<Bls12>(&mut acc[0], None, Some(&rk));
                 acc
-            });
+            },
+        );
         assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn test_factor_to_sparse_matrixes() {
+        for width in 3..9 {
+            test_factor_to_sparse_matrixes_aux(width, 3);
+        }
+    }
+
+    fn test_factor_to_sparse_matrixes_aux(width: usize, n: usize) {
+        let m = generate_mds::<Bls12>(width);
+        let m2 = m.clone();
+
+        let (pre_sparse, sparse_matrices) = factor_to_sparse_matrices::<Bls12>(m, n);
+        assert_eq!(n, sparse_matrices.len());
+
+        let (pre_sparse2, sparse_matrixes) = factor_to_sparse_matrixes::<Bls12>(m2, n);
+
+        assert_eq!(pre_sparse, pre_sparse2);
+
+        let matrices_again = sparse_matrixes
+            .iter()
+            .map(|m| m.to_matrix())
+            .collect::<Vec<_>>();
+        dbg!(&sparse_matrixes, &sparse_matrices);
+
+        let _ = sparse_matrices
+            .iter()
+            .zip(matrices_again.iter())
+            .map(|(a, b)| {
+                dbg!(&a, &b);
+                assert_eq!(a, b)
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(sparse_matrices, matrices_again);
     }
 }
