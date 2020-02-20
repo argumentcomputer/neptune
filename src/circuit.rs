@@ -1,4 +1,5 @@
 use crate::matrix::Matrix;
+use crate::mds::SparseMatrix;
 use crate::poseidon::PoseidonConstants;
 
 use bellperson::gadgets::num::AllocatedNum;
@@ -347,14 +348,13 @@ where
         let full_half = self.constants.half_full_rounds;
         let sparse_offset = full_half - 1;
         if self.current_round == sparse_offset {
-            // FIXME: the first matrix is not sparse. It shouldn't be in sparse_matrices.
             self.product_mds_with_matrix::<CS>(&self.constants.pre_sparse_matrix)?;
         } else {
             if (self.current_round > sparse_offset)
                 && (self.current_round < full_half + self.constants.partial_rounds)
             {
                 let index = self.current_round - sparse_offset - 1;
-                let sparse_matrix = &self.constants.sparse_matrices[index];
+                let sparse_matrix = &self.constants.sparse_matrixes[index];
 
                 self.product_mds_with_sparse_matrix::<CS>(&sparse_matrix)?;
             } else {
@@ -390,13 +390,12 @@ where
     // Sparse matrix in this context means one of the form, M''.
     fn product_mds_with_sparse_matrix<CS: ConstraintSystem<E>>(
         &mut self,
-        matrix: &Matrix<E::Fr>,
+        matrix: &SparseMatrix<E>,
     ) -> Result<(), SynthesisError> {
         let mut result: Vec<Elt<E>> = Vec::with_capacity(self.constants.width());
-
         // First column is dense.
         let column = (0..self.constants.width())
-            .map(|i| matrix[i][0])
+            .map(|i| matrix.w_hat[i])
             .collect::<Vec<_>>();
 
         result.push(scalar_product::<E, CS>(self.elements.as_slice(), &column)?);
@@ -405,7 +404,7 @@ where
             result.push(
                 self.elements[j].clone().add::<CS>(
                     self.elements[0] // First row is dense.
-                        .scale::<CS>(matrix[0][j])?, // Except for first row/column, diagonals are one.
+                        .scale::<CS>(matrix.v_rest[j - 1])?, // Except for first row/column, diagonals are one.
                 )?,
             );
         }

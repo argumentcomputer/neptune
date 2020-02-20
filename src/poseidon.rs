@@ -1,5 +1,5 @@
 use crate::matrix::Matrix;
-use crate::mds::{create_mds_matrices, factor_to_sparse_matrices, MDSMatrices};
+use crate::mds::{create_mds_matrices, factor_to_sparse_matrixes, MDSMatrices, SparseMatrix};
 use crate::preprocessing::compress_round_constants;
 use crate::{matrix, quintic_s_box};
 use crate::{round_constants, round_numbers, scalar_from_u64, Error};
@@ -46,7 +46,7 @@ where
     pub round_constants: Vec<E::Fr>,
     pub compressed_round_constants: Vec<E::Fr>,
     pub pre_sparse_matrix: Matrix<E::Fr>,
-    pub sparse_matrices: Vec<Matrix<E::Fr>>,
+    pub sparse_matrixes: Vec<SparseMatrix<E>>,
     pub arity_tag: E::Fr,
     pub full_rounds: usize,
     pub half_full_rounds: usize,
@@ -93,8 +93,8 @@ where
             partial_rounds,
         );
 
-        let (pre_sparse_matrix, sparse_matrices) =
-            factor_to_sparse_matrices::<E>(mds_matrices.m.clone(), partial_rounds);
+        let (pre_sparse_matrix, sparse_matrixes) =
+            factor_to_sparse_matrixes::<E>(mds_matrices.m.clone(), partial_rounds);
 
         // Ensure we have enough constants for the sbox rounds
         assert!(
@@ -112,7 +112,7 @@ where
             round_constants,
             compressed_round_constants,
             pre_sparse_matrix,
-            sparse_matrices,
+            sparse_matrixes,
             arity_tag: arity_tag::<E, Arity>(),
             full_rounds,
             half_full_rounds,
@@ -545,7 +545,7 @@ where
                 && (self.current_round < full_half + self.constants.partial_rounds)
             {
                 let index = self.current_round - sparse_offset - 1;
-                let sparse_matrix = &self.constants.sparse_matrices[index];
+                let sparse_matrix = &self.constants.sparse_matrixes[index];
 
                 self.product_mds_with_sparse_matrix(&sparse_matrix);
             } else {
@@ -571,12 +571,12 @@ where
     }
 
     // Sparse matrix in this context means one of the form, M''.
-    fn product_mds_with_sparse_matrix(&mut self, matrix: &Matrix<E::Fr>) {
+    fn product_mds_with_sparse_matrix(&mut self, sparse_matrix: &SparseMatrix<E>) {
         let mut result = GenericArray::<E::Fr, Add1<Arity>>::generate(|_| E::Fr::zero());
 
         // First column is dense.
-        for (i, row) in matrix.iter().enumerate() {
-            let mut tmp = row[0];
+        for (i, val) in sparse_matrix.w_hat.iter().enumerate() {
+            let mut tmp = *val;
             tmp.mul_assign(&self.elements[i]);
             result[0].add_assign(&tmp);
         }
@@ -586,7 +586,7 @@ where
             val.add_assign(&self.elements[j]);
 
             // First row is dense.
-            let mut tmp = matrix[0][j];
+            let mut tmp = sparse_matrix.v_rest[j - 1];
             tmp.mul_assign(&self.elements[0]);
             val.add_assign(&tmp);
         }
