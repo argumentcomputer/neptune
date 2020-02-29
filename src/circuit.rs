@@ -2,13 +2,14 @@ use crate::matrix::Matrix;
 use crate::mds::SparseMatrix;
 use crate::poseidon::PoseidonConstants;
 
+use bellperson::gadgets::boolean::Boolean;
+use bellperson::gadgets::num;
 use bellperson::gadgets::num::AllocatedNum;
-use bellperson::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
+use bellperson::{ConstraintSystem, LinearCombination, SynthesisError};
 use ff::Field;
 use ff::ScalarEngine as Engine;
 use generic_array::typenum;
 use generic_array::ArrayLength;
-use std::collections::HashMap;
 use std::marker::PhantomData;
 
 /// Similar to `num::Num`, we use `Elt` to accumulate both values and linear combinations, then eventually
@@ -17,14 +18,14 @@ use std::marker::PhantomData;
 /// accumulate linear (not polynomial) constraints. The set of operations provided here ensure this invariant is maintained.
 enum Elt<E: Engine> {
     Allocated(AllocatedNum<E>),
-    Num(Option<E::Fr>, LinearCombination<E>),
+    Num(num::Num<E>),
 }
 
 impl<E: Engine> Clone for Elt<E> {
     fn clone(&self) -> Self {
         match self {
             Elt::Allocated(a) => Elt::Allocated(a.clone()),
-            Elt::Num(fr, lc) => Elt::Num(fr.clone(), simplify_lc(lc)),
+            Elt::Num(num) => Elt::Num(num.clone()),
         }
     }
 }
@@ -39,7 +40,7 @@ impl<E: Engine> Elt<E> {
     }
 
     fn is_num(&self) -> bool {
-        if let Self::Num(_, _) = self {
+        if let Self::Num(_) = self {
             true
         } else {
             false
@@ -47,9 +48,8 @@ impl<E: Engine> Elt<E> {
     }
 
     fn num_from_fr<CS: ConstraintSystem<E>>(fr: E::Fr) -> Self {
-        let mut lc = LinearCombination::zero();
-        lc = lc + (fr, CS::one());
-        Self::Num(Some(fr), lc)
+        let num = num::Num::<E>::zero();
+        Self::Num(num.add_bool_with_coeff(CS::one(), &Boolean::Constant(true), fr))
     }
 
     fn ensure_allocated<CS: ConstraintSystem<E>>(
@@ -59,15 +59,16 @@ impl<E: Engine> Elt<E> {
     ) -> Result<AllocatedNum<E>, SynthesisError> {
         match self {
             Self::Allocated(v) => Ok(v.clone()),
-            Self::Num(fr, lc) => {
+            Self::Num(num) => {
                 let v = AllocatedNum::alloc(cs.namespace(|| "allocate for Elt::Num"), || {
-                    fr.ok_or_else(|| SynthesisError::AssignmentMissing)
+                    num.get_value()
+                        .ok_or_else(|| SynthesisError::AssignmentMissing)
                 })?;
 
                 if enforce {
                     cs.enforce(
                         || format!("enforce num allocation preserves lc"),
-                        |_| lc.clone(),
+                        |_| num.lc(E::Fr::one()),
                         |lc| lc + CS::one(),
                         |lc| lc + v.get_variable(),
                     );
@@ -80,110 +81,35 @@ impl<E: Engine> Elt<E> {
     fn val(&self) -> Option<E::Fr> {
         match self {
             Self::Allocated(v) => v.get_value(),
-            Self::Num(fr, _lc) => *fr,
+            Self::Num(num) => num.get_value(),
         }
     }
 
     fn lc(&self) -> LinearCombination<E> {
         match self {
-            Self::Num(_fr, lc) => lc.clone(),
+            Self::Num(num) => num.lc(E::Fr::one()),
             Self::Allocated(v) => LinearCombination::<E>::zero() + v.get_variable(),
         }
     }
 
     /// Add two Nums and return a Num tracking the calculation. It is forbidden to invoke on an Allocated because the intended computation
-    /// doe not include that path.
+    /// does not include that path.
     fn add<CS: ConstraintSystem<E>>(self, other: Elt<E>) -> Result<Elt<E>, SynthesisError> {
         match (self, other) {
-            (Elt::Num(Some(fr), lc), Elt::Num(Some(fr2), lc2)) => {
-                let mut new_fr = fr;
-                new_fr.add_assign(&fr2);
-
-                // Coalesce like terms after adding, to prevent combinatorial
-                // explosion of successive multiplications.
-                let new_lc = simplify_lc(&(lc + &lc2));
-                Ok(Elt::Num(Some(new_fr), new_lc))
-            }
-            (Elt::Num(Some(fr), lc), Elt::Num(None, lc2)) => {
-                let new_lc = simplify_lc(&(lc + &lc2));
-                Ok(Elt::Num(Some(fr), new_lc))
-            }
-            (Elt::Num(None, lc), Elt::Num(Some(fr2), lc2)) => {
-                let new_lc = simplify_lc(&(lc + &lc2));
-                Ok(Elt::Num(Some(fr2), new_lc))
-            }
-            (Elt::Num(None, lc), Elt::Num(None, lc2)) => {
-                let new_lc = simplify_lc(&(lc + &lc2));
-                Ok(Elt::Num(None, new_lc))
-            }
+            (Elt::Num(a), Elt::Num(b)) => Ok(Elt::Num(a.add(&b))),
             _ => panic!("only two numbers may be added"),
         }
     }
 
     /// Scale
-    fn scale<CS: ConstraintSystem<E>>(&self, scalar: E::Fr) -> Result<Elt<E>, SynthesisError> {
+    fn scale<CS: ConstraintSystem<E>>(self, scalar: E::Fr) -> Result<Elt<E>, SynthesisError> {
         match self {
-            Elt::Num(Some(fr), lc) => {
-                let mut tmp = *fr;
-                tmp.mul_assign(&scalar);
-
-                let new_lc = lc.as_ref().iter().fold(
-                    LinearCombination::zero(),
-                    |acc, (variable, mut fr)| {
-                        fr.mul_assign(&scalar);
-                        acc + (fr, *variable)
-                    },
-                );
-
-                Ok(Elt::Num(Some(tmp), new_lc))
-            }
-            Elt::Num(None, lc) => {
-                let new_lc = lc.as_ref().iter().fold(
-                    LinearCombination::zero(),
-                    |acc, (variable, mut fr)| {
-                        fr.mul_assign(&scalar);
-                        acc + (fr, *variable)
-                    },
-                );
-                Ok(Elt::Num(None, new_lc))
-            }
-            Elt::Allocated(_) => Elt::Num(self.val(), self.lc()).scale::<CS>(scalar),
+            Elt::Num(num) => Ok(Elt::Num(num.scale(scalar))),
+            Elt::Allocated(a) => Elt::Num(a.into()).scale::<CS>(scalar),
         }
     }
 }
 
-fn simplify_lc<E: Engine>(lc: &LinearCombination<E>) -> LinearCombination<E> {
-    #[derive(PartialEq, Eq, Debug, std::hash::Hash)]
-    enum Idx {
-        Input(usize),
-        Aux(usize),
-    }
-
-    let mut map: HashMap<Idx, E::Fr> = HashMap::new();
-
-    lc.as_ref().iter().for_each(|(var, fr)| {
-        let key = match var.get_unchecked() {
-            Index::Input(i) => Idx::Input(i),
-            Index::Aux(i) => Idx::Aux(i),
-        };
-
-        let val = map.entry(key).or_insert(E::Fr::zero());
-        val.add_assign(fr)
-    });
-
-    let simplified = map
-        .iter()
-        .fold(LinearCombination::<E>::zero(), |acc, (idx, &fr)| {
-            let index = match idx {
-                Idx::Input(i) => Index::Input(*i),
-                Idx::Aux(i) => Index::Aux(*i),
-            };
-            acc + (fr, Variable::new_unchecked(index))
-        });
-    simplified
-}
-
-//#[derive(Clone)]
 /// Circuit for Poseidon hash.
 pub struct PoseidonCircuit<'a, E, Arity>
 where
@@ -393,17 +319,17 @@ where
         matrix: &SparseMatrix<E>,
     ) -> Result<(), SynthesisError> {
         let mut result: Vec<Elt<E>> = Vec::with_capacity(self.constants.width());
-        // First column is dense.
-        let column = (0..self.constants.width())
-            .map(|i| matrix.w_hat[i])
-            .collect::<Vec<_>>();
 
-        result.push(scalar_product::<E, CS>(self.elements.as_slice(), &column)?);
+        result.push(scalar_product::<E, CS>(
+            self.elements.as_slice(),
+            &matrix.w_hat,
+        )?);
 
         for j in 1..self.width {
             result.push(
                 self.elements[j].clone().add::<CS>(
-                    self.elements[0] // First row is dense.
+                    self.elements[0]
+                        .clone() // First row is dense.
                         .scale::<CS>(matrix.v_rest[j - 1])?, // Except for first row/column, diagonals are one.
                 )?,
             );
@@ -648,10 +574,11 @@ fn scalar_product<E: Engine, CS: ConstraintSystem<E>>(
     elts: &[Elt<E>],
     scalars: &[E::Fr],
 ) -> Result<Elt<E>, SynthesisError> {
-    elts.iter().zip(scalars).try_fold(
-        Elt::Num(Some(E::Fr::zero()), { LinearCombination::<E>::zero() }),
-        |acc, (elt, &scalar)| acc.add::<CS>(elt.scale::<CS>(scalar)?),
-    )
+    elts.iter()
+        .zip(scalars)
+        .try_fold(Elt::Num(num::Num::zero()), |acc, (elt, &scalar)| {
+            acc.add::<CS>(elt.clone().scale::<CS>(scalar)?)
+        })
 }
 
 #[cfg(test)]

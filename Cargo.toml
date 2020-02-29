@@ -9,7 +9,7 @@ repository = "https://github.com/porcuquine/poseidon"
 
 [dependencies]
 lazy_static = "1.4.0"
-bellperson = "0.6.0"
+bellperson = "0.6.3"
 bincode = { version = "1.2", optional = true }
 blake2s_simd = "0.5"
 byteorder = "1"
