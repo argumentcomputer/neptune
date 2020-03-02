@@ -16,18 +16,10 @@ use std::marker::PhantomData;
 /// extract into a `num::AllocatedNum`, enforcing that the linear combination corresponds to the result.
 /// In this way, all intermediate calculations are accounted for, with the restriction that we can only
 /// accumulate linear (not polynomial) constraints. The set of operations provided here ensure this invariant is maintained.
+#[derive(Clone)]
 enum Elt<E: Engine> {
     Allocated(AllocatedNum<E>),
     Num(num::Num<E>),
-}
-
-impl<E: Engine> Clone for Elt<E> {
-    fn clone(&self) -> Self {
-        match self {
-            Elt::Allocated(a) => Elt::Allocated(a.clone()),
-            Elt::Num(num) => Elt::Num(num.clone()),
-        }
-    }
 }
 
 impl<E: Engine> Elt<E> {
