@@ -59,8 +59,8 @@ pub enum HashMode {
     // The initial and correct version of the algorithm. We should preserve the ability to hash this way for reference
     // and to preserve confidence in our tests along thew way.
     Correct,
-    // This mode is meant to be mostly synchronized with `Correct` but may reduce or simplify the total algorithm.
-    // Its purpose is for use during refactoring/development, as a target for `ModB`.
+    // This mode is meant to be mostly synchronized with `Correct` but may reduce or simplify the work performed by the algorithm, if not the code implementing.
+    // Its purpose is for use during refactoring/development.
     OptimizedDynamic,
     // Consumes statically pre-processed constants for simplest operation.
     OptimizedStatic,
@@ -234,8 +234,7 @@ where
     ///
     /// The returned element is the second poseidon element, the first is the arity tag.
     pub fn hash_correct(&mut self) -> E::Fr {
-        // This counter is incremented when a round constants is read. Therefore, the round constants never
-        // repeat
+        // This counter is incremented when a round constants is read. Therefore, the round constants never repeat.
         // The first full round should use the initial constants.
         self.full_round();
 
@@ -243,7 +242,6 @@ where
             self.full_round();
         }
 
-        // Constants were added in the previous full round, so skip them here (false argument).
         self.partial_round();
 
         for _ in 1..self.constants.partial_rounds {
@@ -265,7 +263,6 @@ where
             self.full_round_dynamic(false, true);
         }
 
-        // Constants were added in the previous full round, so skip them here (false argument).
         self.partial_round_dynamic();
 
         for _ in 1..self.constants.partial_rounds {
@@ -309,9 +306,6 @@ where
     }
 
     pub fn full_round(&mut self) {
-        // NOTE: decrease in performance is expected during this refactoring.
-        // We seek to preserve correctness while transforming the algorithm to an eventually more performant one.
-
         // Apply the quintic S-Box to all elements, after adding the round key.
         // Round keys are added in the S-box to match circuits (where the addition is free)
         // and in preparation for the shift to adding round keys after (rather than before) applying the S-box.
@@ -500,7 +494,7 @@ where
     }
 
     /// For every leaf, add the round constants with index defined by the constants offset, and increment the
-    /// offset
+    /// offset.
     fn add_round_constants(&mut self) {
         for (element, round_constant) in self.elements.iter_mut().zip(
             self.constants
@@ -680,8 +674,6 @@ mod tests {
         Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>>,
         Add1<Arity>: ArrayLength<<Bls12 as ScalarEngine>::Fr>,
     {
-        // NOTE: For now, type parameters on constants, p, and in the final assertion below need to be updated manually when testing different arities.
-        // TODO: Mechanism to run all tests every time. (Previously only a single arity was compiled in.)
         let constants = PoseidonConstants::<Bls12, Arity>::new();
         let mut p = Poseidon::<Bls12, Arity>::new(&constants);
         let mut p2 = Poseidon::<Bls12, Arity>::new(&constants);
@@ -769,8 +761,6 @@ mod tests {
 
     #[test]
     fn hash_compare_optimized() {
-        // NOTE: For now, type parameters on constants, p, and in the final assertion below need to be updated manually when testing different arities.
-        // TODO: Mechanism to run all tests every time. (Previously only a single arity was compiled in.)
         let constants = PoseidonConstants::<Bls12, U2>::new();
         let mut p = Poseidon::<Bls12, U2>::new(&constants);
         let test_arity = constants.arity();
