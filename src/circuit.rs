@@ -109,7 +109,6 @@ where
     Arity: typenum::Unsigned
         + std::ops::Add<typenum::bit::B1>
         + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
-    typenum::Add1<Arity>: ArrayLength<E::Fr>,
 {
     constants_offset: usize,
     width: usize,
@@ -127,7 +126,6 @@ where
     Arity: typenum::Unsigned
         + std::ops::Add<typenum::bit::B1>
         + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
-    typenum::Add1<Arity>: ArrayLength<E::Fr>,
 {
     /// Create a new Poseidon hasher for `preimage`.
     pub fn new(
@@ -350,7 +348,6 @@ where
     Arity: typenum::Unsigned
         + std::ops::Add<typenum::bit::B1>
         + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
-    typenum::Add1<Arity>: ArrayLength<E::Fr>,
 {
     // Add the arity tag to the front of the preimage.
     let tag = constants.arity_tag;

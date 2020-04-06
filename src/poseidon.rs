@@ -40,7 +40,6 @@ pub struct PoseidonConstants<E, Arity>
 where
     E: ScalarEngine,
     Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>>,
-    Add1<Arity>: ArrayLength<E::Fr>,
 {
     pub mds_matrices: MDSMatrices<E>,
     pub round_constants: Vec<E::Fr>,
@@ -73,7 +72,6 @@ impl<'a, E, Arity> PoseidonConstants<E, Arity>
 where
     E: ScalarEngine,
     Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>>,
-    Add1<Arity>: ArrayLength<E::Fr>,
 {
     pub fn new() -> Self {
         let arity = Arity::to_usize();
@@ -130,7 +128,7 @@ where
     /// Returns the width.
     #[inline]
     pub fn width(&self) -> usize {
-        Add1::<Arity>::to_usize()
+        Arity::to_usize() + 1
     }
 }
 
