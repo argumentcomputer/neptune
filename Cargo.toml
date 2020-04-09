@@ -18,6 +18,9 @@ generic-array = "0.13.2"
 paired = "0.17.0"
 rand_xorshift = "0.2.0"
 
+#[cfg(feature="gpu")]
+triton = { git = "https://github.com/filecoin-project/neptune-triton", default-features=false, features=["opencl"] }
+
 [dev-dependencies]
 criterion = "0.3"
 rand = "0.7.0"
