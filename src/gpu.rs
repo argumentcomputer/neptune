@@ -107,6 +107,7 @@ fn array_u64_3d_from_frs_2d(
 
     let d1 = l as i64;
     let dim = [d1, d2, d3];
+    dbg!(&dim);
     Array_u64_3d::from_vec(*ctx, u64s.as_slice(), &dim)
         .map_err(|e| Error::Other(format!("error converting Frs 2d: {:?}", e).to_string()))
 }
@@ -174,7 +175,7 @@ pub fn hash_binary(preimage: [Fr; 2]) -> Result<Fr, Error>
 where
 {
     let mut ctx = FutharkContext::new();
-    let constants = GPUConstants(PoseidonConstants::<Bls12, U2>::new()); // TODO: make this a method.
+    let constants = GPUConstants(PoseidonConstants::<Bls12, U2>::new());
     let state = ctx
         .init2(
             constants.arity_tag(&ctx)?,
@@ -223,5 +224,21 @@ mod tests {
             "GPU result ({:?}) differed from CPU ({:?}) result).",
             gpu_res, cpu_res
         );
+    }
+
+    #[test]
+    fn test_debug_init2() {
+        let mut ctx = FutharkContext::new();
+        let constants = GPUConstants(PoseidonConstants::<Bls12, U2>::new()); // TODO: make this a method.
+        let state = ctx
+            .debug_init2(
+                constants.arity_tag(&ctx).unwrap(),
+                constants.round_keys(&ctx).unwrap(),
+                constants.mds_matrix(&ctx).unwrap(),
+                constants.pre_sparse_matrix(&ctx).unwrap(),
+                constants.sparse_matrixes(&ctx).unwrap(),
+            )
+            .map_err(|e| Error::GPUError(format!("{:?}", e)))
+            .unwrap();
     }
 }
