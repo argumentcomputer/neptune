@@ -33,11 +33,11 @@ where
         }
     }
 
-    pub fn add_columns(columns: &[E::Fr]) {
+    pub fn add_columns(&mut self, columns: &[E::Fr]) {
         unimplemented!();
     }
 
-    pub fn add_final_columns(columns: &[E::Fr]) -> Vec<E::Fr> {
+    pub fn add_final_columns(&mut self, columns: &[E::Fr]) -> Vec<E::Fr> {
         unimplemented!();
     }
 }
