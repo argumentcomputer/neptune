@@ -20,8 +20,8 @@ rand_xorshift = "0.2.0"
 
 #[cfg(feature="gpu")]
 #triton = { package = "neptune-triton", version = "0.1.1", default-features = false, features = ["opencl"] }
-#triton = { git = "https://github.com/filecoin-project/neptune-triton", default-features=false, features=["opencl"] }
-triton = { path = "/Users/clwk/filecoin-project/neptune-triton/library/triton", default-features=false, features=["opencl"] }
+#triton = { git = "https://github.com/filecoin-project/neptune-triton", default-features=false, features=["sequential_c"], branch="linux-codegen" }
+triton = { path = "/Users/clwk/filecoin-project/neptune-triton/library/triton", default-features=false, features=["sequential_c"] }
 #triton = { path = "/Users/clwk/filecoin-project/neptune-triton/library/triton", default-features=false, features=["no_futhark"] }
 
 [dev-dependencies]
