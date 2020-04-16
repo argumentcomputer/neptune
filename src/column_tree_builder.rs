@@ -118,18 +118,15 @@ where
 
         while current_row_size >= 1 {
             tree_size += current_row_size;
-            assert_eq!(
-                0,
-                current_row_size % arity,
-                "Tree leaf count does not have a power of arity as a factor."
-            );
+            if current_row_size != 1 {
+                assert_eq!(
+                    0,
+                    current_row_size % arity,
+                    "Tree leaf count does not have a power of arity as a factor."
+                );
+            }
             current_row_size /= arity;
         }
-
-        assert_eq!(
-            1, current_row_size,
-            "Final row of tree was not the root: tree leaf count was not a power of arity."
-        );
 
         tree_size
     }
