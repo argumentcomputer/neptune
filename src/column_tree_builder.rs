@@ -110,7 +110,7 @@ where
         Ok(tree_data)
     }
 
-    fn tree_size(&self) -> usize {
+    pub fn tree_size(&self) -> usize {
         let arity = TreeArity::to_usize();
 
         let mut tree_size = 0;
