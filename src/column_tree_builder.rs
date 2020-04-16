@@ -1,25 +1,23 @@
 use crate::error::Error;
-use crate::poseidon::poseidon;
+use crate::poseidon::{Poseidon, PoseidonConstants};
 use ff::{Field, ScalarEngine};
 use generic_array::{typenum, ArrayLength, GenericArray};
-use std::marker::PhantomData;
 use std::ops::Add;
 use typenum::bit::B1;
-use typenum::marker_traits::Unsigned;
 use typenum::uint::{UInt, UTerm};
 
 pub struct ColumnTreeBuilder<E, ColumnArity, TreeArity>
 where
     E: ScalarEngine,
     ColumnArity: ArrayLength<E::Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
-    TreeArity: Unsigned,
+    TreeArity: ArrayLength<E::Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
 {
     leaf_count: usize,
     data: Vec<E::Fr>,
     /// Index of the first unfilled datum.
     fill_index: usize,
-    _c: PhantomData<ColumnArity>,
-    _t: PhantomData<TreeArity>,
+    column_constants: PoseidonConstants<E, ColumnArity>,
+    tree_constants: PoseidonConstants<E, TreeArity>,
 }
 
 impl<E, ColumnArity, TreeArity> ColumnTreeBuilder<E, ColumnArity, TreeArity>
@@ -35,8 +33,8 @@ where
             leaf_count,
             data: vec![E::Fr::zero(); leaf_count],
             fill_index: 0,
-            _c: PhantomData::<ColumnArity>,
-            _t: PhantomData::<TreeArity>,
+            column_constants: PoseidonConstants::<E, ColumnArity>::new(),
+            tree_constants: PoseidonConstants::<E, TreeArity>::new(),
         };
 
         // This will panic if leaf_count is not compatible with tree arity.
@@ -58,12 +56,10 @@ where
             return Err(Error::Other("too many columns".to_string()));
         }
 
-        columns
-            .iter()
-            .zip(self.data[start..end].iter_mut())
-            .for_each(
-                |(column, place)| *place = poseidon::<E, ColumnArity>(&column), // FIXME: create and use a hasher!
-            );
+        columns.iter().enumerate().for_each(|(i, column)| {
+            self.data[start + i] =
+                Poseidon::new_with_preimage(&column, &self.column_constants).hash();
+        });
 
         self.fill_index += column_count;
 
@@ -105,7 +101,8 @@ where
         let (mut start, mut end) = (0, arity);
 
         for i in self.leaf_count..tree_size {
-            tree_data[i] = poseidon::<E, TreeArity>(&tree_data[start..end]);
+            tree_data[i] =
+                Poseidon::new_with_preimage(&tree_data[start..end], &self.tree_constants).hash();
             start += arity;
             end += arity;
         }
