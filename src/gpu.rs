@@ -191,7 +191,7 @@ where
     unpack_fr_array((vec, shape.as_slice())).map(|frs| frs[0])
 }
 
-type p2_state = triton::FutharkOpaqueF51E26B8;
+type p2_state = triton::FutharkOpaqueP2State;
 
 fn test_binary_get_state(ctx: &mut FutharkContext) -> Result<p2_state, Error> {
     let constants = GPUConstants(PoseidonConstants::<Bls12, U2>::new());
@@ -242,17 +242,20 @@ mod tests {
 
     #[test]
     fn test_hash_binary() {
-        let a = Fr::zero();
-        let b = Fr::zero();
-        let preimage = [a, b];
-        let cpu_res = poseidon::<Bls12, U2>(&preimage);
-        let gpu_res = hash_binary(preimage).unwrap();
+        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
+        for i in 0..100 {
+            let a = Fr::random(&mut rng);
+            let b = Fr::random(&mut rng);
+            let preimage = [a, b];
+            let cpu_res = poseidon::<Bls12, U2>(&preimage);
+            let gpu_res = hash_binary(preimage).unwrap();
 
-        assert_eq!(
-            cpu_res, gpu_res,
-            "GPU result ({:?}) differed from CPU ({:?}) result).",
-            gpu_res, cpu_res
-        );
+            assert_eq!(
+                cpu_res, gpu_res,
+                "GPU result ({:?}) differed from CPU ({:?}) result).",
+                gpu_res, cpu_res
+            );
+        }
     }
 
     #[test]
@@ -287,7 +290,7 @@ mod tests {
     fn test_debug_init2() {
         let mut ctx = FutharkContext::new();
         let constants = GPUConstants(PoseidonConstants::<Bls12, U2>::new()); // TODO: make this a method.
-        let state = ctx
+        let _state = ctx
             .debug_init2(
                 constants.arity_tag(&ctx).unwrap(),
                 constants.round_keys(&ctx).unwrap(),
