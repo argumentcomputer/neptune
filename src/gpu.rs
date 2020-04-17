@@ -261,7 +261,7 @@ mod tests {
 
         let mut ctx = FutharkContext::new();
 
-        for i in 0..100000 {
+        for i in 0..100 {
             let a = Fr::random(&mut rng);
             let b = Fr::random(&mut rng);
             let c = Fr::random(&mut rng);
