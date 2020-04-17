@@ -191,7 +191,7 @@ where
     unpack_fr_array((vec, shape.as_slice())).map(|frs| frs[0])
 }
 
-type p2_state = triton::FutharkOpaque9B6Df2Ea;
+type p2_state = triton::FutharkOpaqueF51E26B8;
 
 fn test_binary_get_state(ctx: &mut FutharkContext) -> Result<p2_state, Error> {
     let constants = GPUConstants(PoseidonConstants::<Bls12, U2>::new());
