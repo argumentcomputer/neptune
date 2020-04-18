@@ -1,10 +1,15 @@
 use crate::error::Error;
+use crate::gpu;
 use crate::poseidon::{Poseidon, PoseidonConstants};
+
 use ff::{Field, ScalarEngine};
 use generic_array::{typenum, ArrayLength, GenericArray};
 use std::ops::Add;
 use typenum::bit::B1;
 use typenum::uint::{UInt, UTerm};
+
+pub type GPUColumnTreeBuilder<ColumnArity, TreeArity> =
+    gpu::ColumnTreeBuilder2k<ColumnArity, TreeArity>;
 
 pub trait ColumnTreeBuilderTrait<E, ColumnArity, TreeArity>
 where
@@ -15,15 +20,12 @@ where
     <TreeArity as Add<B1>>::Output: ArrayLength<E::Fr>,
 {
     fn new(leaf_count: usize) -> Self;
-    fn add_columns(&mut self, columns: &[GenericArray<E::Fr, ColumnArity>])
-        -> Result<usize, Error>;
+    fn add_columns(&mut self, columns: &[GenericArray<E::Fr, ColumnArity>]) -> Result<(), Error>;
     fn add_final_columns(
         &mut self,
         columns: &[GenericArray<E::Fr, ColumnArity>],
     ) -> Result<Vec<E::Fr>, Error>;
     fn reset(&mut self);
-    fn build_tree(&self) -> Result<Vec<E::Fr>, Error>;
-    fn tree_size(&self) -> usize;
 }
 
 pub struct ColumnTreeBuilder<E, ColumnArity, TreeArity>
@@ -65,10 +67,7 @@ where
         builder
     }
 
-    fn add_columns(
-        &mut self,
-        columns: &[GenericArray<E::Fr, ColumnArity>],
-    ) -> Result<usize, Error> {
+    fn add_columns(&mut self, columns: &[GenericArray<E::Fr, ColumnArity>]) -> Result<(), Error> {
         let start = self.fill_index;
         let column_count = columns.len();
         let end = start + column_count;
@@ -84,19 +83,14 @@ where
 
         self.fill_index += column_count;
 
-        Ok(self.leaf_count - self.fill_index)
+        Ok(())
     }
 
     fn add_final_columns(
         &mut self,
         columns: &[GenericArray<E::Fr, ColumnArity>],
     ) -> Result<Vec<E::Fr>, Error> {
-        let columns_remaining = self.add_columns(columns)?;
-
-        if columns_remaining != 0 {
-            // We could make this an error, but as long as data is initialized to zero at each reset,
-            // early finalization is equivalent to zero-padding.
-        }
+        self.add_columns(columns)?;
 
         let tree = self.build_tree();
         self.reset();
@@ -110,7 +104,16 @@ where
             .iter_mut()
             .for_each(|place| *place = E::Fr::zero());
     }
+}
 
+impl<E, ColumnArity, TreeArity> ColumnTreeBuilder<E, ColumnArity, TreeArity>
+where
+    E: ScalarEngine,
+    ColumnArity: ArrayLength<E::Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
+    <ColumnArity as Add<B1>>::Output: ArrayLength<E::Fr>,
+    TreeArity: ArrayLength<E::Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
+    <TreeArity as Add<B1>>::Output: ArrayLength<E::Fr>,
+{
     fn build_tree(&self) -> Result<Vec<E::Fr>, Error> {
         let tree_size = self.tree_size();
         let arity = TreeArity::to_usize();

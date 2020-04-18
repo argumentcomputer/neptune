@@ -1,9 +1,11 @@
+use crate::column_tree_builder::ColumnTreeBuilderTrait;
 use crate::error::Error;
 use crate::poseidon::PoseidonConstants;
-use ff::{PrimeField, PrimeFieldDecodingError};
+use ff::{PrimeField, PrimeFieldDecodingError, ScalarEngine};
 use generic_array::{typenum, ArrayLength, GenericArray};
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use slice_of_array::prelude::*;
+use std::marker::PhantomData;
 use std::ops::Add;
 use triton::FutharkContext;
 use triton::{Array_u64_1d, Array_u64_2d, Array_u64_3d};
@@ -211,6 +213,47 @@ fn test_binary_get_state(ctx: &mut FutharkContext) -> Result<P2State, Error> {
 
 type CTB2kState = triton::FutharkOpaqueCtb2KState;
 
+pub struct ColumnTreeBuilder2k<U11, U8>
+where
+// ColumnArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
+// TreeArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
+{
+    ctx: FutharkContext,
+    state: CTB2kState,
+    _c: PhantomData<U11>,
+    _t: PhantomData<U8>,
+}
+
+impl ColumnTreeBuilderTrait<Bls12, U11, U8> for ColumnTreeBuilder2k<U11, U8> {
+    fn new(leaf_count: usize) -> Self {
+        assert_eq!(64, leaf_count);
+        let mut ctx = FutharkContext::new();
+        let state = init_column_tree_builder_2k(&mut ctx).unwrap();
+
+        Self {
+            ctx,
+            state,
+            _c: PhantomData::<U11>,
+            _t: PhantomData::<U8>,
+        }
+    }
+
+    fn add_columns(&mut self, columns: &[GenericArray<Fr, U11>]) -> Result<(), Error> {
+        add_columns_2k(&mut self.ctx, self.state.clone(), columns);
+
+        Ok(())
+    }
+
+    fn add_final_columns(&mut self, columns: &[GenericArray<Fr, U11>]) -> Result<Vec<Fr>, Error> {
+        finalize_2k(&mut self.ctx, self.state.clone())
+    }
+
+    fn reset(&mut self) {
+        unimplemented!();
+        // FIXME: Add entry point.
+    }
+}
+
 fn init_column_tree_builder_2k(ctx: &mut FutharkContext) -> Result<CTB2kState, Error> {
     let column_constants = GPUConstants(PoseidonConstants::<Bls12, U11>::new());
     let tree_constants = GPUConstants(PoseidonConstants::<Bls12, U8>::new());
@@ -247,9 +290,9 @@ fn as_u64s<'a, U: ArrayLength<Fr>>(vec: &'a [GenericArray<Fr, U>]) -> &'a [u64] 
 fn add_columns_2k(
     ctx: &mut FutharkContext,
     state: CTB2kState,
-    columns: Vec<GenericArray<Fr, U11>>,
+    columns: &[GenericArray<Fr, U11>],
 ) -> Result<CTB2kState, Error> {
-    let flat_columns = as_u64s(&columns);
+    let flat_columns = as_u64s(columns);
     ctx.add_columns_2k(
         state,
         columns.len() as i32,
