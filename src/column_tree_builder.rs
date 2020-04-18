@@ -6,6 +6,26 @@ use std::ops::Add;
 use typenum::bit::B1;
 use typenum::uint::{UInt, UTerm};
 
+pub trait ColumnTreeBuilderTrait<E, ColumnArity, TreeArity>
+where
+    E: ScalarEngine,
+    ColumnArity: ArrayLength<E::Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
+    <ColumnArity as Add<B1>>::Output: ArrayLength<E::Fr>,
+    TreeArity: ArrayLength<E::Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
+    <TreeArity as Add<B1>>::Output: ArrayLength<E::Fr>,
+{
+    fn new(leaf_count: usize) -> Self;
+    fn add_columns(&mut self, columns: &[GenericArray<E::Fr, ColumnArity>])
+        -> Result<usize, Error>;
+    fn add_final_columns(
+        &mut self,
+        columns: &[GenericArray<E::Fr, ColumnArity>],
+    ) -> Result<Vec<E::Fr>, Error>;
+    fn reset(&mut self);
+    fn build_tree(&self) -> Result<Vec<E::Fr>, Error>;
+    fn tree_size(&self) -> usize;
+}
+
 pub struct ColumnTreeBuilder<E, ColumnArity, TreeArity>
 where
     E: ScalarEngine,
@@ -20,7 +40,8 @@ where
     tree_constants: PoseidonConstants<E, TreeArity>,
 }
 
-impl<E, ColumnArity, TreeArity> ColumnTreeBuilder<E, ColumnArity, TreeArity>
+impl<E, ColumnArity, TreeArity> ColumnTreeBuilderTrait<E, ColumnArity, TreeArity>
+    for ColumnTreeBuilder<E, ColumnArity, TreeArity>
 where
     E: ScalarEngine,
     ColumnArity: ArrayLength<E::Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
@@ -28,7 +49,7 @@ where
     TreeArity: ArrayLength<E::Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
     <TreeArity as Add<B1>>::Output: ArrayLength<E::Fr>,
 {
-    pub fn new(leaf_count: usize) -> Self {
+    fn new(leaf_count: usize) -> Self {
         let builder = Self {
             leaf_count,
             data: vec![E::Fr::zero(); leaf_count],
@@ -44,7 +65,7 @@ where
         builder
     }
 
-    pub fn add_columns(
+    fn add_columns(
         &mut self,
         columns: &[GenericArray<E::Fr, ColumnArity>],
     ) -> Result<usize, Error> {
@@ -66,7 +87,7 @@ where
         Ok(self.leaf_count - self.fill_index)
     }
 
-    pub fn add_final_columns(
+    fn add_final_columns(
         &mut self,
         columns: &[GenericArray<E::Fr, ColumnArity>],
     ) -> Result<Vec<E::Fr>, Error> {
@@ -83,7 +104,7 @@ where
         tree
     }
 
-    pub fn reset(&mut self) {
+    fn reset(&mut self) {
         self.fill_index = 0;
         self.data
             .iter_mut()
@@ -110,7 +131,7 @@ where
         Ok(tree_data)
     }
 
-    pub fn tree_size(&self) -> usize {
+    fn tree_size(&self) -> usize {
         let arity = TreeArity::to_usize();
 
         let mut tree_size = 0;

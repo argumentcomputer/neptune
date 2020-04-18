@@ -1,13 +1,14 @@
 use crate::error::Error;
 use crate::poseidon::PoseidonConstants;
 use ff::{PrimeField, PrimeFieldDecodingError};
-use generic_array::typenum;
+use generic_array::{typenum, ArrayLength, GenericArray};
 use paired::bls12_381::{Bls12, Fr, FrRepr};
+use slice_of_array::prelude::*;
 use std::ops::Add;
 use triton::FutharkContext;
 use triton::{Array_u64_1d, Array_u64_2d, Array_u64_3d};
 use typenum::bit::B1;
-use typenum::{UInt, UTerm, Unsigned, U2};
+use typenum::{UInt, UTerm, Unsigned, U11, U2, U8};
 
 struct GPUConstants<Arity>(PoseidonConstants<Bls12, Arity>)
 where
@@ -162,10 +163,10 @@ fn simple11(n: i32) -> Result<Vec<Fr>, Error> {
     unpack_fr_array((vec.to_vec(), shape.as_slice()))
 }
 
-pub fn hash_binary(preimage: [Fr; 2]) -> Result<Fr, Error>
+pub fn hash_binary(ctx: &mut FutharkContext, preimage: [Fr; 2]) -> Result<Fr, Error>
 where
 {
-    let mut ctx = FutharkContext::new();
+    // TODO: Don't recreate state each time (will require changing entry point to return new state)
     let constants = GPUConstants(PoseidonConstants::<Bls12, U2>::new());
     let state = ctx
         .init2(
@@ -182,7 +183,7 @@ where
     let (vec, shape) = ctx
         .hash2(
             state,
-            Array_u64_1d::from_vec(ctx, &preimage_u64s, &[8, 1])
+            Array_u64_1d::from_vec(*ctx, &preimage_u64s, &[8, 1])
                 .map_err(|_| Error::Other("could not convert".to_string()))?,
         )
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?
@@ -191,9 +192,9 @@ where
     unpack_fr_array((vec, shape.as_slice())).map(|frs| frs[0])
 }
 
-type p2_state = triton::FutharkOpaqueP2State;
+type P2State = triton::FutharkOpaqueP2State;
 
-fn test_binary_get_state(ctx: &mut FutharkContext) -> Result<p2_state, Error> {
+fn test_binary_get_state(ctx: &mut FutharkContext) -> Result<P2State, Error> {
     let constants = GPUConstants(PoseidonConstants::<Bls12, U2>::new());
     let state = ctx
         .init2(
@@ -206,6 +207,66 @@ fn test_binary_get_state(ctx: &mut FutharkContext) -> Result<p2_state, Error> {
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
     Ok(state)
+}
+
+type CTB2kState = triton::FutharkOpaqueCtb2KState;
+
+fn init_column_tree_builder_2k(ctx: &mut FutharkContext) -> Result<CTB2kState, Error> {
+    let column_constants = GPUConstants(PoseidonConstants::<Bls12, U11>::new());
+    let tree_constants = GPUConstants(PoseidonConstants::<Bls12, U8>::new());
+
+    let state = ctx
+        .init_2k(
+            tree_constants.arity_tag(&ctx)?,
+            tree_constants.round_keys(&ctx)?,
+            tree_constants.mds_matrix(&ctx)?,
+            tree_constants.pre_sparse_matrix(&ctx)?,
+            tree_constants.sparse_matrixes(&ctx)?,
+            column_constants.arity_tag(&ctx)?,
+            column_constants.round_keys(&ctx)?,
+            column_constants.mds_matrix(&ctx)?,
+            column_constants.pre_sparse_matrix(&ctx)?,
+            column_constants.sparse_matrixes(&ctx)?,
+        )
+        .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+
+    Ok(state)
+}
+
+fn as_u64s<'a, U: ArrayLength<Fr>>(vec: &'a [GenericArray<Fr, U>]) -> &'a [u64] {
+    let fr_size = 4 * std::mem::size_of::<u64>();
+    assert_eq!(std::mem::size_of::<Fr>(), fr_size, "fr size changed");
+    unsafe {
+        std::slice::from_raw_parts(
+            vec.as_ptr() as *const () as *const u64,
+            vec.len() * fr_size * U::to_usize(),
+        )
+    }
+}
+
+fn add_columns_2k(
+    ctx: &mut FutharkContext,
+    state: CTB2kState,
+    columns: Vec<GenericArray<Fr, U11>>,
+) -> Result<CTB2kState, Error> {
+    let flat_columns = as_u64s(&columns);
+    ctx.add_columns_2k(
+        state,
+        columns.len() as i32,
+        Array_u64_1d::from_vec(*ctx, &flat_columns, &[flat_columns.len() as i64, 1])
+            .map_err(|_| Error::Other("could not convert".to_string()))?,
+    )
+    .map_err(|e| Error::GPUError(format!("{:?}", e)))
+}
+
+fn finalize_2k(ctx: &mut FutharkContext, state: CTB2kState) -> Result<Vec<Fr>, Error> {
+    let (res, state) = ctx
+        .finalize_2k(state)
+        .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+
+    let (vec, shape) = res.to_vec();
+
+    unpack_fr_array((vec, shape.as_slice()))
 }
 
 fn test_binary(ctx: &mut FutharkContext, preimage: [Fr; 3]) -> Result<Fr, Error>
@@ -243,12 +304,14 @@ mod tests {
     #[test]
     fn test_hash_binary() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
+        let mut ctx = FutharkContext::new();
+
         for i in 0..100 {
             let a = Fr::random(&mut rng);
             let b = Fr::random(&mut rng);
             let preimage = [a, b];
             let cpu_res = poseidon::<Bls12, U2>(&preimage);
-            let gpu_res = hash_binary(preimage).unwrap();
+            let gpu_res = hash_binary(&mut ctx, preimage).unwrap();
 
             assert_eq!(
                 cpu_res, gpu_res,
@@ -284,21 +347,5 @@ mod tests {
                 gpu_res, cpu_res
             );
         }
-    }
-
-    #[test]
-    fn test_debug_init2() {
-        let mut ctx = FutharkContext::new();
-        let constants = GPUConstants(PoseidonConstants::<Bls12, U2>::new()); // TODO: make this a method.
-        let _state = ctx
-            .debug_init2(
-                constants.arity_tag(&ctx).unwrap(),
-                constants.round_keys(&ctx).unwrap(),
-                constants.mds_matrix(&ctx).unwrap(),
-                constants.pre_sparse_matrix(&ctx).unwrap(),
-                constants.sparse_matrixes(&ctx).unwrap(),
-            )
-            .map_err(|e| Error::GPUError(format!("{:?}", e)))
-            .unwrap();
     }
 }
