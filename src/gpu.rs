@@ -1,16 +1,20 @@
 use crate::column_tree_builder::ColumnTreeBuilderTrait;
 use crate::error::Error;
-use crate::poseidon::PoseidonConstants;
+use crate::poseidon::{Poseidon, PoseidonConstants};
 use ff::{PrimeField, PrimeFieldDecodingError, ScalarEngine};
-use generic_array::{typenum, ArrayLength, GenericArray};
+use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
 use paired::bls12_381::{Bls12, Fr, FrRepr};
-use slice_of_array::prelude::*;
 use std::marker::PhantomData;
 use std::ops::Add;
+use take_mut::take;
 use triton::FutharkContext;
 use triton::{Array_u64_1d, Array_u64_2d, Array_u64_3d};
 use typenum::bit::B1;
 use typenum::{UInt, UTerm, Unsigned, U11, U2, U8};
+
+type P2State = triton::FutharkOpaqueP2State;
+type P8State = triton::FutharkOpaqueP8State;
+type P11State = triton::FutharkOpaqueP11State;
 
 struct GPUConstants<Arity>(PoseidonConstants<Bls12, Arity>)
 where
@@ -147,7 +151,9 @@ pub fn u64s_into_fr(limbs: &[u64]) -> Result<Fr, PrimeFieldDecodingError> {
 
 fn unpack_fr_array(vec_shape: (Vec<u64>, &[i64])) -> Result<Vec<Fr>, Error> {
     let (vec, shape) = vec_shape;
-    let chunk_size = shape[0] as usize;
+    dbg!(&shape);
+    //    let chunk_size = shape[0] as usize;
+    let chunk_size = shape[shape.len() - 1] as usize;
 
     vec.chunks(chunk_size)
         .map(|x| u64s_into_fr(x))
@@ -165,10 +171,81 @@ fn simple11(n: i32) -> Result<Vec<Fr>, Error> {
     unpack_fr_array((vec.to_vec(), shape.as_slice()))
 }
 
-pub fn hash_binary(ctx: &mut FutharkContext, preimage: [Fr; 2]) -> Result<Fr, Error>
+pub fn hash_binary(
+    ctx: &mut FutharkContext,
+    state: P2State,
+    preimage: [Fr; 2],
+) -> Result<(Fr, P2State), Error>
 where
 {
-    // TODO: Don't recreate state each time (will require changing entry point to return new state)
+    let preimage_u64s = frs_to_u64s(&preimage);
+    let (res, state) = ctx
+        .hash2(
+            state,
+            Array_u64_1d::from_vec(*ctx, &preimage_u64s, &[8, 1])
+                .map_err(|_| Error::Other("could not convert".to_string()))?,
+        )
+        .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+
+    let (vec, shape) = res.to_vec();
+
+    Ok((
+        unpack_fr_array((vec, shape.as_slice())).map(|frs| frs[0])?,
+        state,
+    ))
+}
+
+pub fn hash_oct(
+    ctx: &mut FutharkContext,
+    state: P8State,
+    preimage: Vec<Fr>,
+) -> Result<(Fr, P8State), Error>
+where
+{
+    let preimage_u64s = frs_to_u64s(&preimage);
+    dbg!(preimage_u64s.len());
+    let (res, state) = ctx
+        .hash8(
+            state,
+            Array_u64_1d::from_vec(*ctx, &preimage_u64s, &[32, 1])
+                .map_err(|_| Error::Other("could not convert".to_string()))?,
+        )
+        .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+
+    let (vec, shape) = res.to_vec();
+
+    Ok((
+        unpack_fr_array((vec, shape.as_slice())).map(|frs| frs[0])?,
+        state,
+    ))
+}
+
+pub fn hash_column(
+    ctx: &mut FutharkContext,
+    state: P11State,
+    preimage: Vec<Fr>,
+) -> Result<(Fr, P11State), Error>
+where
+{
+    let preimage_u64s = frs_to_u64s(&preimage);
+    dbg!(preimage_u64s.len());
+    let (res, state) = ctx
+        .hash11(
+            state,
+            Array_u64_1d::from_vec(*ctx, &preimage_u64s, &[44, 1])
+                .map_err(|_| Error::Other("could not convert".to_string()))?,
+        )
+        .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+
+    let (vec, shape) = res.to_vec();
+
+    Ok((
+        unpack_fr_array((vec, shape.as_slice())).map(|frs| frs[0])?,
+        state,
+    ))
+}
+
+fn init_hash2(ctx: &mut FutharkContext) -> Result<P2State, Error> {
     let constants = GPUConstants(PoseidonConstants::<Bls12, U2>::new());
     let state = ctx
         .init2(
@@ -180,26 +257,28 @@ where
         )
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
-    let preimage_u64s = frs_to_u64s(&preimage);
-
-    let (vec, shape) = ctx
-        .hash2(
-            state,
-            Array_u64_1d::from_vec(*ctx, &preimage_u64s, &[8, 1])
-                .map_err(|_| Error::Other("could not convert".to_string()))?,
-        )
-        .map_err(|e| Error::GPUError(format!("{:?}", e)))?
-        .to_vec();
-
-    unpack_fr_array((vec, shape.as_slice())).map(|frs| frs[0])
+    Ok(state)
 }
 
-type P2State = triton::FutharkOpaqueP2State;
-
-fn test_binary_get_state(ctx: &mut FutharkContext) -> Result<P2State, Error> {
-    let constants = GPUConstants(PoseidonConstants::<Bls12, U2>::new());
+fn init_hash8(ctx: &mut FutharkContext) -> Result<P8State, Error> {
+    let constants = GPUConstants(PoseidonConstants::<Bls12, U8>::new());
     let state = ctx
-        .init2(
+        .init8(
+            constants.arity_tag(&ctx)?,
+            constants.round_keys(&ctx)?,
+            constants.mds_matrix(&ctx)?,
+            constants.pre_sparse_matrix(&ctx)?,
+            constants.sparse_matrixes(&ctx)?,
+        )
+        .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+
+    Ok(state)
+}
+
+fn init_hash11(ctx: &mut FutharkContext) -> Result<P11State, Error> {
+    let constants = GPUConstants(PoseidonConstants::<Bls12, U11>::new());
+    let state = ctx
+        .init11(
             constants.arity_tag(&ctx)?,
             constants.round_keys(&ctx)?,
             constants.mds_matrix(&ctx)?,
@@ -224,6 +303,21 @@ where
     _t: PhantomData<U8>,
 }
 
+// impl ColumnTreeBuilderTrait<Bls12, U11, U8> for CTB2kState {
+//     fn new(leaf_count: usize) -> Self {
+//         assert_eq!(64, leaf_count);
+//         let mut ctx = FutharkContext::new();
+//         state = init_column_tree_builder_2k(&mut ctx).unwrap()
+//     }
+
+//     fn add_columns(&mut self, columns: &[GenericArray<Fr, U11>]) -> Result<(), Error> {
+//         self. = add_columns_2k(&mut self.ctx, self.state, columns)?;
+
+//         Ok(())
+//     }
+
+// }
+
 impl ColumnTreeBuilderTrait<Bls12, U11, U8> for ColumnTreeBuilder2k<U11, U8> {
     fn new(leaf_count: usize) -> Self {
         assert_eq!(64, leaf_count);
@@ -239,13 +333,30 @@ impl ColumnTreeBuilderTrait<Bls12, U11, U8> for ColumnTreeBuilder2k<U11, U8> {
     }
 
     fn add_columns(&mut self, columns: &[GenericArray<Fr, U11>]) -> Result<(), Error> {
-        add_columns_2k(&mut self.ctx, self.state.clone(), columns);
+        let mut ctx = self.ctx;
+        take(&mut self.state, |state| {
+            panic!("poiu");
+            add_columns_2k(&mut ctx, state, columns).unwrap()
+            // FIXME: don't unwrap
+        });
 
         Ok(())
     }
 
     fn add_final_columns(&mut self, columns: &[GenericArray<Fr, U11>]) -> Result<Vec<Fr>, Error> {
-        finalize_2k(&mut self.ctx, self.state.clone())
+        let mut ctx = self.ctx;
+        let mut res = Vec::new();
+        let mut set_res = |r| res = r;
+
+        take(&mut self.state, |state| {
+            let (res, new_state) = finalize_2k(&mut ctx, state).unwrap(); // FIXME: don't unwrap
+            set_res(res);
+            new_state
+        });
+        // let (res, state) = finalize_2k(&mut self.ctx, self.state)?;
+        // self.state = state;
+
+        Ok(res)
     }
 
     fn reset(&mut self) {
@@ -277,8 +388,12 @@ fn init_column_tree_builder_2k(ctx: &mut FutharkContext) -> Result<CTB2kState, E
 }
 
 fn as_u64s<'a, U: ArrayLength<Fr>>(vec: &'a [GenericArray<Fr, U>]) -> &'a [u64] {
-    let fr_size = 4 * std::mem::size_of::<u64>();
-    assert_eq!(std::mem::size_of::<Fr>(), fr_size, "fr size changed");
+    let fr_size = 4; // * std::mem::size_of::<u64>();
+    assert_eq!(
+        fr_size * std::mem::size_of::<u64>(),
+        std::mem::size_of::<Fr>(),
+        "fr size changed"
+    );
     unsafe {
         std::slice::from_raw_parts(
             vec.as_ptr() as *const () as *const u64,
@@ -287,29 +402,42 @@ fn as_u64s<'a, U: ArrayLength<Fr>>(vec: &'a [GenericArray<Fr, U>]) -> &'a [u64] 
     }
 }
 
+fn u64_vec<'a, U: ArrayLength<Fr>>(vec: &'a [GenericArray<Fr, U>]) -> Vec<u64> {
+    vec![0; vec.len() * U::to_usize() * std::mem::size_of::<Fr>()]
+}
+
 fn add_columns_2k(
     ctx: &mut FutharkContext,
     state: CTB2kState,
     columns: &[GenericArray<Fr, U11>],
 ) -> Result<CTB2kState, Error> {
     let flat_columns = as_u64s(columns);
+    dbg!(&flat_columns.len());
+    // let flat_columns = u64_vec(columns);
+
+    // let x = Array_u64_1d::from_vec(*ctx, &flat_columns, &[flat_columns.len() as i64, 1])
+    //     .map_err(|_| Error::Other("could not convert".to_string()))?;
+
+    assert_eq!(flat_columns.len(), 4 * columns.len() * 11);
     ctx.add_columns_2k(
         state,
-        columns.len() as i32,
         Array_u64_1d::from_vec(*ctx, &flat_columns, &[flat_columns.len() as i64, 1])
             .map_err(|_| Error::Other("could not convert".to_string()))?,
     )
     .map_err(|e| Error::GPUError(format!("{:?}", e)))
 }
 
-fn finalize_2k(ctx: &mut FutharkContext, state: CTB2kState) -> Result<Vec<Fr>, Error> {
+fn finalize_2k(
+    ctx: &mut FutharkContext,
+    state: CTB2kState,
+) -> Result<(Vec<Fr>, CTB2kState), Error> {
     let (res, state) = ctx
         .finalize_2k(state)
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
     let (vec, shape) = res.to_vec();
-
-    unpack_fr_array((vec, shape.as_slice()))
+    let unpacked = unpack_fr_array((vec, shape.as_slice()))?;
+    Ok((unpacked, state))
 }
 
 fn test_binary(ctx: &mut FutharkContext, preimage: [Fr; 3]) -> Result<Fr, Error>
@@ -349,12 +477,62 @@ mod tests {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
         let mut ctx = FutharkContext::new();
 
-        for i in 0..100 {
+        let mut state = init_hash2(&mut ctx).unwrap();
+        let poseidon_constants = PoseidonConstants::<Bls12, U2>::new();
+
+        for i in 0..1000 {
             let a = Fr::random(&mut rng);
             let b = Fr::random(&mut rng);
             let preimage = [a, b];
-            let cpu_res = poseidon::<Bls12, U2>(&preimage);
-            let gpu_res = hash_binary(&mut ctx, preimage).unwrap();
+            let cpu_res = Poseidon::new_with_preimage(&preimage, &poseidon_constants).hash();
+            let (gpu_res, new_state) = hash_binary(&mut ctx, state, preimage).unwrap();
+            state = new_state;
+
+            assert_eq!(
+                cpu_res, gpu_res,
+                "GPU result ({:?}) differed from CPU ({:?}) result).",
+                gpu_res, cpu_res
+            );
+        }
+    }
+
+    #[test]
+    fn test_hash_oct() {
+        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
+        let mut ctx = FutharkContext::new();
+
+        let mut state = init_hash8(&mut ctx).unwrap();
+        let poseidon_constants = PoseidonConstants::<Bls12, U8>::new();
+
+        for i in 0..1000 {
+            let preimage: Vec<Fr> = (0..8).map(|_| Fr::random(&mut rng)).collect();
+
+            let cpu_res = Poseidon::new_with_preimage(&preimage, &poseidon_constants).hash();
+            let (gpu_res, new_state) = hash_oct(&mut ctx, state, preimage).unwrap();
+            state = new_state;
+
+            assert_eq!(
+                cpu_res, gpu_res,
+                "GPU result ({:?}) differed from CPU ({:?}) result).",
+                gpu_res, cpu_res
+            );
+        }
+    }
+
+    #[test]
+    fn test_hash_column() {
+        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
+        let mut ctx = FutharkContext::new();
+
+        let mut state = init_hash11(&mut ctx).unwrap();
+        let poseidon_constants = PoseidonConstants::<Bls12, U11>::new();
+
+        for i in 0..1000 {
+            let preimage: Vec<Fr> = (0..11).map(|_| Fr::random(&mut rng)).collect();
+
+            let cpu_res = Poseidon::new_with_preimage(&preimage, &poseidon_constants).hash();
+            let (gpu_res, new_state) = hash_column(&mut ctx, state, preimage).unwrap();
+            state = new_state;
 
             assert_eq!(
                 cpu_res, gpu_res,
@@ -390,5 +568,43 @@ mod tests {
                 gpu_res, cpu_res
             );
         }
+    }
+
+    #[test]
+    fn test_column_tree_builder_2k() {
+        unimplemented!(); // This currently fails with (signal: 6, SIGABRT: process abort signal)
+        let leaves = 64;
+        let mut ctb = ColumnTreeBuilder2k::new(64);
+
+        let columns: Vec<GenericArray<Fr, U11>> = (0..1)
+            .map(|_| GenericArray::<Fr, U11>::generate(|i| Fr::zero()))
+            .collect();
+
+        ctb.add_columns(columns.as_slice());
+    }
+    use crate::column_tree_builder::ColumnTreeBuilder;
+
+    #[test]
+    fn test_direct_column_tree_builder_2k() {
+        let leaves = 64;
+        let mut ctx = FutharkContext::new();
+        println!("start");
+        let mut cpu_builder = ColumnTreeBuilder::<Bls12, U11, U8>::new(leaves);
+        println!("initialized CPU");
+        let state = init_column_tree_builder_2k(&mut ctx).unwrap();
+        println!("initialize GPU");
+
+        let columns: Vec<GenericArray<Fr, U11>> = (0..leaves)
+            .map(|_| GenericArray::<Fr, U11>::generate(|i| Fr::zero()))
+            .collect();
+
+        let state = add_columns_2k(&mut ctx, state, columns.as_slice()).unwrap();
+        println!("added GPU columns");
+        let (res, state) = finalize_2k(&mut ctx, state).unwrap();
+        println!("finalized GPU");
+
+        let cpu_res = cpu_builder.add_final_columns(columns.as_slice()).unwrap();
+        assert_eq!(cpu_res.len(), res.len());
+        assert_eq!(cpu_res, res);
     }
 }

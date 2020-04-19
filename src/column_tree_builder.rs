@@ -8,8 +8,8 @@ use std::ops::Add;
 use typenum::bit::B1;
 use typenum::uint::{UInt, UTerm};
 
-pub type GPUColumnTreeBuilder<ColumnArity, TreeArity> =
-    gpu::ColumnTreeBuilder2k<ColumnArity, TreeArity>;
+// pub type GPUColumnTreeBuilder<ColumnArity, TreeArity> =
+//     gpu::ColumnTreeBuilder2k<ColumnArity, TreeArity>;
 
 pub trait ColumnTreeBuilderTrait<E, ColumnArity, TreeArity>
 where
