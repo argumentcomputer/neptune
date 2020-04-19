@@ -6,7 +6,6 @@ use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArra
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use std::marker::PhantomData;
 use std::ops::Add;
-use take_mut::take;
 use triton::FutharkContext;
 use triton::{Array_u64_1d, Array_u64_2d, Array_u64_3d};
 use typenum::bit::B1;
@@ -334,12 +333,13 @@ impl ColumnTreeBuilderTrait<Bls12, U11, U8> for ColumnTreeBuilder2k<U11, U8> {
 
     fn add_columns(&mut self, columns: &[GenericArray<Fr, U11>]) -> Result<(), Error> {
         let mut ctx = self.ctx;
-        take(&mut self.state, |state| {
-            panic!("poiu");
-            add_columns_2k(&mut ctx, state, columns).unwrap()
-            // FIXME: don't unwrap
-        });
+        // take(&mut self.state, |state| {
+        //     panic!("poiu");
+        //     add_columns_2k(&mut ctx, state, columns).unwrap()
+        //     // FIXME: don't unwrap
+        // });
 
+        // FIXME
         Ok(())
     }
 
@@ -348,11 +348,14 @@ impl ColumnTreeBuilderTrait<Bls12, U11, U8> for ColumnTreeBuilder2k<U11, U8> {
         let mut res = Vec::new();
         let mut set_res = |r| res = r;
 
-        take(&mut self.state, |state| {
-            let (res, new_state) = finalize_2k(&mut ctx, state).unwrap(); // FIXME: don't unwrap
-            set_res(res);
-            new_state
-        });
+        // take(&mut self.state, |state| {
+        //     let (res, new_state) = finalize_2k(&mut ctx, state).unwrap(); // FIXME: don't unwrap
+        //     set_res(res);
+        //     new_state
+        // });
+
+        // FIXME
+
         // let (res, state) = finalize_2k(&mut self.ctx, self.state)?;
         // self.state = state;
 
