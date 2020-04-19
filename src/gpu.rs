@@ -289,7 +289,8 @@ fn init_hash11(ctx: &mut FutharkContext) -> Result<P11State, Error> {
     Ok(state)
 }
 
-type CTB2kState = triton::FutharkOpaqueCtb2KState;
+type CTB2KState = triton::FutharkOpaqueCtb2KState;
+type CTB4GState = triton::FutharkOpaqueCtb4GState;
 
 pub struct ColumnTreeBuilder2k<U11, U8>
 where
@@ -297,12 +298,12 @@ where
 // TreeArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
 {
     ctx: FutharkContext,
-    state: CTB2kState,
+    state: CTB2KState,
     _c: PhantomData<U11>,
     _t: PhantomData<U8>,
 }
 
-// impl ColumnTreeBuilderTrait<Bls12, U11, U8> for CTB2kState {
+// impl ColumnTreeBuilderTrait<Bls12, U11, U8> for CTB2KState {
 //     fn new(leaf_count: usize) -> Self {
 //         assert_eq!(64, leaf_count);
 //         let mut ctx = FutharkContext::new();
@@ -368,12 +369,34 @@ impl ColumnTreeBuilderTrait<Bls12, U11, U8> for ColumnTreeBuilder2k<U11, U8> {
     }
 }
 
-fn init_column_tree_builder_2k(ctx: &mut FutharkContext) -> Result<CTB2kState, Error> {
+fn init_column_tree_builder_2k(ctx: &mut FutharkContext) -> Result<CTB2KState, Error> {
     let column_constants = GPUConstants(PoseidonConstants::<Bls12, U11>::new());
     let tree_constants = GPUConstants(PoseidonConstants::<Bls12, U8>::new());
 
     let state = ctx
         .init_2k(
+            tree_constants.arity_tag(&ctx)?,
+            tree_constants.round_keys(&ctx)?,
+            tree_constants.mds_matrix(&ctx)?,
+            tree_constants.pre_sparse_matrix(&ctx)?,
+            tree_constants.sparse_matrixes(&ctx)?,
+            column_constants.arity_tag(&ctx)?,
+            column_constants.round_keys(&ctx)?,
+            column_constants.mds_matrix(&ctx)?,
+            column_constants.pre_sparse_matrix(&ctx)?,
+            column_constants.sparse_matrixes(&ctx)?,
+        )
+        .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+
+    Ok(state)
+}
+
+fn init_column_tree_builder_4g(ctx: &mut FutharkContext) -> Result<CTB4GState, Error> {
+    let column_constants = GPUConstants(PoseidonConstants::<Bls12, U11>::new());
+    let tree_constants = GPUConstants(PoseidonConstants::<Bls12, U8>::new());
+
+    let state = ctx
+        .init_4g(
             tree_constants.arity_tag(&ctx)?,
             tree_constants.round_keys(&ctx)?,
             tree_constants.mds_matrix(&ctx)?,
@@ -411,9 +434,9 @@ fn u64_vec<'a, U: ArrayLength<Fr>>(vec: &'a [GenericArray<Fr, U>]) -> Vec<u64> {
 
 fn add_columns_2k(
     ctx: &mut FutharkContext,
-    state: CTB2kState,
+    state: CTB2KState,
     columns: &[GenericArray<Fr, U11>],
-) -> Result<CTB2kState, Error> {
+) -> Result<CTB2KState, Error> {
     let flat_columns = as_u64s(columns);
     dbg!(&flat_columns.len());
     // let flat_columns = u64_vec(columns);
@@ -432,10 +455,44 @@ fn add_columns_2k(
 
 fn finalize_2k(
     ctx: &mut FutharkContext,
-    state: CTB2kState,
-) -> Result<(Vec<Fr>, CTB2kState), Error> {
+    state: CTB2KState,
+) -> Result<(Vec<Fr>, CTB2KState), Error> {
     let (res, state) = ctx
         .finalize_2k(state)
+        .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+
+    let (vec, shape) = res.to_vec();
+    let unpacked = unpack_fr_array((vec, shape.as_slice()))?;
+    Ok((unpacked, state))
+}
+
+fn add_columns_4g(
+    ctx: &mut FutharkContext,
+    state: CTB4GState,
+    columns: &[GenericArray<Fr, U11>],
+) -> Result<CTB4GState, Error> {
+    let flat_columns = as_u64s(columns);
+    dbg!(&flat_columns.len());
+    // let flat_columns = u64_vec(columns);
+
+    // let x = Array_u64_1d::from_vec(*ctx, &flat_columns, &[flat_columns.len() as i64, 1])
+    //     .map_err(|_| Error::Other("could not convert".to_string()))?;
+
+    assert_eq!(flat_columns.len(), 4 * columns.len() * 11);
+    ctx.add_columns_4g(
+        state,
+        Array_u64_1d::from_vec(*ctx, &flat_columns, &[flat_columns.len() as i64, 1])
+            .map_err(|_| Error::Other("could not convert".to_string()))?,
+    )
+    .map_err(|e| Error::GPUError(format!("{:?}", e)))
+}
+
+fn finalize_4g(
+    ctx: &mut FutharkContext,
+    state: CTB4GState,
+) -> Result<(Vec<Fr>, CTB4GState), Error> {
+    let (res, state) = ctx
+        .finalize_4g(state)
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
     let (vec, shape) = res.to_vec();
@@ -604,6 +661,30 @@ mod tests {
         let state = add_columns_2k(&mut ctx, state, columns.as_slice()).unwrap();
         println!("added GPU columns");
         let (res, state) = finalize_2k(&mut ctx, state).unwrap();
+        println!("finalized GPU");
+
+        let cpu_res = cpu_builder.add_final_columns(columns.as_slice()).unwrap();
+        assert_eq!(cpu_res.len(), res.len());
+        assert_eq!(cpu_res, res);
+    }
+
+    #[test]
+    fn test_direct_column_tree_builder_4g() {
+        let leaves = 134217728;
+        let mut ctx = FutharkContext::new();
+        println!("start");
+        let mut cpu_builder = ColumnTreeBuilder::<Bls12, U11, U8>::new(leaves);
+        println!("initialized CPU");
+        let state = init_column_tree_builder_4g(&mut ctx).unwrap();
+        println!("initialize GPU");
+
+        let columns: Vec<GenericArray<Fr, U11>> = (0..leaves)
+            .map(|_| GenericArray::<Fr, U11>::generate(|i| Fr::zero()))
+            .collect();
+
+        let state = add_columns_4g(&mut ctx, state, columns.as_slice()).unwrap();
+        println!("added GPU columns");
+        let (res, state) = finalize_4g(&mut ctx, state).unwrap();
         println!("finalized GPU");
 
         let cpu_res = cpu_builder.add_final_columns(columns.as_slice()).unwrap();
