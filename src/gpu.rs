@@ -680,13 +680,14 @@ mod tests {
 
         let mut state = init_column_tree_builder_4g(&mut ctx).unwrap();
 
-        for i in 0..batch_size {
-            let columns: Vec<GenericArray<Fr, U11>> = (0..leaves)
-                .map(|_| GenericArray::<Fr, U11>::generate(|i| Fr::zero()))
-                .collect();
+        // for i in 0..batch_size {
+        //     let columns: Vec<GenericArray<Fr, U11>> = (0..leaves)
+        //         .map(|_| GenericArray::<Fr, U11>::generate(|i| Fr::zero()))
+        //         .collect();
 
-            state = add_columns_4g(&mut ctx, state, columns.as_slice()).unwrap();
-        }
+        //     dbg!(&i, &columns.len());
+        //     state = add_columns_4g(&mut ctx, state, columns.as_slice()).unwrap();
+        // }
 
         let (res, state) = finalize_4g(&mut ctx, state).unwrap();
 
