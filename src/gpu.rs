@@ -291,6 +291,7 @@ fn init_hash11(ctx: &mut FutharkContext) -> Result<P11State, Error> {
 
 type CTB2KState = triton::FutharkOpaqueCtb2KState;
 type CTB4GState = triton::FutharkOpaqueCtb4GState;
+type CTB512MState = triton::FutharkOpaqueCtb512MState;
 
 pub struct ColumnTreeBuilder2k<U11, U8>
 where
@@ -375,6 +376,28 @@ fn init_column_tree_builder_2k(ctx: &mut FutharkContext) -> Result<CTB2KState, E
 
     let state = ctx
         .init_2k(
+            tree_constants.arity_tag(&ctx)?,
+            tree_constants.round_keys(&ctx)?,
+            tree_constants.mds_matrix(&ctx)?,
+            tree_constants.pre_sparse_matrix(&ctx)?,
+            tree_constants.sparse_matrixes(&ctx)?,
+            column_constants.arity_tag(&ctx)?,
+            column_constants.round_keys(&ctx)?,
+            column_constants.mds_matrix(&ctx)?,
+            column_constants.pre_sparse_matrix(&ctx)?,
+            column_constants.sparse_matrixes(&ctx)?,
+        )
+        .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+
+    Ok(state)
+}
+
+fn init_column_tree_builder_512m(ctx: &mut FutharkContext) -> Result<CTB512MState, Error> {
+    let column_constants = GPUConstants(PoseidonConstants::<Bls12, U11>::new());
+    let tree_constants = GPUConstants(PoseidonConstants::<Bls12, U8>::new());
+
+    let state = ctx
+        .init_512m(
             tree_constants.arity_tag(&ctx)?,
             tree_constants.round_keys(&ctx)?,
             tree_constants.mds_matrix(&ctx)?,
@@ -493,6 +516,40 @@ fn finalize_4g(
 ) -> Result<(Vec<Fr>, CTB4GState), Error> {
     let (res, state) = ctx
         .finalize_4g(state)
+        .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+
+    let (vec, shape) = res.to_vec();
+    let unpacked = unpack_fr_array((vec, shape.as_slice()))?;
+    Ok((unpacked, state))
+}
+
+fn add_columns_512m(
+    ctx: &mut FutharkContext,
+    state: CTB512MState,
+    columns: &[GenericArray<Fr, U11>],
+) -> Result<CTB512MState, Error> {
+    let flat_columns = as_u64s(columns);
+    dbg!(&flat_columns.len());
+    // let flat_columns = u64_vec(columns);
+
+    // let x = Array_u64_1d::from_vec(*ctx, &flat_columns, &[flat_columns.len() as i64, 1])
+    //     .map_err(|_| Error::Other("could not convert".to_string()))?;
+
+    assert_eq!(flat_columns.len(), 4 * columns.len() * 11);
+    ctx.add_columns_512m(
+        state,
+        Array_u64_1d::from_vec(*ctx, &flat_columns, &[flat_columns.len() as i64, 1])
+            .map_err(|_| Error::Other("could not convert".to_string()))?,
+    )
+    .map_err(|e| Error::GPUError(format!("{:?}", e)))
+}
+
+fn finalize_512m(
+    ctx: &mut FutharkContext,
+    state: CTB512MState,
+) -> Result<(Vec<Fr>, CTB512MState), Error> {
+    let (res, state) = ctx
+        .finalize_512m(state)
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
     let (vec, shape) = res.to_vec();
@@ -690,6 +747,34 @@ mod tests {
         // }
 
         let (res, state) = finalize_4g(&mut ctx, state).unwrap();
+
+        // let cpu_res = cpu_builder.add_final_columns(columns.as_slice()).unwrap();
+
+        // assert_eq!(cpu_res.len(), res.len());
+        // assert_eq!(cpu_res, res);
+    }
+    #[test]
+    fn test_direct_column_tree_builder_512m() {
+        let leaves = 1 << 24; // 2^29 / 32 = 16777216;
+        let num_batches = 128;
+        let batch_size = leaves / num_batches;
+
+        let mut ctx = FutharkContext::new();
+
+        // let mut cpu_builder = ColumnTreeBuilder::<Bls12, U11, U8>::new(leaves);
+
+        let mut state = init_column_tree_builder_512m(&mut ctx).unwrap();
+
+        for i in 0..num_batches {
+            let columns: Vec<GenericArray<Fr, U11>> = (0..batch_size)
+                .map(|_| GenericArray::<Fr, U11>::generate(|i| Fr::zero()))
+                .collect();
+
+            dbg!(&i, &columns.len());
+            state = add_columns_512m(&mut ctx, state, columns.as_slice()).unwrap();
+        }
+
+        let (res, state) = finalize_512m(&mut ctx, state).unwrap();
 
         // let cpu_res = cpu_builder.add_final_columns(columns.as_slice()).unwrap();
 
