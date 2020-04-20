@@ -723,6 +723,12 @@ mod tests {
         let cpu_res = cpu_builder.add_final_columns(columns.as_slice()).unwrap();
         assert_eq!(cpu_res.len(), res.len());
         assert_eq!(cpu_res, res);
+
+        let computed_root = cpu_builder
+            .compute_uniform_tree_root(GenericArray::<Fr, U11>::generate(|i| Fr::zero()))
+            .unwrap();
+
+        assert_eq!(computed_root, res[res.len() - 1]);
     }
 
     #[test]
@@ -754,8 +760,29 @@ mod tests {
         // assert_eq!(cpu_res, res);
     }
     #[test]
+    // Poor-man's benchmark, for now.
+    #[test]
+    #[ignore]
     fn test_direct_column_tree_builder_512m() {
         let leaves = 1 << 24; // 2^29 / 32 = 16777216;
+        let _ = test_direct_column_tree_builder_512m_aux(leaves);
+    }
+
+    #[test]
+    fn test_direct_column_tree_builder_512m_verify() {
+        let leaves = 1 << 24; // 2^29 / 32 = 16777216;
+        let root = test_direct_column_tree_builder_512m_aux(leaves);
+
+        let mut cpu_builder = ColumnTreeBuilder::<Bls12, U11, U8>::new(leaves);
+
+        let computed_root = cpu_builder
+            .compute_uniform_tree_root(GenericArray::<Fr, U11>::generate(|i| Fr::zero()))
+            .unwrap();
+
+        assert_eq!(computed_root, root);
+    }
+
+    fn test_direct_column_tree_builder_512m_aux(leaves: usize) -> Fr {
         let num_batches = 128;
         let batch_size = leaves / num_batches;
 
@@ -780,5 +807,7 @@ mod tests {
 
         // assert_eq!(cpu_res.len(), res.len());
         // assert_eq!(cpu_res, res);
+
+        res[res.len() - 1]
     }
 }

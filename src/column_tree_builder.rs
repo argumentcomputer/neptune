@@ -154,6 +154,48 @@ where
 
         tree_size
     }
+
+    fn tree_height(&self) -> usize {
+        let arity = TreeArity::to_usize();
+
+        let mut tree_height = 0;
+        let mut current_row_size = self.leaf_count;
+
+        // Could also just calculate log base arity directly.
+        while current_row_size >= 1 {
+            if current_row_size != 1 {
+                tree_height += 1;
+                assert_eq!(
+                    0,
+                    current_row_size % arity,
+                    "Tree leaf count does not have a power of arity as a factor."
+                );
+            }
+            current_row_size /= arity;
+        }
+        dbg!(&tree_height);
+        tree_height
+    }
+
+    // Compute root of tree composed of all identical columns. For use in checking correctness of GPU column tree-building
+    // without the cost of generating a full column tree.
+    pub(crate) fn compute_uniform_tree_root(
+        &mut self,
+        column: GenericArray<E::Fr, ColumnArity>,
+    ) -> Result<E::Fr, Error> {
+        let arity = TreeArity::to_usize();
+        // All the leaves will be the same.
+        let mut element = Poseidon::new_with_preimage(&column, &self.column_constants).hash();
+
+        for i in 0..self.tree_height() {
+            let preimage = vec![element; arity];
+            // Each row is the hash of the identical elements in the previous row.
+            element = Poseidon::new_with_preimage(&preimage, &self.tree_constants).hash();
+        }
+
+        // The last element computed is the root.
+        Ok(element)
+    }
 }
 
 #[cfg(test)]
