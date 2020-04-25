@@ -8,6 +8,8 @@ pub enum Error {
     /// Attempt to reference an index element that is out of bounds
     IndexOutOfBounds,
     /// The provided leaf was not found in the tree
+    GPUError(String),
+    DecodingError,
     Other(String),
 }
 
@@ -21,6 +23,8 @@ impl fmt::Display for Error {
                 "The size of the buffer cannot be greater than the hash arity."
             ),
             Error::IndexOutOfBounds => write!(f, "The referenced index is outs of bounds."),
+            Error::GPUError(s) => write!(f, "GPU Error: {}", s),
+            Error::DecodingError => write!(f, "PrimeFieldDecodingError"),
             Error::Other(s) => write!(f, "{}", s),
         }
     }
