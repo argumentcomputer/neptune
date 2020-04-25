@@ -1,10 +1,12 @@
 use crate::matrix::Matrix;
 use crate::mds::{create_mds_matrices, factor_to_sparse_matrixes, MDSMatrices, SparseMatrix};
 use crate::preprocessing::compress_round_constants;
-use crate::{matrix, quintic_s_box};
+use crate::{matrix, quintic_s_box, BatchHasher};
 use crate::{round_constants, round_numbers, scalar_from_u64, Error};
 use ff::{Field, ScalarEngine};
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
+use paired::bls12_381;
+use paired::bls12_381::Bls12;
 use std::marker::PhantomData;
 use std::ops::Add;
 use typenum::bit::B1;
@@ -601,6 +603,50 @@ where
 {
     let constants = PoseidonConstants::<E, Arity>::new();
     Poseidon::<E, Arity>::new_with_preimage(preimage, &constants).hash()
+}
+
+#[derive(Debug)]
+pub struct SimplePoseidonBatchHasher<'a, Arity>
+where
+    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<bls12_381::Fr>,
+    <Arity as Add<B1>>::Output: ArrayLength<bls12_381::Fr>,
+{
+    constants: PoseidonConstants<Bls12, Arity>,
+    max_batch_size: usize,
+    _s: PhantomData<Poseidon<'a, Bls12, Arity>>,
+}
+
+impl<'a, Arity> SimplePoseidonBatchHasher<'a, Arity>
+where
+    Arity: 'a + Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<bls12_381::Fr>,
+    <Arity as Add<B1>>::Output: ArrayLength<bls12_381::Fr>,
+{
+    pub(crate) fn new(max_batch_size: usize) -> Result<Self, Error> {
+        Ok(Self {
+            constants: PoseidonConstants::<Bls12, Arity>::new(),
+            max_batch_size,
+            _s: PhantomData::<Poseidon<'a, Bls12, Arity>>,
+        })
+    }
+}
+impl<'a, Arity> BatchHasher<Arity> for SimplePoseidonBatchHasher<'a, Arity>
+where
+    Arity: 'a + Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<bls12_381::Fr>,
+    <Arity as Add<B1>>::Output: ArrayLength<bls12_381::Fr>,
+{
+    fn hash(
+        &mut self,
+        preimages: &[GenericArray<bls12_381::Fr, Arity>],
+    ) -> Result<Vec<bls12_381::Fr>, Error> {
+        Ok(preimages
+            .iter()
+            .map(|preimage| Poseidon::new_with_preimage(&preimage, &self.constants).hash())
+            .collect())
+    }
+
+    fn max_batch_size(&self) -> usize {
+        self.max_batch_size
+    }
 }
 
 #[cfg(test)]
