@@ -478,6 +478,7 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     #[test]
+    #[cfg(all(feature = "gpu", not(target_os = "macos")))]
     fn test_mbatch_hash2() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
         let mut ctx = FutharkContext::new();
@@ -501,6 +502,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(all(feature = "gpu", not(target_os = "macos")))]
     fn test_mbatch_hash8() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
         let mut ctx = FutharkContext::new();
@@ -521,28 +523,30 @@ mod tests {
 
         assert_eq!(expected_hashes, hashes);
         assert_eq!(expected_hashes, gpu_hashes);
-    }
 
-    #[test]
-    fn test_mbatch_hash11() {
-        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
-        let mut ctx = FutharkContext::new();
-        let mut state = init_hash11(&mut ctx).unwrap();
-        let batch_size = 100;
-        let arity = 2;
+        #[test]
+        #[cfg(all(feature = "gpu", not(target_os = "macos")))]
+        fn test_mbatch_hash11() {
+            let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
+            let mut ctx = FutharkContext::new();
+            let mut state = init_hash11(&mut ctx).unwrap();
+            let batch_size = 100;
+            let arity = 2;
 
-        let mut gpu_hasher = GPUBatchHasher::<U11>::new(batch_size).unwrap();
-        let mut simple_hasher = SimplePoseidonBatchHasher::<U11>::new(batch_size).unwrap();
+            let mut gpu_hasher = GPUBatchHasher::<U11>::new(batch_size).unwrap();
+            let mut simple_hasher = SimplePoseidonBatchHasher::<U11>::new(batch_size).unwrap();
 
-        let preimages = (0..batch_size)
-            .map(|_| GenericArray::<Fr, U11>::generate(|_| Fr::random(&mut rng)))
-            .collect::<Vec<_>>();
+            let preimages = (0..batch_size)
+                .map(|_| GenericArray::<Fr, U11>::generate(|_| Fr::random(&mut rng)))
+                .collect::<Vec<_>>();
 
-        let (hashes, state) = mbatch_hash11(&mut ctx, &mut state, preimages.as_slice()).unwrap();
-        let gpu_hashes = gpu_hasher.hash(&preimages).unwrap();
-        let expected_hashes: Vec<_> = simple_hasher.hash(&preimages).unwrap();
+            let (hashes, state) =
+                mbatch_hash11(&mut ctx, &mut state, preimages.as_slice()).unwrap();
+            let gpu_hashes = gpu_hasher.hash(&preimages).unwrap();
+            let expected_hashes: Vec<_> = simple_hasher.hash(&preimages).unwrap();
 
-        assert_eq!(expected_hashes, hashes);
-        assert_eq!(expected_hashes, gpu_hashes);
+            assert_eq!(expected_hashes, hashes);
+            assert_eq!(expected_hashes, gpu_hashes);
+        }
     }
 }

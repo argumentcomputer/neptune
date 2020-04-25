@@ -36,9 +36,20 @@ where
         }
     }
 
+    #[cfg(feature = "gpu")]
     pub(crate) fn new(t: &BatcherType, max_batch_size: usize) -> Result<Self, Error> {
         match t {
             BatcherType::GPU => Ok(Batcher::GPU(GPUBatchHasher::<Arity>::new(max_batch_size)?)),
+
+            BatcherType::CPU => Ok(Batcher::CPU(SimplePoseidonBatchHasher::<Arity>::new(
+                max_batch_size,
+            )?)),
+        }
+    }
+    #[cfg(not(feature = "gpu"))]
+    pub(crate) fn new(t: &BatcherType, max_batch_size: usize) -> Result<Self, Error> {
+        match t {
+            BatcherType::GPU => Err(Error::Other("GPU not configured".to_string())),
             BatcherType::CPU => Ok(Batcher::CPU(SimplePoseidonBatchHasher::<Arity>::new(
                 max_batch_size,
             )?)),
