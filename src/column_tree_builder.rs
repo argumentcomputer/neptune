@@ -305,13 +305,6 @@ mod tests {
         test_column_tree_builder_aux(Some(BatcherType::GPU), 16777216, 32, 400000, 700000);
     }
 
-    #[test]
-    #[ignore] // FIXME: add a feature flag. Very expensive test without actual GPU.
-    fn test_column_tree_builder_4g() {
-        //4GiB
-        test_column_tree_builder_aux(Some(BatcherType::GPU), 134217728, 100, 400000, 700000);
-    }
-
     fn test_column_tree_builder_aux(
         batcher_type: Option<BatcherType>,
         leaves: usize,

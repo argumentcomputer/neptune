@@ -22,7 +22,7 @@ rand = "0.7.0"
 rand_xorshift = "0.2.0"
 take_mut = "0.2.2"
 
-triton = { version = "0.1.2", package = "neptune-triton", default-features=false, features=["opencl"] }
+triton = { version = "0.2.0", package = "neptune-triton", default-features=false, features=["opencl"] }
 
 [dev-dependencies]
 criterion = "0.3"
