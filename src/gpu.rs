@@ -76,15 +76,15 @@ where
         Ok(Self {
             ctx,
             state: BatcherState::new::<Arity>(&mut ctx)?,
-            tree_builder_state: if Arity::to_usize() == 8 {
-                None
+            tree_builder_state: None,
             // Uncomment the following to build 64M trees.
             // However, in practice this doesn't add noticeable speed and does use more memory.
             // Leave the mechanism in as basis for further future experimentation, for now.
-            // Some(init_tree8_64m(&mut ctx)?)
-            } else {
-                None
-            },
+            // if Arity::to_usize() == 8 {
+            //     Some(init_tree8_64m(&mut ctx)?)
+            // } else {
+            //     None
+            // },
             max_batch_size,
             _a: PhantomData::<Arity>,
         })

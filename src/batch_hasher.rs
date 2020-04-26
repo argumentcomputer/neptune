@@ -7,7 +7,6 @@ use paired::bls12_381::Fr;
 use std::ops::Add;
 use typenum::bit::B1;
 use typenum::uint::{UInt, UTerm, Unsigned};
-//use typenum::{UInt, UTerm, Unsigned, U11, U2, U8};
 
 #[derive(Clone, Debug)]
 pub enum BatcherType {
@@ -36,7 +35,7 @@ where
         }
     }
 
-    #[cfg(feature = "gpu")]
+    #[cfg(all(feature = "gpu", not(target_os = "macos")))]
     pub(crate) fn new(t: &BatcherType, max_batch_size: usize) -> Result<Self, Error> {
         match t {
             BatcherType::GPU => Ok(Batcher::GPU(GPUBatchHasher::<Arity>::new(max_batch_size)?)),
@@ -46,7 +45,7 @@ where
             )?)),
         }
     }
-    #[cfg(not(feature = "gpu"))]
+    #[cfg(not(all(feature = "gpu", not(target_os = "macos"))))]
     pub(crate) fn new(t: &BatcherType, max_batch_size: usize) -> Result<Self, Error> {
         match t {
             BatcherType::GPU => Err(Error::Other("GPU not configured".to_string())),

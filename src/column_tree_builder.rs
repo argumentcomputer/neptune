@@ -290,7 +290,6 @@ mod tests {
         #[cfg(all(feature = "gpu", not(target_os = "macos")))]
         test_column_tree_builder_aux(Some(BatcherType::GPU), 512, 32, 512, 512);
 
-        // 128KiB tree has 4096 leaves.
         test_column_tree_builder_aux(None, 512, 19, 512, 512);
         test_column_tree_builder_aux(Some(BatcherType::CPU), 512, 32, 512, 512);
 
