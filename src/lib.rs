@@ -52,17 +52,23 @@ pub fn scalar_from_u64s(parts: [u64; 4]) -> Scalar {
 
 const SBOX: u8 = 1; // x^5
 const FIELD: u8 = 1; // Gf(p)
-const FIELD_SIZE: usize = 255; // n  Maybe Get this from Scalar.
 
 fn round_constants<E: ScalarEngine>(arity: usize) -> Vec<E::Fr> {
     let t = arity + 1;
-    let n = t * FIELD_SIZE;
 
     let (full_rounds, partial_rounds) = round_numbers(arity);
 
     let r_f = full_rounds as u16;
     let r_p = partial_rounds as u16;
-    generate_constants::<E>(FIELD, SBOX, n as u16, t as u16, r_f, r_p)
+
+    let fr_num_bits = E::Fr::NUM_BITS;
+    let field_size = {
+        assert!(fr_num_bits <= std::u16::MAX as u32);
+        // It's safe to convert to u16 for compatibility with other types.
+        fr_num_bits as u16
+    };
+
+    generate_constants::<E>(FIELD, SBOX, field_size, t as u16, r_f, r_p)
 }
 
 /// Apply the quintic S-Box (s^5) to a given item
