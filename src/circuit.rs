@@ -9,7 +9,6 @@ use bellperson::{ConstraintSystem, LinearCombination, SynthesisError};
 use ff::Field;
 use ff::ScalarEngine as Engine;
 use generic_array::typenum;
-use generic_array::ArrayLength;
 use std::marker::PhantomData;
 
 /// Similar to `num::Num`, we use `Elt` to accumulate both values and linear combinations, then eventually
@@ -577,6 +576,7 @@ mod tests {
     use crate::test::TestConstraintSystem;
     use crate::{scalar_from_u64, Poseidon};
     use bellperson::ConstraintSystem;
+    use generic_array::ArrayLength;
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
