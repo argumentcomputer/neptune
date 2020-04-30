@@ -185,6 +185,7 @@ where
                             as_generic_arrays::<TreeArity>(&tree_data[batch_start..batch_end]);
                         let hashed = batcher.hash(&preimages)?;
 
+                        #[allow(clippy::drop_ref)]
                         drop(preimages); // make sure we don't reference tree_data anymore
                         tree_data[new_row_start + total_hashed
                             ..new_row_start + total_hashed + hashed.len()]

@@ -10,25 +10,19 @@ repository = "https://github.com/porcuquine/poseidon"
 [dependencies]
 lazy_static = "1.4.0"
 bellperson = "0.6.3"
-bincode = { version = "1.2", optional = true }
 blake2s_simd = "0.5"
 byteorder = "1"
-env_logger = "0.7.1"
 ff = { version = "0.2.1", package = "fff" }
 generic-array = "0.13.2"
-log = "0.4.8"
 paired = "0.18.0"
-rand = "0.7.0"
-rand_xorshift = "0.2.0"
-take_mut = "0.2.2"
-
-triton = { version = "0.2.0", package = "neptune-triton", default-features=false, features=["opencl"] }
+triton = { version = "0.2.0", package = "neptune-triton", default-features=false, features=["opencl"], optional=true }
 
 [dev-dependencies]
 criterion = "0.3"
 rand = "0.7.0"
 sha2 = "0.8"
 tempdir = "0.3"
+rand_xorshift = "0.2.0"
 
 [build-dependencies]
 paired = "0.17.0"
@@ -44,4 +38,4 @@ incremental = false
 codegen-units = 1
 
 [features]
-gpu = []
+gpu = ["triton"]
