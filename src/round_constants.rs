@@ -1,5 +1,5 @@
 pub use crate::Error;
-use ff::{PrimeField, PrimeFieldDecodingError, PrimeFieldRepr, ScalarEngine};
+use fff::{PrimeField, PrimeFieldDecodingError, PrimeFieldRepr, ScalarEngine};
 pub use paired::bls12_381::Fr as Scalar;
 
 /// From the paper ():

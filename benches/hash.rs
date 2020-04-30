@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use ff::PrimeField;
+use fff::PrimeField;
 use generic_array::{typenum, ArrayLength};
 use neptune::poseidon::{HashMode, PoseidonConstants};
 use neptune::*;

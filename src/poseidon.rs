@@ -3,7 +3,7 @@ use crate::mds::{create_mds_matrices, factor_to_sparse_matrixes, MDSMatrices, Sp
 use crate::preprocessing::compress_round_constants;
 use crate::{matrix, quintic_s_box, BatchHasher};
 use crate::{round_constants, round_numbers, scalar_from_u64, Error};
-use ff::{Field, ScalarEngine};
+use fff::{Field, ScalarEngine};
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
 use paired::bls12_381;
 use paired::bls12_381::Bls12;
@@ -653,7 +653,7 @@ where
 mod tests {
     use super::*;
     use crate::*;
-    use ff::Field;
+    use fff::Field;
     use generic_array::typenum;
     use paired::bls12_381::Bls12;
 

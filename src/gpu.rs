@@ -1,7 +1,7 @@
 use crate::error::Error;
 use crate::poseidon::PoseidonConstants;
 use crate::BatchHasher;
-use ff::{PrimeField, PrimeFieldDecodingError};
+use fff::{PrimeField, PrimeFieldDecodingError};
 use generic_array::{typenum, ArrayLength, GenericArray};
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use std::marker::PhantomData;
@@ -484,7 +484,7 @@ mod tests {
     use super::*;
     use crate::poseidon::{poseidon, Poseidon, SimplePoseidonBatchHasher};
     use crate::BatchHasher;
-    use ff::{Field, ScalarEngine};
+    use fff::{Field, ScalarEngine};
     use generic_array::sequence::GenericSequence;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;

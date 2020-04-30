@@ -1,7 +1,7 @@
 use crate::matrix::{apply_matrix, vec_add};
 use crate::mds::MDSMatrices;
 use crate::quintic_s_box;
-use ff::{Field, ScalarEngine};
+use fff::{Field, ScalarEngine};
 
 // - Compress constants by pushing them back through linear layers and through the identity components of partial layers.
 // - As a result, constants need only be added after each S-box.

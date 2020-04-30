@@ -8,25 +8,26 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/porcuquine/poseidon"
 
 [dependencies]
-lazy_static = "1.4.0"
-bellperson = "0.6.3"
+lazy_static = "1.4"
+bellperson = "0.6"
 blake2s_simd = "0.5"
 byteorder = "1"
-ff = { version = "0.2.1", package = "fff" }
-generic-array = "0.13.2"
-paired = "0.18.0"
-triton = { version = "0.2.0", package = "neptune-triton", default-features=false, features=["opencl"], optional=true }
+fff = "0.2"
+generic-array = "0.14"
+paired = "0.19"
+rand_xorshift = "0.2"
+triton = { version = "0.2.0", package = "neptune-triton", default-features = false, features = ["opencl"], optional = true }
 
 [dev-dependencies]
 criterion = "0.3"
-rand = "0.7.0"
+rand = "0.7"
 sha2 = "0.8"
 tempdir = "0.3"
-rand_xorshift = "0.2.0"
+rand_xorshift = "0.2"
 
 [build-dependencies]
-paired = "0.17.0"
-ff = { version = "0.2.1", package = "fff" }
+paired = "0.19"
+fff = "0.2"
 
 [[bench]]
 name = "hash"
@@ -38,4 +39,5 @@ incremental = false
 codegen-units = 1
 
 [features]
+default = []
 gpu = ["triton"]

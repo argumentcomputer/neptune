@@ -2,7 +2,7 @@ use crate::batch_hasher::{Batcher, BatcherType};
 use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
 use crate::BatchHasher;
-use ff::Field;
+use fff::Field;
 use generic_array::{typenum, ArrayLength, GenericArray};
 use paired::bls12_381::{Bls12, Fr};
 use std::ops::Add;
@@ -281,7 +281,7 @@ where
 mod tests {
     use super::*;
     use crate::BatchHasher;
-    use ff::Field;
+    use fff::Field;
     use generic_array::sequence::GenericSequence;
     use generic_array::typenum::{U11, U8};
     use paired::bls12_381::Fr;

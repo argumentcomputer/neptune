@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use bellperson::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 use blake2s_simd::State as Blake2s;
 use byteorder::{BigEndian, ByteOrder};
-use ff::{Field, PrimeField, PrimeFieldRepr};
+use fff::{Field, PrimeField, PrimeFieldRepr};
 use paired::Engine;
 
 #[derive(Debug)]
@@ -433,7 +433,7 @@ mod tests {
 
     #[test]
     fn test_cs() {
-        use ff::PrimeField;
+        use fff::PrimeField;
         use paired::bls12_381::{Bls12, Fr};
 
         let mut cs = TestConstraintSystem::<Bls12>::new();

@@ -3,7 +3,7 @@
 pub use crate::poseidon::Poseidon;
 use crate::round_constants::generate_constants;
 pub use error::Error;
-use ff::{Field, PrimeField, ScalarEngine};
+use fff::{Field, PrimeField, ScalarEngine};
 use generic_array::{typenum, ArrayLength, GenericArray};
 pub use paired::bls12_381::Fr as Scalar;
 use paired::bls12_381::FrRepr;

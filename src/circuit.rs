@@ -6,8 +6,8 @@ use bellperson::gadgets::boolean::Boolean;
 use bellperson::gadgets::num;
 use bellperson::gadgets::num::AllocatedNum;
 use bellperson::{ConstraintSystem, LinearCombination, SynthesisError};
-use ff::Field;
-use ff::ScalarEngine as Engine;
+use fff::Field;
+use fff::ScalarEngine as Engine;
 use generic_array::typenum;
 use std::marker::PhantomData;
 

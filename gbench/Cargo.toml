@@ -7,14 +7,16 @@ edition = "2018"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-lazy_static = "1.4.0"
-bellperson = "0.6.3"
-blake2s_simd = "0.5"
-byteorder = "1"
-env_logger = "0.7.1"
-ff = { version = "0.2.1", package = "fff" }
-generic-array = "0.13.2"
 log = "0.4.8"
-paired = "0.18.0"
-triton = { version = "0.2.0", package = "neptune-triton", default-features=false, features=["opencl"] }
+env_logger = "0.7.1"
+
+byteorder = "1"
+lazy_static = "1.4"
+generic-array = "0.14"
+blake2s_simd = "0.5"
+
+fff = "0.2"
+paired = "0.19"
+bellperson = "0.6"
+triton = { version = "0.2.0", package = "neptune-triton", default-features = false, features = ["opencl"] }
 neptune = { path = "../", features=["gpu"] }
