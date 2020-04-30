@@ -170,18 +170,22 @@ where
 }
 
 fn frs_to_u64s(frs: &[Fr]) -> Vec<u64> {
-    let mut res = vec![u64::default(); frs.len() * 4];
-    for (src, dest) in frs.iter().zip(res.chunks_mut(4)) {
-        dest.copy_from_slice(&src.into_repr().0);
+    let mut out = Vec::with_capacity(frs.len() * 4);
+    for fr in frs.iter() {
+        out.extend_from_slice(&fr.into_repr().0);
     }
-    res
+    out
 }
 
 fn frs_2d_to_u64s(frs_2d: &[Vec<Fr>]) -> Vec<u64> {
-    frs_2d
-        .iter()
-        .flat_map(|row| frs_to_u64s(row).into_iter())
-        .collect()
+    let len = frs_2d.iter().map(|row| row.len() * 4).sum();
+    let mut out: Vec<u64> = Vec::with_capacity(len);
+    for row in frs_2d.iter() {
+        for fr in row.iter() {
+            out.extend_from_slice(&fr.into_repr().0);
+        }
+    }
+    out
 }
 
 fn array_u64_1d_from_fr(ctx: &FutharkContext, fr: Fr) -> Result<Array_u64_1d, Error> {
