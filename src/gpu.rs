@@ -181,22 +181,18 @@ where
 
 /// Conversion functions for massaging input/output to and from interface types.
 fn frs_to_u64s(frs: &[Fr]) -> Vec<u64> {
-    let mut out = Vec::with_capacity(frs.len() * 4);
-    for fr in frs.iter() {
-        out.extend_from_slice(&fr.into_repr().0);
+    let mut res = vec![u64::default(); frs.len() * 4];
+    for (src, dest) in frs.iter().zip(res.chunks_mut(4)) {
+        dest.copy_from_slice(&src.into_repr().0);
     }
-    out
+    res
 }
 
 fn frs_2d_to_u64s(frs_2d: &[Vec<Fr>]) -> Vec<u64> {
-    let len = frs_2d.iter().map(|row| row.len() * 4).sum();
-    let mut out: Vec<u64> = Vec::with_capacity(len);
-    for row in frs_2d.iter() {
-        for fr in row.iter() {
-            out.extend_from_slice(&fr.into_repr().0);
-        }
-    }
-    out
+    frs_2d
+        .iter()
+        .flat_map(|row| frs_to_u64s(row).into_iter())
+        .collect()
 }
 
 fn array_u64_1d_from_fr(ctx: &FutharkContext, fr: Fr) -> Result<Array_u64_1d, Error> {
@@ -483,9 +479,17 @@ fn u64_vec<'a, U: ArrayLength<Fr>>(vec: &'a [GenericArray<Fr, U>]) -> Vec<u64> {
 }
 
 #[cfg(test)]
+#[cfg(all(feature = "gpu", not(target_os = "macos")))]
 mod tests {
+    use super::*;
+    use crate::poseidon::{poseidon, Poseidon, SimplePoseidonBatchHasher};
+    use crate::BatchHasher;
+    use ff::{Field, ScalarEngine};
+    use generic_array::sequence::GenericSequence;
+    use rand::SeedableRng;
+    use rand_xorshift::XorShiftRng;
+
     #[test]
-    #[cfg(all(feature = "gpu", not(target_os = "macos")))]
     fn test_mbatch_hash2() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
         let mut ctx = FutharkContext::new();
@@ -509,7 +513,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "gpu", not(target_os = "macos")))]
     fn test_mbatch_hash8() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
         let mut ctx = FutharkContext::new();
@@ -532,7 +535,6 @@ mod tests {
         assert_eq!(expected_hashes, gpu_hashes);
 
         #[test]
-        #[cfg(all(feature = "gpu", not(target_os = "macos")))]
         fn test_mbatch_hash11() {
             let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
             let mut ctx = FutharkContext::new();

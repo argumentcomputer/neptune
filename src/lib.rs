@@ -24,10 +24,13 @@ mod round_constants;
 mod test;
 
 /// Column Tree Builder
+#[cfg(feature = "gpu")]
 pub mod column_tree_builder;
+#[cfg(feature = "gpu")]
 mod gpu;
 
 /// Batch Hasher
+#[cfg(feature = "gpu")]
 pub mod batch_hasher;
 
 pub(crate) const TEST_SEED: [u8; 16] = [
