@@ -1,12 +1,9 @@
 use crate::error::Error;
 use crate::gpu::GPUBatchHasher;
 use crate::poseidon::SimplePoseidonBatchHasher;
-use crate::BatchHasher;
-use generic_array::{typenum, ArrayLength, GenericArray};
+use crate::{Arity, BatchHasher};
+use generic_array::GenericArray;
 use paired::bls12_381::Fr;
-use std::ops::Add;
-use typenum::bit::B1;
-use typenum::uint::{UInt, UTerm, Unsigned};
 
 #[derive(Clone, Debug)]
 pub enum BatcherType {
@@ -14,19 +11,17 @@ pub enum BatcherType {
     CPU,
 }
 
-pub enum Batcher<'a, Arity>
+pub enum Batcher<'a, A>
 where
-    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<Fr>,
-    <Arity as Add<B1>>::Output: ArrayLength<Fr>,
+    A: Arity<Fr>,
 {
-    GPU(GPUBatchHasher<Arity>),
-    CPU(SimplePoseidonBatchHasher<'a, Arity>),
+    GPU(GPUBatchHasher<A>),
+    CPU(SimplePoseidonBatchHasher<'a, A>),
 }
 
-impl<Arity> Batcher<'_, Arity>
+impl<A> Batcher<'_, A>
 where
-    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<Fr>,
-    <Arity as Add<B1>>::Output: ArrayLength<Fr>,
+    A: Arity<Fr>,
 {
     pub(crate) fn t(&self) -> BatcherType {
         match self {
@@ -38,9 +33,9 @@ where
     #[cfg(all(feature = "gpu", not(target_os = "macos")))]
     pub(crate) fn new(t: &BatcherType, max_batch_size: usize) -> Result<Self, Error> {
         match t {
-            BatcherType::GPU => Ok(Batcher::GPU(GPUBatchHasher::<Arity>::new(max_batch_size)?)),
+            BatcherType::GPU => Ok(Batcher::GPU(GPUBatchHasher::<A>::new(max_batch_size)?)),
 
-            BatcherType::CPU => Ok(Batcher::CPU(SimplePoseidonBatchHasher::<Arity>::new(
+            BatcherType::CPU => Ok(Batcher::CPU(SimplePoseidonBatchHasher::<A>::new(
                 max_batch_size,
             )?)),
         }
@@ -49,19 +44,18 @@ where
     pub(crate) fn new(t: &BatcherType, max_batch_size: usize) -> Result<Self, Error> {
         match t {
             BatcherType::GPU => Err(Error::Other("GPU not configured".to_string())),
-            BatcherType::CPU => Ok(Batcher::CPU(SimplePoseidonBatchHasher::<Arity>::new(
+            BatcherType::CPU => Ok(Batcher::CPU(SimplePoseidonBatchHasher::<A>::new(
                 max_batch_size,
             )?)),
         }
     }
 }
 
-impl<Arity> BatchHasher<Arity> for Batcher<'_, Arity>
+impl<A> BatchHasher<A> for Batcher<'_, A>
 where
-    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<Fr>,
-    <Arity as Add<B1>>::Output: ArrayLength<Fr>,
+    A: Arity<Fr>,
 {
-    fn hash(&mut self, preimages: &[GenericArray<Fr, Arity>]) -> Result<Vec<Fr>, Error> {
+    fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
         match self {
             Batcher::GPU(batcher) => batcher.hash(preimages),
             Batcher::CPU(batcher) => batcher.hash(preimages),
