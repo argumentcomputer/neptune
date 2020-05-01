@@ -39,6 +39,15 @@ macro_rules! impl_arity {
     };
 }
 
+// Dummy implementation to allow for an "optional" argument.
+impl<Fr: PrimeField> Arity<Fr> for U0 {
+    type ConstantsSize = U0;
+
+    fn tag() -> Fr {
+        unreachable!("dummy implementation for U0, should not be called")
+    }
+}
+
 impl_arity!(
     U2 => U3,
     U3 => U4,
