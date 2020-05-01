@@ -1,20 +1,15 @@
 use crate::batch_hasher::{Batcher, BatcherType};
 use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
-use crate::BatchHasher;
+use crate::{Arity, BatchHasher};
 use ff::Field;
-use generic_array::{typenum, ArrayLength, GenericArray};
+use generic_array::GenericArray;
 use paired::bls12_381::{Bls12, Fr};
-use std::ops::Add;
-use typenum::bit::B1;
-use typenum::uint::{UInt, UTerm};
 
 pub trait ColumnTreeBuilderTrait<ColumnArity, TreeArity>
 where
-    ColumnArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
-    <ColumnArity as Add<B1>>::Output: ArrayLength<Fr>,
-    TreeArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
-    <TreeArity as Add<B1>>::Output: ArrayLength<Fr>,
+    ColumnArity: Arity<Fr>,
+    TreeArity: Arity<Fr>,
 {
     fn add_columns(&mut self, columns: &[GenericArray<Fr, ColumnArity>]) -> Result<(), Error>;
     fn add_final_columns(
@@ -26,10 +21,8 @@ where
 
 pub struct ColumnTreeBuilder<'a, ColumnArity, TreeArity>
 where
-    ColumnArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
-    <ColumnArity as Add<B1>>::Output: ArrayLength<Fr>,
-    TreeArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
-    <TreeArity as Add<B1>>::Output: ArrayLength<Fr>,
+    ColumnArity: Arity<Fr>,
+    TreeArity: Arity<Fr>,
 {
     pub leaf_count: usize,
     data: Vec<Fr>,
@@ -44,10 +37,8 @@ where
 impl<ColumnArity, TreeArity> ColumnTreeBuilderTrait<ColumnArity, TreeArity>
     for ColumnTreeBuilder<'_, ColumnArity, TreeArity>
 where
-    ColumnArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
-    <ColumnArity as Add<B1>>::Output: ArrayLength<Fr>,
-    TreeArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
-    <TreeArity as Add<B1>>::Output: ArrayLength<Fr>,
+    ColumnArity: Arity<Fr>,
+    TreeArity: Arity<Fr>,
 {
     fn add_columns(&mut self, columns: &[GenericArray<Fr, ColumnArity>]) -> Result<(), Error> {
         let start = self.fill_index;
@@ -90,30 +81,28 @@ where
         self.data.iter_mut().for_each(|place| *place = Fr::zero());
     }
 }
-fn as_generic_arrays<'a, Arity: ArrayLength<Fr>>(vec: &'a [Fr]) -> &'a [GenericArray<Fr, Arity>] {
+fn as_generic_arrays<'a, A: Arity<Fr>>(vec: &'a [Fr]) -> &'a [GenericArray<Fr, A>] {
     // It is a programmer error to call `as_generic_arrays` on a vector whose underlying data cannot be divided
     // into an even number of `GenericArray<Fr, Arity>`.
     assert_eq!(
         0,
-        (vec.len() * std::mem::size_of::<Fr>()) % std::mem::size_of::<GenericArray<Fr, Arity>>()
+        (vec.len() * std::mem::size_of::<Fr>()) % std::mem::size_of::<GenericArray<Fr, A>>()
     );
 
     // This block does not affect the underlying `Fr`s. It just groups them into `GenericArray`s of length `Arity`.
     // We know by the assertion above that `vec` can be evenly divided into these units.
     unsafe {
         std::slice::from_raw_parts(
-            vec.as_ptr() as *const () as *const GenericArray<Fr, Arity>,
-            vec.len() / Arity::to_usize(),
+            vec.as_ptr() as *const () as *const GenericArray<Fr, A>,
+            vec.len() / A::to_usize(),
         )
     }
 }
 
 impl<ColumnArity, TreeArity> ColumnTreeBuilder<'_, ColumnArity, TreeArity>
 where
-    ColumnArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
-    <ColumnArity as Add<B1>>::Output: ArrayLength<Fr>,
-    TreeArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
-    <TreeArity as Add<B1>>::Output: ArrayLength<Fr>,
+    ColumnArity: Arity<Fr>,
+    TreeArity: Arity<Fr>,
 {
     pub fn new(
         t: Option<BatcherType>,

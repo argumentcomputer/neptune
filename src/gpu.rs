@@ -1,15 +1,13 @@
 use crate::error::Error;
 use crate::poseidon::PoseidonConstants;
-use crate::BatchHasher;
+use crate::{Arity, BatchHasher};
 use ff::{PrimeField, PrimeFieldDecodingError};
 use generic_array::{typenum, ArrayLength, GenericArray};
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use std::marker::PhantomData;
-use std::ops::Add;
 use triton::FutharkContext;
 use triton::{Array_u64_1d, Array_u64_2d, Array_u64_3d};
-use typenum::bit::B1;
-use typenum::{UInt, UTerm, Unsigned, U11, U2, U8};
+use typenum::{U11, U2, U8};
 
 /// Convenience type aliases for opaque pointers from the generated Futhark bindings.
 type P2State = triton::FutharkOpaqueP2State;
@@ -27,24 +25,23 @@ enum BatcherState {
 impl BatcherState {
     /// Create a new state for use in batch hashing preimages of `Arity` elements.
     /// State is an opaque pointer supplied to the corresponding GPU entry point when processing a batch.
-    fn new<Arity: Unsigned>(ctx: &mut FutharkContext) -> Result<Self, Error> {
-        Ok(match Arity::to_usize() {
+    fn new<A: Arity<Fr>>(ctx: &mut FutharkContext) -> Result<Self, Error> {
+        Ok(match A::to_usize() {
             size if size == 2 => BatcherState::Arity2(init_hash2(ctx)?),
             size if size == 8 => BatcherState::Arity8(init_hash8(ctx)?),
             size if size == 11 => BatcherState::Arity11(init_hash11(ctx)?),
-            _ => panic!("unsupported arity: {}", Arity::to_usize()),
+            _ => panic!("unsupported arity: {}", A::to_usize()),
         })
     }
 
     /// Hash a batch of N * `Arity` `Fr`s into N `Fr`s.
-    fn hash<Arity: ArrayLength<Fr>>(
+    fn hash<A: ArrayLength<Fr>>(
         &mut self,
         ctx: &mut FutharkContext,
-        preimages: &[GenericArray<Fr, Arity>],
+        preimages: &[GenericArray<Fr, A>],
     ) -> Result<(Vec<Fr>, Self), Error>
     where
-        Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<Fr>,
-        <Arity as Add<B1>>::Output: ArrayLength<Fr>,
+        A: Arity<Fr>,
     {
         match self {
             BatcherState::Arity2(state) => {
@@ -64,48 +61,46 @@ impl BatcherState {
 }
 
 /// `GPUBatchHasher` implements `BatchHasher` and performs the batched hashing on GPU.
-pub struct GPUBatchHasher<Arity> {
+pub struct GPUBatchHasher<A> {
     ctx: FutharkContext,
     state: BatcherState,
     /// If `tree_builder_state` is provided, use it to build the final 64MiB tree on the GPU with one call.
     tree_builder_state: Option<T864MState>,
     max_batch_size: usize,
-    _a: PhantomData<Arity>,
+    _a: PhantomData<A>,
 }
 
-impl<Arity> GPUBatchHasher<Arity>
+impl<A> GPUBatchHasher<A>
 where
-    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<Fr>,
-    <Arity as Add<B1>>::Output: ArrayLength<Fr>,
+    A: Arity<Fr>,
 {
-    /// Create a new `GPUBatchHasher` and initialize it with state corresponding with its `Arity`.
+    /// Create a new `GPUBatchHasher` and initialize it with state corresponding with its `A`.
     pub(crate) fn new(max_batch_size: usize) -> Result<Self, Error> {
         let mut ctx = FutharkContext::new();
         Ok(Self {
             ctx,
-            state: BatcherState::new::<Arity>(&mut ctx)?,
+            state: BatcherState::new::<A>(&mut ctx)?,
             tree_builder_state: None,
             // Uncomment the following to build 64M trees.
             // However, in practice this doesn't add noticeable speed and does use more memory.
             // Leave the mechanism in as basis for further future experimentation, for now.
-            // if Arity::to_usize() == 8 {
+            // if A::to_usize() == 8 {
             //     Some(init_tree8_64m(&mut ctx)?)
             // } else {
             //     None
             // },
             max_batch_size,
-            _a: PhantomData::<Arity>,
+            _a: PhantomData::<A>,
         })
     }
 }
 
-impl<Arity> BatchHasher<Arity> for GPUBatchHasher<Arity>
+impl<A> BatchHasher<A> for GPUBatchHasher<A>
 where
-    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<Fr>,
-    <Arity as Add<B1>>::Output: ArrayLength<Fr>,
+    A: Arity<Fr>,
 {
-    /// Hash a batch of `Arity`-sized preimages.
-    fn hash(&mut self, preimages: &[GenericArray<Fr, Arity>]) -> Result<Vec<Fr>, Error> {
+    /// Hash a batch of `A`-sized preimages.
+    fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
         let (res, state) = self.state.hash(&mut self.ctx, preimages)?; //FIXME
         std::mem::replace(&mut self.state, state);
         Ok(res)
@@ -133,13 +128,13 @@ where
 }
 
 #[derive(Debug)]
-struct GPUConstants<Arity>(PoseidonConstants<Bls12, Arity>)
+struct GPUConstants<A>(PoseidonConstants<Bls12, A>)
 where
-    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>>;
+    A: Arity<Fr>;
 
-impl<Arity> GPUConstants<Arity>
+impl<A> GPUConstants<A>
 where
-    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>>,
+    A: Arity<Fr>,
 {
     fn arity_tag(&self, ctx: &FutharkContext) -> Result<Array_u64_1d, Error> {
         let arity_tag = self.0.arity_tag;
@@ -405,15 +400,15 @@ pub(crate) fn build_tree8_64m(
     Ok(frs.to_vec())
 }
 
-fn mbatch_hash2<Arity>(
+fn mbatch_hash2<A>(
     ctx: &mut FutharkContext,
     state: &mut P2State,
-    preimages: &[GenericArray<Fr, Arity>],
+    preimages: &[GenericArray<Fr, A>],
 ) -> Result<(Vec<Fr>, P2State), Error>
 where
-    Arity: Unsigned + ArrayLength<Fr>,
+    A: Arity<Fr>,
 {
-    assert_eq!(2, Arity::to_usize());
+    assert_eq!(2, A::to_usize());
     let flat_preimages = as_mont_u64s(preimages);
     let input = Array_u64_1d::from_vec(*ctx, &flat_preimages, &[flat_preimages.len() as i64, 1])
         .map_err(|_| Error::Other("could not convert".to_string()))?;
@@ -428,15 +423,15 @@ where
     Ok((frs.to_vec(), state))
 }
 
-fn mbatch_hash8<Arity>(
+fn mbatch_hash8<A>(
     ctx: &mut FutharkContext,
     state: &P8State,
-    preimages: &[GenericArray<Fr, Arity>],
+    preimages: &[GenericArray<Fr, A>],
 ) -> Result<(Vec<Fr>, P8State), Error>
 where
-    Arity: Unsigned + ArrayLength<Fr>,
+    A: Arity<Fr>,
 {
-    assert_eq!(8, Arity::to_usize());
+    assert_eq!(8, A::to_usize());
     let flat_preimages = as_mont_u64s(preimages);
     let input = Array_u64_1d::from_vec(*ctx, &flat_preimages, &[flat_preimages.len() as i64, 1])
         .map_err(|_| Error::Other("could not convert".to_string()))?;
@@ -451,15 +446,15 @@ where
     Ok((frs.to_vec(), state))
 }
 
-fn mbatch_hash11<Arity>(
+fn mbatch_hash11<A>(
     ctx: &mut FutharkContext,
     state: &P11State,
-    preimages: &[GenericArray<Fr, Arity>],
+    preimages: &[GenericArray<Fr, A>],
 ) -> Result<(Vec<Fr>, P11State), Error>
 where
-    Arity: Unsigned + ArrayLength<Fr>,
+    A: Arity<Fr>,
 {
-    assert_eq!(11, Arity::to_usize());
+    assert_eq!(11, A::to_usize());
     let flat_preimages = as_mont_u64s(preimages);
     let input = Array_u64_1d::from_vec(*ctx, &flat_preimages, &[flat_preimages.len() as i64, 1])
         .map_err(|_| Error::Other("could not convert".to_string()))?;
