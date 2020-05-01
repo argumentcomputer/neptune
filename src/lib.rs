@@ -1,15 +1,12 @@
 #![allow(dead_code)]
 
-pub use crate::poseidon::Poseidon;
+pub use crate::poseidon::{Arity, Poseidon};
 use crate::round_constants::generate_constants;
 pub use error::Error;
 use ff::{Field, PrimeField, ScalarEngine};
-use generic_array::{typenum, ArrayLength, GenericArray};
+use generic_array::GenericArray;
 pub use paired::bls12_381::Fr as Scalar;
 use paired::bls12_381::FrRepr;
-use std::ops::Add;
-use typenum::bit::B1;
-use typenum::{UInt, UTerm, Unsigned};
 
 /// Poseidon circuit
 pub mod circuit;
@@ -37,20 +34,18 @@ pub(crate) const TEST_SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
 ];
 
-pub trait BatchHasher<Arity>
+pub trait BatchHasher<A>
 where
-    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<Scalar>,
-    <Arity as Add<B1>>::Output: ArrayLength<Scalar>,
-    Self: std::marker::Sized,
+    A: Arity<Scalar>,
 {
     // type State;
 
-    fn hash(&mut self, preimages: &[GenericArray<Scalar, Arity>]) -> Result<Vec<Scalar>, Error>;
+    fn hash(&mut self, preimages: &[GenericArray<Scalar, A>]) -> Result<Vec<Scalar>, Error>;
 
     fn hash_into_slice(
         &mut self,
         target_slice: &mut [Scalar],
-        preimages: &[GenericArray<Scalar, Arity>],
+        preimages: &[GenericArray<Scalar, A>],
     ) -> Result<(), Error> {
         assert_eq!(target_slice.len(), preimages.len());
         // FIXME: Account for max batch size.
@@ -98,8 +93,8 @@ pub fn round_numbers(arity: usize) -> (usize, usize) {
 }
 
 /// convert
-pub fn scalar_from_u64<E: ScalarEngine>(i: u64) -> E::Fr {
-    <E::Fr as PrimeField>::from_repr(<<E::Fr as PrimeField>::Repr as From<u64>>::from(i)).unwrap()
+pub fn scalar_from_u64<Fr: PrimeField>(i: u64) -> Fr {
+    Fr::from_repr(<Fr::Repr as From<u64>>::from(i)).unwrap()
 }
 
 /// create field element from four u64

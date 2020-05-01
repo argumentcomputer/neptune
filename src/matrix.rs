@@ -353,19 +353,19 @@ pub(crate) fn invert<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> Option<Matr
 mod tests {
     use super::*;
     use crate::scalar_from_u64;
-    use paired::bls12_381::Bls12;
+    use paired::bls12_381::{Bls12, Fr};
 
     #[test]
     fn test_minor() {
-        let one = scalar_from_u64::<Bls12>(1);
-        let two = scalar_from_u64::<Bls12>(2);
-        let three = scalar_from_u64::<Bls12>(3);
-        let four = scalar_from_u64::<Bls12>(4);
-        let five = scalar_from_u64::<Bls12>(5);
-        let six = scalar_from_u64::<Bls12>(6);
-        let seven = scalar_from_u64::<Bls12>(7);
-        let eight = scalar_from_u64::<Bls12>(8);
-        let nine = scalar_from_u64::<Bls12>(9);
+        let one = scalar_from_u64::<Fr>(1);
+        let two = scalar_from_u64::<Fr>(2);
+        let three = scalar_from_u64::<Fr>(3);
+        let four = scalar_from_u64::<Fr>(4);
+        let five = scalar_from_u64::<Fr>(5);
+        let six = scalar_from_u64::<Fr>(6);
+        let seven = scalar_from_u64::<Fr>(7);
+        let eight = scalar_from_u64::<Fr>(8);
+        let nine = scalar_from_u64::<Fr>(9);
 
         let m = vec![
             vec![one, two, three],
@@ -393,12 +393,12 @@ mod tests {
 
     #[test]
     fn test_scalar_mul() {
-        let zero = scalar_from_u64::<Bls12>(0);
-        let one = scalar_from_u64::<Bls12>(1);
-        let two = scalar_from_u64::<Bls12>(2);
-        let three = scalar_from_u64::<Bls12>(3);
-        let four = scalar_from_u64::<Bls12>(4);
-        let six = scalar_from_u64::<Bls12>(6);
+        let zero = scalar_from_u64::<Fr>(0);
+        let one = scalar_from_u64::<Fr>(1);
+        let two = scalar_from_u64::<Fr>(2);
+        let three = scalar_from_u64::<Fr>(3);
+        let four = scalar_from_u64::<Fr>(4);
+        let six = scalar_from_u64::<Fr>(6);
 
         let m = vec![vec![zero, one], vec![two, three]];
         let res = scalar_mul::<Bls12>(two, &m);
@@ -410,33 +410,33 @@ mod tests {
 
     #[test]
     fn test_vec_mul() {
-        let one = scalar_from_u64::<Bls12>(1);
-        let two = scalar_from_u64::<Bls12>(2);
-        let three = scalar_from_u64::<Bls12>(3);
-        let four = scalar_from_u64::<Bls12>(4);
-        let five = scalar_from_u64::<Bls12>(5);
-        let six = scalar_from_u64::<Bls12>(6);
+        let one = scalar_from_u64::<Fr>(1);
+        let two = scalar_from_u64::<Fr>(2);
+        let three = scalar_from_u64::<Fr>(3);
+        let four = scalar_from_u64::<Fr>(4);
+        let five = scalar_from_u64::<Fr>(5);
+        let six = scalar_from_u64::<Fr>(6);
 
         let a = vec![one, two, three];
         let b = vec![four, five, six];
         let res = vec_mul::<Bls12>(&a, &b);
 
-        let expected = scalar_from_u64::<Bls12>(32);
+        let expected = scalar_from_u64::<Fr>(32);
 
         assert_eq!(expected, res);
     }
 
     #[test]
     fn test_transpose() {
-        let one = scalar_from_u64::<Bls12>(1);
-        let two = scalar_from_u64::<Bls12>(2);
-        let three = scalar_from_u64::<Bls12>(3);
-        let four = scalar_from_u64::<Bls12>(4);
-        let five = scalar_from_u64::<Bls12>(5);
-        let six = scalar_from_u64::<Bls12>(6);
-        let seven = scalar_from_u64::<Bls12>(7);
-        let eight = scalar_from_u64::<Bls12>(8);
-        let nine = scalar_from_u64::<Bls12>(9);
+        let one = scalar_from_u64::<Fr>(1);
+        let two = scalar_from_u64::<Fr>(2);
+        let three = scalar_from_u64::<Fr>(3);
+        let four = scalar_from_u64::<Fr>(4);
+        let five = scalar_from_u64::<Fr>(5);
+        let six = scalar_from_u64::<Fr>(6);
+        let seven = scalar_from_u64::<Fr>(7);
+        let eight = scalar_from_u64::<Fr>(8);
+        let nine = scalar_from_u64::<Fr>(9);
 
         let m = vec![
             vec![one, two, three],
@@ -456,15 +456,15 @@ mod tests {
 
     #[test]
     fn test_inverse() {
-        let one = scalar_from_u64::<Bls12>(1);
-        let two = scalar_from_u64::<Bls12>(2);
-        let three = scalar_from_u64::<Bls12>(3);
-        let four = scalar_from_u64::<Bls12>(4);
-        let five = scalar_from_u64::<Bls12>(5);
-        let six = scalar_from_u64::<Bls12>(6);
-        let seven = scalar_from_u64::<Bls12>(7);
-        let eight = scalar_from_u64::<Bls12>(8);
-        let nine = scalar_from_u64::<Bls12>(9);
+        let one = scalar_from_u64::<Fr>(1);
+        let two = scalar_from_u64::<Fr>(2);
+        let three = scalar_from_u64::<Fr>(3);
+        let four = scalar_from_u64::<Fr>(4);
+        let five = scalar_from_u64::<Fr>(5);
+        let six = scalar_from_u64::<Fr>(6);
+        let seven = scalar_from_u64::<Fr>(7);
+        let eight = scalar_from_u64::<Fr>(8);
+        let nine = scalar_from_u64::<Fr>(9);
 
         let m = vec![
             vec![one, two, three],
@@ -518,15 +518,15 @@ mod tests {
 
     #[test]
     fn test_eliminate() {
-        //let one = scalar_from_u64::<Bls12>(1);
-        let two = scalar_from_u64::<Bls12>(2);
-        let three = scalar_from_u64::<Bls12>(3);
-        let four = scalar_from_u64::<Bls12>(4);
-        let five = scalar_from_u64::<Bls12>(5);
-        let six = scalar_from_u64::<Bls12>(6);
-        let seven = scalar_from_u64::<Bls12>(7);
-        let eight = scalar_from_u64::<Bls12>(8);
-        //        let nine = scalar_from_u64::<Bls12>(9);
+        //let one = scalar_from_u64::<Fr>(1);
+        let two = scalar_from_u64::<Fr>(2);
+        let three = scalar_from_u64::<Fr>(3);
+        let four = scalar_from_u64::<Fr>(4);
+        let five = scalar_from_u64::<Fr>(5);
+        let six = scalar_from_u64::<Fr>(6);
+        let seven = scalar_from_u64::<Fr>(7);
+        let eight = scalar_from_u64::<Fr>(8);
+        //        let nine = scalar_from_u64::<Fr>(9);
 
         let m = vec![
             vec![two, three, four],
@@ -555,15 +555,15 @@ mod tests {
     }
     #[test]
     fn test_upper_triangular() {
-        //        let one = scalar_from_u64::<Bls12>(1);
-        let two = scalar_from_u64::<Bls12>(2);
-        let three = scalar_from_u64::<Bls12>(3);
-        let four = scalar_from_u64::<Bls12>(4);
-        let five = scalar_from_u64::<Bls12>(5);
-        let six = scalar_from_u64::<Bls12>(6);
-        let seven = scalar_from_u64::<Bls12>(7);
-        let eight = scalar_from_u64::<Bls12>(8);
-        //        let nine = scalar_from_u64::<Bls12>(9);
+        //        let one = scalar_from_u64::<Fr>(1);
+        let two = scalar_from_u64::<Fr>(2);
+        let three = scalar_from_u64::<Fr>(3);
+        let four = scalar_from_u64::<Fr>(4);
+        let five = scalar_from_u64::<Fr>(5);
+        let six = scalar_from_u64::<Fr>(6);
+        let seven = scalar_from_u64::<Fr>(7);
+        let eight = scalar_from_u64::<Fr>(8);
+        //        let nine = scalar_from_u64::<Fr>(9);
 
         let m = vec![
             vec![two, three, four],
@@ -579,15 +579,15 @@ mod tests {
 
     #[test]
     fn test_reduce_to_identity() {
-        //        let one = scalar_from_u64::<Bls12>(1);
-        let two = scalar_from_u64::<Bls12>(2);
-        let three = scalar_from_u64::<Bls12>(3);
-        let four = scalar_from_u64::<Bls12>(4);
-        let five = scalar_from_u64::<Bls12>(5);
-        let six = scalar_from_u64::<Bls12>(6);
-        let seven = scalar_from_u64::<Bls12>(7);
-        let eight = scalar_from_u64::<Bls12>(8);
-        //        let nine = scalar_from_u64::<Bls12>(9);
+        //        let one = scalar_from_u64::<Fr>(1);
+        let two = scalar_from_u64::<Fr>(2);
+        let three = scalar_from_u64::<Fr>(3);
+        let four = scalar_from_u64::<Fr>(4);
+        let five = scalar_from_u64::<Fr>(5);
+        let six = scalar_from_u64::<Fr>(6);
+        let seven = scalar_from_u64::<Fr>(7);
+        let eight = scalar_from_u64::<Fr>(8);
+        //        let nine = scalar_from_u64::<Fr>(9);
 
         let m = vec![
             vec![two, three, four],

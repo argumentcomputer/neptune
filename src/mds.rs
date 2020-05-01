@@ -129,8 +129,8 @@ fn generate_mds<E: ScalarEngine>(t: usize) -> Matrix<Scalar<E>> {
     // det(M) = (ad - bc) ; if a == b and c == d => det(M) =0
     // For an MDS matrix, every possible mxm submatrix, must have det(M) != 0
     for i in 0..t {
-        let x = scalar_from_u64::<E>((i) as u64);
-        let y = scalar_from_u64::<E>((i + t) as u64);
+        let x = scalar_from_u64((i) as u64);
+        let y = scalar_from_u64((i + t) as u64);
         xs.push(x);
         ys.push(y);
     }

@@ -1,6 +1,6 @@
 use crate::matrix::Matrix;
 use crate::mds::SparseMatrix;
-use crate::poseidon::PoseidonConstants;
+use crate::poseidon::{Arity, PoseidonConstants};
 
 use bellperson::gadgets::boolean::Boolean;
 use bellperson::gadgets::num;
@@ -8,7 +8,6 @@ use bellperson::gadgets::num::AllocatedNum;
 use bellperson::{ConstraintSystem, LinearCombination, SynthesisError};
 use ff::Field;
 use ff::ScalarEngine as Engine;
-use generic_array::typenum;
 use std::marker::PhantomData;
 
 /// Similar to `num::Num`, we use `Elt` to accumulate both values and linear combinations, then eventually
@@ -102,34 +101,30 @@ impl<E: Engine> Elt<E> {
 }
 
 /// Circuit for Poseidon hash.
-pub struct PoseidonCircuit<'a, E, Arity>
+pub struct PoseidonCircuit<'a, E, A>
 where
     E: Engine,
-    Arity: typenum::Unsigned
-        + std::ops::Add<typenum::bit::B1>
-        + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
+    A: Arity<E::Fr>,
 {
     constants_offset: usize,
     width: usize,
     elements: Vec<Elt<E>>,
     pos: usize,
     current_round: usize,
-    constants: &'a PoseidonConstants<E, Arity>,
-    _w: PhantomData<Arity>,
+    constants: &'a PoseidonConstants<E, A>,
+    _w: PhantomData<A>,
 }
 
 /// PoseidonCircuit implementation.
-impl<'a, E, Arity> PoseidonCircuit<'a, E, Arity>
+impl<'a, E, A> PoseidonCircuit<'a, E, A>
 where
     E: Engine,
-    Arity: typenum::Unsigned
-        + std::ops::Add<typenum::bit::B1>
-        + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
+    A: Arity<E::Fr>,
 {
     /// Create a new Poseidon hasher for `preimage`.
     pub fn new(
         allocated_nums: Vec<AllocatedNum<E>>,
-        constants: &'a PoseidonConstants<E, Arity>,
+        constants: &'a PoseidonConstants<E, A>,
     ) -> Self {
         let width = constants.width();
         let elements = allocated_nums.into_iter().map(Elt::Allocated).collect();
@@ -140,7 +135,7 @@ where
             pos: width,
             current_round: 0,
             constants,
-            _w: PhantomData::<Arity>,
+            _w: PhantomData::<A>,
         }
     }
 
@@ -336,17 +331,15 @@ where
 }
 
 /// Create circuit for Poseidon hash.
-pub fn poseidon_hash<CS, E, Arity>(
+pub fn poseidon_hash<CS, E, A>(
     mut cs: CS,
     mut preimage: Vec<AllocatedNum<E>>,
-    constants: &PoseidonConstants<E, Arity>,
+    constants: &PoseidonConstants<E, A>,
 ) -> Result<AllocatedNum<E>, SynthesisError>
 where
     CS: ConstraintSystem<E>,
     E: Engine,
-    Arity: typenum::Unsigned
-        + std::ops::Add<typenum::bit::B1>
-        + std::ops::Add<typenum::uint::UInt<typenum::uint::UTerm, typenum::bit::B1>>,
+    A: Arity<E::Fr>,
 {
     // Add the arity tag to the front of the preimage.
     let tag = constants.arity_tag;
@@ -576,15 +569,10 @@ mod tests {
     use crate::test::TestConstraintSystem;
     use crate::{scalar_from_u64, Poseidon};
     use bellperson::ConstraintSystem;
-    use generic_array::ArrayLength;
+    use generic_array::typenum;
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
-    use std::ops::Add;
-    use typenum::bit::B1;
-    use typenum::marker_traits::Unsigned;
-    use typenum::uint::{UInt, UTerm};
-    use typenum::Add1;
 
     #[test]
     fn test_poseidon_hash() {
@@ -595,15 +583,14 @@ mod tests {
         test_poseidon_hash_aux::<typenum::U24>(1012);
         test_poseidon_hash_aux::<typenum::U36>(1388);
     }
-    fn test_poseidon_hash_aux<Arity>(expected_constraints: usize)
+    fn test_poseidon_hash_aux<A>(expected_constraints: usize)
     where
-        Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>>,
-        Add1<Arity>: ArrayLength<<Bls12 as Engine>::Fr>,
+        A: Arity<<Bls12 as Engine>::Fr>,
     {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        let arity = Arity::to_usize();
-        let constants = PoseidonConstants::<Bls12, Arity>::new();
+        let arity = A::to_usize();
+        let constants = PoseidonConstants::<Bls12, A>::new();
 
         let expected_constraints_calculated = {
             let width = 1 + arity;
@@ -630,7 +617,7 @@ mod tests {
 
         let out = poseidon_hash(&mut cs, data, &constants).expect("poseidon hashing failed");
 
-        let mut p = Poseidon::<Bls12, Arity>::new_with_preimage(&fr_data, &constants);
+        let mut p = Poseidon::<Bls12, A>::new_with_preimage(&fr_data, &constants);
         let expected: Fr = p.hash_in_mode(HashMode::Correct);
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
@@ -655,7 +642,7 @@ mod tests {
     }
 
     fn fr(n: u64) -> <Bls12 as Engine>::Fr {
-        scalar_from_u64::<Bls12>(n)
+        scalar_from_u64::<<Bls12 as Engine>::Fr>(n)
     }
 
     fn efr(n: u64) -> Elt<Bls12> {
@@ -668,13 +655,11 @@ mod tests {
 
         let mut cs1 = cs.namespace(|| "square_sum");
         let two = fr(2);
-        let three = AllocatedNum::alloc(cs1.namespace(|| "three"), || {
-            Ok(scalar_from_u64::<Bls12>(3))
-        })
-        .unwrap();
+        let three =
+            AllocatedNum::alloc(cs1.namespace(|| "three"), || Ok(scalar_from_u64(3))).unwrap();
         let res = square_sum(cs1, two, &three, true).unwrap();
 
-        let twenty_five: Fr = scalar_from_u64::<Bls12>(25);
+        let twenty_five: Fr = scalar_from_u64(25);
         assert_eq!(twenty_five, res.get_value().unwrap());
     }
 
@@ -693,7 +678,7 @@ mod tests {
             .unwrap();
 
             assert!(res.is_num());
-            assert_eq!(scalar_from_u64::<Bls12>(56), res.val().unwrap());
+            assert_eq!(scalar_from_u64::<Fr>(56), res.val().unwrap());
         }
         {
             let mut cs = TestConstraintSystem::<Bls12>::new();
@@ -702,12 +687,10 @@ mod tests {
             let two = efr(2);
 
             let n3 =
-                AllocatedNum::alloc(cs.namespace(|| "three"), || Ok(scalar_from_u64::<Bls12>(3)))
-                    .unwrap();
+                AllocatedNum::alloc(cs.namespace(|| "three"), || Ok(scalar_from_u64(3))).unwrap();
             let three = Elt::Allocated(n3.clone());
             let n4 =
-                AllocatedNum::alloc(cs.namespace(|| "four"), || Ok(scalar_from_u64::<Bls12>(4)))
-                    .unwrap();
+                AllocatedNum::alloc(cs.namespace(|| "four"), || Ok(scalar_from_u64(4))).unwrap();
             let four = Elt::Allocated(n4.clone());
 
             let res = scalar_product::<Bls12, TestConstraintSystem<Bls12>>(
@@ -717,7 +700,7 @@ mod tests {
             .unwrap();
 
             assert!(res.is_num());
-            assert_eq!(scalar_from_u64::<Bls12>(56), res.val().unwrap());
+            assert_eq!(scalar_from_u64::<Fr>(56), res.val().unwrap());
 
             res.lc().as_ref().iter().for_each(|(var, f)| {
                 if var.get_unchecked() == n3.get_variable().get_unchecked() {
@@ -738,12 +721,10 @@ mod tests {
             let two = efr(2);
 
             let n3 =
-                AllocatedNum::alloc(cs.namespace(|| "three"), || Ok(scalar_from_u64::<Bls12>(3)))
-                    .unwrap();
+                AllocatedNum::alloc(cs.namespace(|| "three"), || Ok(scalar_from_u64(3))).unwrap();
             let three = Elt::Allocated(n3.clone());
             let n4 =
-                AllocatedNum::alloc(cs.namespace(|| "four"), || Ok(scalar_from_u64::<Bls12>(4)))
-                    .unwrap();
+                AllocatedNum::alloc(cs.namespace(|| "four"), || Ok(scalar_from_u64(4))).unwrap();
             let four = Elt::Allocated(n4.clone());
 
             let mut res_vec = Vec::new();
