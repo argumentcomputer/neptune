@@ -1,9 +1,9 @@
 use crate::error::Error;
-use crate::gpu::GPUBatchHasher;
 use crate::poseidon::SimplePoseidonBatchHasher;
 use crate::{Arity, BatchHasher};
 use generic_array::GenericArray;
 use paired::bls12_381::Fr;
+use std::marker::PhantomData;
 
 #[derive(Clone, Debug)]
 pub enum BatcherType {
@@ -11,11 +11,17 @@ pub enum BatcherType {
     CPU,
 }
 
+#[cfg(not(target_os = "macos"))]
+use crate::gpu::GPUBatchHasher;
+
 pub enum Batcher<'a, A>
 where
     A: Arity<Fr>,
 {
+    #[cfg(not(target_os = "macos"))]
     GPU(GPUBatchHasher<A>),
+    #[cfg(target_os = "macos")]
+    GPU(NoGPUBatchHasher<A>),
     CPU(SimplePoseidonBatchHasher<'a, A>),
 }
 
@@ -81,5 +87,30 @@ where
             Batcher::GPU(batcher) => batcher.max_batch_size(),
             Batcher::CPU(batcher) => batcher.max_batch_size(),
         }
+    }
+}
+
+// /// NoGPUBatchHasher is a dummy required so we can build with the gpu flag even on platforms on which we cannot currently
+// /// run with GPU.
+pub struct NoGPUBatchHasher<A>(PhantomData<A>);
+
+impl<A> BatchHasher<A> for NoGPUBatchHasher<A>
+where
+    A: Arity<Fr>,
+{
+    fn hash(&mut self, _preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
+        unimplemented!();
+    }
+
+    fn tree_leaf_count(&self) -> Option<usize> {
+        unimplemented!();
+    }
+
+    fn build_tree(&mut self, _leaves: &[Fr]) -> Result<Vec<Fr>, Error> {
+        unimplemented!();
+    }
+
+    fn max_batch_size(&self) -> usize {
+        unimplemented!();
     }
 }
