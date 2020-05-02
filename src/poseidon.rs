@@ -622,7 +622,7 @@ where
             }
         }
 
-        std::mem::replace(&mut self.elements, result);
+        let _ = std::mem::replace(&mut self.elements, result);
     }
 
     // Sparse matrix in this context means one of the form, M''.
@@ -646,7 +646,7 @@ where
             val.add_assign(&tmp);
         }
 
-        std::mem::replace(&mut self.elements, result);
+        let _ = std::mem::replace(&mut self.elements, result);
     }
 
     fn debug(&self, msg: &str) {
