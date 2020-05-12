@@ -52,7 +52,6 @@ where
     let mut num_hashes = 1;
 
     for i in 0..4 {
-        println!("benching synthesis of {} hashes", num_hashes);
         group.bench_with_input(
             BenchmarkId::new(
                 "Poseidon Synthesis",
