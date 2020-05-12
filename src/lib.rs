@@ -22,9 +22,14 @@ mod preprocessing;
 mod round_constants;
 mod test;
 
+/// Tree Builder
+#[cfg(feature = "gpu")]
+pub mod tree_builder;
+
 /// Column Tree Builder
 #[cfg(feature = "gpu")]
 pub mod column_tree_builder;
+
 #[cfg(feature = "gpu")]
 mod gpu;
 
