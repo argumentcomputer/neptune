@@ -702,7 +702,7 @@ mod tests {
             assert!(res.is_num());
             assert_eq!(scalar_from_u64::<Fr>(56), res.val().unwrap());
 
-            res.lc().as_ref().iter().for_each(|(var, f)| {
+            res.lc().iter().for_each(|(var, f)| {
                 if var.get_unchecked() == n3.get_variable().get_unchecked() {
                     assert_eq!(*f, fr(6));
                 };
@@ -740,7 +740,7 @@ mod tests {
             assert!(res_vec[0].is_num());
             assert_eq!(fr(56), res_vec[0].val().unwrap());
 
-            res_vec[0].lc().as_ref().iter().for_each(|(var, f)| {
+            res_vec[0].lc().iter().for_each(|(var, f)| {
                 if var.get_unchecked() == n3.get_variable().get_unchecked() {
                     assert_eq!(*f, fr(6)); // 6 * three
                 };
@@ -758,7 +758,7 @@ mod tests {
             )
             .unwrap();
 
-            res2.lc().as_ref().iter().for_each(|(var, f)| {
+            res2.lc().iter().for_each(|(var, f)| {
                 if var.get_unchecked() == n3.get_variable().get_unchecked() {
                     assert_eq!(*f, fr(42)); // 7 * 6 * three
                 };
