@@ -32,6 +32,10 @@ ff = { version = "0.2.1", package = "fff" }
 name = "hash"
 harness = false
 
+[[bench]]
+name = "synthesis"
+harness = false
+
 [profile.bench]
 lto = true
 incremental = false
