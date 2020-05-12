@@ -1,7 +1,7 @@
 [package]
 name = "neptune"
 description = "Poseidon hashing over BLS12-381 for Filecoin."
-version = "0.6.0"
+version = "0.5.6"
 authors = ["porcuquine <porcuquine@users.noreply.github.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -9,12 +9,12 @@ repository = "https://github.com/porcuquine/poseidon"
 
 [dependencies]
 lazy_static = "1.4.0"
-bellperson = "0.6.3"
+bellperson = "0.7.0"
 blake2s_simd = "0.5"
 byteorder = "1"
 ff = { version = "0.2.1", package = "fff" }
 generic-array = "0.13.2"
-paired = "0.18.0"
+paired = "0.19.0"
 triton = { version = "0.2.1", package = "neptune-triton", default-features=false, features=["opencl"], optional=true }
 
 [dev-dependencies]
@@ -25,7 +25,7 @@ tempdir = "0.3"
 rand_xorshift = "0.2.0"
 
 [build-dependencies]
-paired = "0.17.0"
+paired = "0.19.0"
 ff = { version = "0.2.1", package = "fff" }
 
 [[bench]]
