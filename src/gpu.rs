@@ -5,6 +5,7 @@ use ff::{PrimeField, PrimeFieldDecodingError};
 use generic_array::{typenum, ArrayLength, GenericArray};
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use std::marker::PhantomData;
+use std::sync::Mutex;
 use triton::FutharkContext;
 use triton::{Array_u64_1d, Array_u64_2d, Array_u64_3d};
 use typenum::{U11, U2, U8};
@@ -14,6 +15,10 @@ type P2State = triton::FutharkOpaqueP2State;
 type P8State = triton::FutharkOpaqueP8State;
 type P11State = triton::FutharkOpaqueP11State;
 pub(crate) type T864MState = triton::FutharkOpaqueT864MState;
+
+lazy_static! {
+    pub static ref FUTHARK_CONTEXT: Mutex<FutharkContext> = Mutex::new(FutharkContext::new());
+}
 
 /// Container to hold the state corresponding to each supported arity.
 enum BatcherState {
@@ -25,11 +30,12 @@ enum BatcherState {
 impl BatcherState {
     /// Create a new state for use in batch hashing preimages of `Arity` elements.
     /// State is an opaque pointer supplied to the corresponding GPU entry point when processing a batch.
-    fn new<A: Arity<Fr>>(ctx: &mut FutharkContext) -> Result<Self, Error> {
+    fn new<A: Arity<Fr>>(ctx: &Mutex<FutharkContext>) -> Result<Self, Error> {
+        let mut ctx = ctx.lock().unwrap();
         Ok(match A::to_usize() {
-            size if size == 2 => BatcherState::Arity2(init_hash2(ctx)?),
-            size if size == 8 => BatcherState::Arity8(init_hash8(ctx)?),
-            size if size == 11 => BatcherState::Arity11(init_hash11(ctx)?),
+            size if size == 2 => BatcherState::Arity2(init_hash2(&mut ctx)?),
+            size if size == 8 => BatcherState::Arity8(init_hash8(&mut ctx)?),
+            size if size == 11 => BatcherState::Arity11(init_hash11(&mut ctx)?),
             _ => panic!("unsupported arity: {}", A::to_usize()),
         })
     }
@@ -61,8 +67,8 @@ impl BatcherState {
 }
 
 /// `GPUBatchHasher` implements `BatchHasher` and performs the batched hashing on GPU.
-pub struct GPUBatchHasher<A> {
-    ctx: FutharkContext,
+pub struct GPUBatchHasher<'a, A> {
+    ctx: &'a Mutex<FutharkContext>,
     state: BatcherState,
     /// If `tree_builder_state` is provided, use it to build the final 64MiB tree on the GPU with one call.
     tree_builder_state: Option<T864MState>,
@@ -70,16 +76,16 @@ pub struct GPUBatchHasher<A> {
     _a: PhantomData<A>,
 }
 
-impl<A> GPUBatchHasher<A>
+impl<A> GPUBatchHasher<'_, A>
 where
     A: Arity<Fr>,
 {
     /// Create a new `GPUBatchHasher` and initialize it with state corresponding with its `A`.
     pub(crate) fn new(max_batch_size: usize) -> Result<Self, Error> {
-        let mut ctx = FutharkContext::new();
+        let ctx = &*FUTHARK_CONTEXT;
         Ok(Self {
             ctx,
-            state: BatcherState::new::<A>(&mut ctx)?,
+            state: BatcherState::new::<A>(ctx)?,
             tree_builder_state: None,
             // Uncomment the following to build 64M trees.
             // However, in practice this doesn't add noticeable speed and does use more memory.
@@ -95,13 +101,23 @@ where
     }
 }
 
-impl<A> BatchHasher<A> for GPUBatchHasher<A>
+impl<A> Drop for GPUBatchHasher<'_, A> {
+    fn drop(&mut self) {
+        let ctx = self.ctx.lock().unwrap();
+        unsafe {
+            triton::bindings::futhark_context_clear_caches(ctx.context);
+        }
+    }
+}
+
+impl<A> BatchHasher<A> for GPUBatchHasher<'_, A>
 where
     A: Arity<Fr>,
 {
     /// Hash a batch of `A`-sized preimages.
     fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
-        let (res, state) = self.state.hash(&mut self.ctx, preimages)?; //FIXME
+        let mut ctx = self.ctx.lock().unwrap();
+        let (res, state) = self.state.hash(&mut ctx, preimages)?; //FIXME
         std::mem::replace(&mut self.state, state);
         Ok(res)
     }
@@ -115,11 +131,12 @@ where
 
     /// Build a 64MiB tree on the GPU.
     fn build_tree(&mut self, leaves: &[Fr]) -> Result<Vec<Fr>, Error> {
+        let mut ctx = self.ctx.lock().unwrap();
         let state = self
             .tree_builder_state
             .as_ref()
             .expect("Tried to build without state.");
-        build_tree8_64m(&mut self.ctx, state, leaves)
+        build_tree8_64m(&mut ctx, state, leaves)
     }
 
     fn max_batch_size(&self) -> usize {

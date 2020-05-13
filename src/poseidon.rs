@@ -252,6 +252,7 @@ where
     pub fn set_preimage(&mut self, preimage: &[E::Fr]) {
         self.reset();
         self.elements[1..].copy_from_slice(&preimage);
+        self.pos = self.elements.len();
     }
 
     /// Restore the initial state

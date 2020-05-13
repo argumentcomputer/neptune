@@ -19,7 +19,7 @@ where
     A: Arity<Fr>,
 {
     #[cfg(not(target_os = "macos"))]
-    GPU(GPUBatchHasher<A>),
+    GPU(GPUBatchHasher<'a, A>),
     #[cfg(target_os = "macos")]
     GPU(NoGPUBatchHasher<A>),
     CPU(SimplePoseidonBatchHasher<'a, A>),
