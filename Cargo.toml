@@ -9,8 +9,7 @@ repository = "https://github.com/porcuquine/poseidon"
 
 [dependencies]
 lazy_static = "1.4.0"
-#bellperson = "0.7.0"
-bellperson = { git = "https://github.com/filecoin-project/bellman", branch = "lc" }
+bellperson = "0.8.0"
 blake2s_simd = "0.5"
 byteorder = "1"
 ff = { version = "0.2.1", package = "fff" }
