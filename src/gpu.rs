@@ -494,7 +494,7 @@ fn u64_vec<'a, U: ArrayLength<Fr>>(vec: &'a [GenericArray<Fr, U>]) -> Vec<u64> {
 #[cfg(all(feature = "gpu", not(target_os = "macos")))]
 mod tests {
     use super::*;
-    use crate::poseidon::{poseidon, Poseidon, SimplePoseidonBatchHasher};
+    use crate::poseidon::{Poseidon, SimplePoseidonBatchHasher};
     use crate::BatchHasher;
     use ff::{Field, ScalarEngine};
     use generic_array::sequence::GenericSequence;
