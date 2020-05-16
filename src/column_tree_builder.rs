@@ -16,7 +16,7 @@ where
     fn add_final_columns(
         &mut self,
         columns: &[GenericArray<Fr, ColumnArity>],
-    ) -> Result<Vec<Fr>, Error>;
+    ) -> Result<(Vec<Fr>, Vec<Fr>), Error>;
 
     fn reset(&mut self);
 }
@@ -68,13 +68,13 @@ where
     fn add_final_columns(
         &mut self,
         columns: &[GenericArray<Fr, ColumnArity>],
-    ) -> Result<Vec<Fr>, Error> {
+    ) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
         self.add_columns(columns)?;
 
-        let tree = self.tree_builder.add_final_leaves(&self.data)?;
+        let (base, tree) = self.tree_builder.add_final_leaves(&self.data)?;
         self.reset();
 
-        Ok(tree)
+        Ok((base, tree))
     }
 
     fn reset(&mut self) {
@@ -110,6 +110,7 @@ where
         leaf_count: usize,
         max_column_batch_size: usize,
         max_tree_batch_size: usize,
+        rows_to_discard: usize,
     ) -> Result<Self, Error> {
         let builder = Self {
             leaf_count,
@@ -121,14 +122,19 @@ where
             } else {
                 None
             },
-            tree_builder: TreeBuilder::<TreeArity>::new(t, leaf_count, max_tree_batch_size)?,
+            tree_builder: TreeBuilder::<TreeArity>::new(
+                t,
+                leaf_count,
+                max_tree_batch_size,
+                rows_to_discard,
+            )?,
         };
 
         Ok(builder)
     }
 
-    pub fn tree_size(&self) -> usize {
-        self.tree_builder.tree_size()
+    pub fn tree_size(&self, rows_to_discard: usize) -> usize {
+        self.tree_builder.tree_size(rows_to_discard)
     }
 
     // Compute root of tree composed of all identical columns. For use in checking correctness of GPU column tree-building
@@ -147,6 +153,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::poseidon::Poseidon;
     use crate::BatchHasher;
     use ff::Field;
     use generic_array::sequence::GenericSequence;
@@ -169,52 +176,57 @@ mod tests {
         num_batches: usize,
         max_column_batch_size: usize,
         max_tree_batch_size: usize,
-    ) -> Fr {
+    ) {
         let batch_size = leaves / num_batches;
 
-        let mut builder = ColumnTreeBuilder::<U11, U8>::new(
-            batcher_type,
-            leaves,
-            max_column_batch_size,
-            max_tree_batch_size,
-        )
-        .unwrap();
+        for rows_to_discard in 0..3 {
+            let mut builder = ColumnTreeBuilder::<U11, U8>::new(
+                batcher_type,
+                leaves,
+                max_column_batch_size,
+                max_tree_batch_size,
+                rows_to_discard,
+            )
+            .unwrap();
 
-        // Simplify computing the expected root.
-        let constant_element = Fr::zero();
-        let constant_column = GenericArray::<Fr, U11>::generate(|_| constant_element);
+            // Simplify computing the expected root.
+            let constant_element = Fr::zero();
+            let constant_column = GenericArray::<Fr, U11>::generate(|_| constant_element);
 
-        let max_batch_size = if let Some(batcher) = &builder.column_batcher {
-            batcher.max_batch_size()
-        } else {
-            leaves
-        };
+            let max_batch_size = if let Some(batcher) = &builder.column_batcher {
+                batcher.max_batch_size()
+            } else {
+                leaves
+            };
 
-        let effective_batch_size = usize::min(batch_size, max_batch_size);
+            let effective_batch_size = usize::min(batch_size, max_batch_size);
 
-        let mut total_columns = 0;
-        while total_columns + effective_batch_size < leaves {
-            let columns: Vec<GenericArray<Fr, U11>> =
-                (0..effective_batch_size).map(|_| constant_column).collect();
+            let mut total_columns = 0;
+            while total_columns + effective_batch_size < leaves {
+                let columns: Vec<GenericArray<Fr, U11>> =
+                    (0..effective_batch_size).map(|_| constant_column).collect();
 
-            let _ = builder.add_columns(columns.as_slice()).unwrap();
-            total_columns += columns.len();
+                let _ = builder.add_columns(columns.as_slice()).unwrap();
+                total_columns += columns.len();
+            }
+
+            let final_columns: Vec<_> = (0..leaves - total_columns)
+                .map(|_| GenericArray::<Fr, U11>::generate(|_| constant_element))
+                .collect();
+
+            let (base, res) = builder.add_final_columns(final_columns.as_slice()).unwrap();
+
+            let column_hash =
+                Poseidon::new_with_preimage(&constant_column, &builder.column_constants).hash();
+            assert!(base.iter().all(|x| *x == column_hash));
+
+            let computed_root = res[res.len() - 1];
+
+            let expected_root = builder.compute_uniform_tree_root(final_columns[0]).unwrap();
+            let expected_size = builder.tree_builder.tree_size(0);
+
+            assert_eq!(expected_size, res.len());
+            assert_eq!(expected_root, computed_root);
         }
-
-        let final_columns: Vec<_> = (0..leaves - total_columns)
-            .map(|_| GenericArray::<Fr, U11>::generate(|_| constant_element))
-            .collect();
-
-        let res = builder.add_final_columns(final_columns.as_slice()).unwrap();
-
-        let computed_root = res[res.len() - 1];
-
-        let expected_root = builder.compute_uniform_tree_root(final_columns[0]).unwrap();
-        let expected_size = builder.tree_builder.tree_size();
-
-        assert_eq!(expected_size, res.len());
-        assert_eq!(expected_root, computed_root);
-
-        res[res.len() - 1]
     }
 }

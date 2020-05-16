@@ -5,7 +5,7 @@ use generic_array::GenericArray;
 use paired::bls12_381::Fr;
 use std::marker::PhantomData;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum BatcherType {
     GPU,
     CPU,
@@ -68,20 +68,6 @@ where
         }
     }
 
-    fn tree_leaf_count(&self) -> Option<usize> {
-        match self {
-            Batcher::GPU(batcher) => batcher.tree_leaf_count(),
-            Batcher::CPU(batcher) => batcher.tree_leaf_count(),
-        }
-    }
-
-    fn build_tree(&mut self, leaves: &[Fr]) -> Result<Vec<Fr>, Error> {
-        match self {
-            Batcher::GPU(batcher) => batcher.build_tree(leaves),
-            Batcher::CPU(batcher) => batcher.build_tree(leaves),
-        }
-    }
-
     fn max_batch_size(&self) -> usize {
         match self {
             Batcher::GPU(batcher) => batcher.max_batch_size(),
@@ -99,14 +85,6 @@ where
     A: Arity<Fr>,
 {
     fn hash(&mut self, _preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
-        unimplemented!();
-    }
-
-    fn tree_leaf_count(&self) -> Option<usize> {
-        unimplemented!();
-    }
-
-    fn build_tree(&mut self, _leaves: &[Fr]) -> Result<Vec<Fr>, Error> {
         unimplemented!();
     }
 

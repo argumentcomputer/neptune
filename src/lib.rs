@@ -63,18 +63,6 @@ where
         Ok(target_slice.copy_from_slice(self.hash(preimages)?.as_slice()))
     }
 
-    /// How many leaves must be provided as input to the supported tree builder, intended for building a final small tree
-    /// rather than require repeated batches of dwindling size at the top of a tree whose rows are built in batches.
-    fn tree_leaf_count(&self) -> Option<usize> {
-        None
-    }
-
-    /// Build a merkle tree from provided leaves in a single call to the GPU.
-    /// Leaf count must match the value returned by `self.tree_leaf_count()`.
-    fn build_tree(&mut self, _leaves: &[Scalar]) -> Result<Vec<Scalar>, Error> {
-        unimplemented!();
-    }
-
     /// `max_batch_size` is advisory. Implenters of `BatchHasher` should ensure that up to the returned max hashes can
     /// be safely performed on the target GPU (currently 2080Ti). The max returned should represent a safe batch size
     /// optimized for performance.

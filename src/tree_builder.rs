@@ -11,7 +11,7 @@ where
     TreeArity: Arity<Fr>,
 {
     fn add_leaves(&mut self, leaves: &[Fr]) -> Result<(), Error>;
-    fn add_final_leaves(&mut self, leaves: &[Fr]) -> Result<Vec<Fr>, Error>;
+    fn add_final_leaves(&mut self, leaves: &[Fr]) -> Result<(Vec<Fr>, Vec<Fr>), Error>;
 
     fn reset(&mut self);
 }
@@ -47,13 +47,13 @@ where
         Ok(())
     }
 
-    fn add_final_leaves(&mut self, leaves: &[Fr]) -> Result<Vec<Fr>, Error> {
+    fn add_final_leaves(&mut self, leaves: &[Fr]) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
         self.add_leaves(leaves)?;
 
-        let tree = self.build_tree();
+        let res = self.build_tree(0);
         self.reset();
 
-        tree
+        res
     }
 
     fn reset(&mut self) {
@@ -88,6 +88,7 @@ where
         t: Option<BatcherType>,
         leaf_count: usize,
         max_tree_batch_size: usize,
+        rows_to_discard: usize,
     ) -> Result<Self, Error> {
         let builder = Self {
             leaf_count,
@@ -101,18 +102,22 @@ where
             },
         };
 
+        // Cannot discard the base row or the root.
+        assert!(rows_to_discard < builder.tree_height());
+
         // This will panic if leaf_count is not compatible with tree arity.
         // That is the desired behavior so such a programmer error is caught at development time.
-        let _ = builder.tree_size();
+        let _ = builder.tree_size(rows_to_discard);
 
         Ok(builder)
     }
 
-    pub fn build_tree(&mut self) -> Result<Vec<Fr>, Error> {
-        let tree_size = self.tree_size();
+    pub fn build_tree(&mut self, rows_to_discard: usize) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
+        let final_tree_size = self.tree_size(rows_to_discard);
+        let intermediate_tree_size = self.tree_size(0) + self.leaf_count;
         let arity = TreeArity::to_usize();
 
-        let mut tree_data = vec![Fr::zero(); tree_size];
+        let mut tree_data = vec![Fr::zero(); intermediate_tree_size];
 
         tree_data[0..self.leaf_count].copy_from_slice(&self.data);
 
@@ -123,20 +128,11 @@ where
                 let max_batch_size = batcher.max_batch_size();
 
                 let (mut row_start, mut row_end) = (0, self.leaf_count);
-                while row_end < tree_size {
+                while row_end < intermediate_tree_size {
                     let row_size = row_end - row_start;
                     assert_eq!(0, row_size % arity);
                     let new_row_size = row_size / arity;
                     let (new_row_start, new_row_end) = (row_end, row_end + new_row_size);
-
-                    if let Some(leaf_count) = batcher.tree_leaf_count() {
-                        if row_size == leaf_count {
-                            let remaining_tree =
-                                batcher.build_tree(&tree_data[row_start..row_end])?;
-                            tree_data[new_row_start..tree_size].copy_from_slice(&remaining_tree);
-                            return Ok(tree_data);
-                        };
-                    }
 
                     let mut total_hashed = 0;
                     let mut batch_start = row_start;
@@ -161,7 +157,7 @@ where
                 }
             }
             None => {
-                for i in self.leaf_count..tree_size {
+                for i in self.leaf_count..intermediate_tree_size {
                     tree_data[i] =
                         Poseidon::new_with_preimage(&tree_data[start..end], &self.tree_constants)
                             .hash();
@@ -171,22 +167,33 @@ where
             }
         }
 
-        Ok(tree_data)
+        let base_row = Vec::new(); //tree_data[..self.leaf_count].to_vec();
+        let tree_to_keep = tree_data[tree_data.len() - final_tree_size..].to_vec();
+        Ok((base_row, tree_to_keep))
     }
 
-    pub fn tree_size(&self) -> usize {
+    /// `tree_size` returns the number of nodes in the tree to cache.
+    /// This excludes the base row and the following `rows_to_discard` rows.
+    pub fn tree_size(&self, rows_to_discard: usize) -> usize {
         let arity = TreeArity::to_usize();
 
         let mut tree_size = 0;
         let mut current_row_size = self.leaf_count;
 
+        // Exclude the base row, along with the rows to be discarded.
+        let mut remaining_rows_to_exclude = rows_to_discard + 1;
+
         while current_row_size >= 1 {
-            tree_size += current_row_size;
+            if remaining_rows_to_exclude > 0 {
+                remaining_rows_to_exclude -= 1;
+            } else {
+                tree_size += current_row_size;
+            }
             if current_row_size != 1 {
                 assert_eq!(
                     0,
                     current_row_size % arity,
-                    "Tree leaf count ({}) does not have a power of tree arity ({}) as a factor.",
+                    "Tree leaf count {} is not a power of arity {}.",
                     self.leaf_count,
                     arity
                 )
@@ -210,7 +217,9 @@ where
                 assert_eq!(
                     0,
                     current_row_size % arity,
-                    "Tree leaf count does not have a power of arity as a factor."
+                    "Tree leaf count {} is not a power of arity {}.",
+                    self.leaf_count,
+                    arity
                 );
             }
             current_row_size /= arity;
@@ -244,7 +253,7 @@ mod tests {
     #[test]
     fn test_tree_builder() {
         // 16KiB tree has 512 leaves.
-        test_tree_builder_aux(None, 512, 32, 512, 512);
+        test_tree_builder_aux(None, 1024, 32, 512, 512);
         test_tree_builder_aux(Some(BatcherType::CPU), 512, 32, 512, 512);
 
         #[cfg(all(feature = "gpu", not(target_os = "macos")))]
@@ -257,41 +266,44 @@ mod tests {
         num_batches: usize,
         max_leaf_batch_size: usize,
         max_tree_batch_size: usize,
-    ) -> Fr {
+    ) {
         let batch_size = leaves / num_batches;
 
-        let mut builder =
-            TreeBuilder::<U8>::new(batcher_type, leaves, max_tree_batch_size).unwrap();
+        for rows_to_discard in 0..3 {
+            let mut builder =
+                TreeBuilder::<U8>::new(batcher_type, leaves, max_tree_batch_size, rows_to_discard)
+                    .unwrap();
 
-        // Simplify computing the expected root.
-        let constant_element = Fr::zero();
+            // Simplify computing the expected root.
+            let constant_element = Fr::zero();
 
-        let effective_batch_size = usize::min(batch_size, max_leaf_batch_size);
+            let effective_batch_size = usize::min(batch_size, max_leaf_batch_size);
 
-        let mut total_leaves = 0;
-        while total_leaves + effective_batch_size < leaves {
-            let leaves: Vec<Fr> = (0..effective_batch_size)
+            let mut total_leaves = 0;
+            while total_leaves + effective_batch_size < leaves {
+                let leaves: Vec<Fr> = (0..effective_batch_size)
+                    .map(|_| constant_element)
+                    .collect();
+
+                let _ = builder.add_leaves(leaves.as_slice()).unwrap();
+                total_leaves += leaves.len();
+            }
+
+            let final_leaves: Vec<_> = (0..leaves - total_leaves)
                 .map(|_| constant_element)
                 .collect();
 
-            let _ = builder.add_leaves(leaves.as_slice()).unwrap();
-            total_leaves += leaves.len();
+            let (base, res) = builder.add_final_leaves(final_leaves.as_slice()).unwrap();
+
+            let computed_root = res[res.len() - 1];
+
+            let expected_root = builder.compute_uniform_tree_root(final_leaves[0]).unwrap();
+            let expected_size = builder.tree_size(0);
+
+            assert!(base.iter().all(|x| *x == Fr::zero()));
+
+            assert_eq!(expected_size, res.len());
+            assert_eq!(expected_root, computed_root);
         }
-
-        let final_leaves: Vec<_> = (0..leaves - total_leaves)
-            .map(|_| constant_element)
-            .collect();
-
-        let res = builder.add_final_leaves(final_leaves.as_slice()).unwrap();
-
-        let computed_root = res[res.len() - 1];
-
-        let expected_root = builder.compute_uniform_tree_root(final_leaves[0]).unwrap();
-        let expected_size = builder.tree_size();
-
-        assert_eq!(expected_size, res.len());
-        assert_eq!(expected_root, computed_root);
-
-        res[res.len() - 1]
     }
 }

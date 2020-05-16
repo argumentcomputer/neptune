@@ -117,26 +117,9 @@ where
     /// Hash a batch of `A`-sized preimages.
     fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
         let mut ctx = self.ctx.lock().unwrap();
-        let (res, state) = self.state.hash(&mut ctx, preimages)?; //FIXME
-        std::mem::replace(&mut self.state, state);
+        let (res, state) = self.state.hash(&mut ctx, preimages)?;
+        self.state = state;
         Ok(res)
-    }
-
-    fn tree_leaf_count(&self) -> Option<usize> {
-        match self.tree_builder_state {
-            Some(_) => Some(1 << 21), // Leaves for 64MiB tree. TODO: be more general.
-            None => None,
-        }
-    }
-
-    /// Build a 64MiB tree on the GPU.
-    fn build_tree(&mut self, leaves: &[Fr]) -> Result<Vec<Fr>, Error> {
-        let mut ctx = self.ctx.lock().unwrap();
-        let state = self
-            .tree_builder_state
-            .as_ref()
-            .expect("Tried to build without state.");
-        build_tree8_64m(&mut ctx, state, leaves)
     }
 
     fn max_batch_size(&self) -> usize {
