@@ -141,14 +141,21 @@ where
     A: Arity<E::Fr>,
 {
     pub fn new() -> Self {
+        Self::new_common(false)
+    }
+
+    pub fn new_strengthened() -> Self {
+        Self::new_common(true)
+    }
+    pub fn new_common(strengthened: bool) -> Self {
         let arity = A::to_usize();
         let width = arity + 1;
 
         let mds_matrices = create_mds_matrices::<E>(width);
 
-        let (full_rounds, partial_rounds) = round_numbers(arity);
+        let (full_rounds, partial_rounds) = round_numbers(arity, strengthened);
         let half_full_rounds = full_rounds / 2;
-        let round_constants = round_constants::<E>(arity);
+        let round_constants = round_constants::<E>(arity, strengthened);
         let compressed_round_constants = compress_round_constants::<E>(
             width,
             full_rounds,
@@ -655,17 +662,6 @@ where
     }
 }
 
-/// Poseidon convenience hash function.
-/// NOTE: this is expensive, since it computes all constants when initializing hasher struct.
-pub fn poseidon<E, A>(preimage: &[E::Fr]) -> E::Fr
-where
-    E: ScalarEngine,
-    A: Arity<E::Fr>,
-{
-    let constants = PoseidonConstants::<E, A>::new();
-    Poseidon::<E, A>::new_with_preimage(preimage, &constants).hash()
-}
-
 #[derive(Debug)]
 pub struct SimplePoseidonBatchHasher<'a, A>
 where
@@ -761,21 +757,30 @@ mod tests {
 
     #[test]
     fn hash_values() {
-        hash_values_aux::<typenum::U2>();
-        hash_values_aux::<typenum::U4>();
-        hash_values_aux::<typenum::U8>();
-        hash_values_aux::<typenum::U11>();
-        hash_values_aux::<typenum::U16>();
-        hash_values_aux::<typenum::U24>();
-        hash_values_aux::<typenum::U36>();
+        hash_values_cases(false);
+        hash_values_cases(true);
+    }
+
+    fn hash_values_cases(strengthened: bool) {
+        hash_values_aux::<typenum::U2>(strengthened);
+        hash_values_aux::<typenum::U4>(strengthened);
+        hash_values_aux::<typenum::U8>(strengthened);
+        hash_values_aux::<typenum::U11>(strengthened);
+        hash_values_aux::<typenum::U16>(strengthened);
+        hash_values_aux::<typenum::U24>(strengthened);
+        hash_values_aux::<typenum::U36>(strengthened);
     }
 
     /// Simple test vectors to ensure results don't change unintentionally in development.
-    fn hash_values_aux<A>()
+    fn hash_values_aux<A>(strengthened: bool)
     where
         A: Arity<Fr>,
     {
-        let constants = PoseidonConstants::<Bls12, A>::new();
+        let constants = if strengthened {
+            PoseidonConstants::<Bls12, A>::new_strengthened()
+        } else {
+            PoseidonConstants::<Bls12, A>::new()
+        };
         let mut p = Poseidon::<Bls12, A>::new(&constants);
         let mut p2 = Poseidon::<Bls12, A>::new(&constants);
         let mut p3 = Poseidon::<Bls12, A>::new(&constants);
@@ -801,62 +806,109 @@ mod tests {
         assert_eq!(digest, digest3);
         assert_eq!(digest, digest4);
 
-        let expected = match test_arity {
-            2 => scalar_from_u64s([
-                0xf97f149c4ec1cdf1,
-                0x24f8cbdf5fb526ef,
-                0x21ec4bad486a55ff,
-                0x2ecf89b07e02625c,
-            ]),
-            4 => scalar_from_u64s([
-                0x47539acc2403b893,
-                0x95a0d8732306fbb8,
-                0x569d89ba5529fe09,
-                0x465f31b7337317c9,
-            ]),
-            8 => scalar_from_u64s([
-                0xe2a2991d43ab0a02,
-                0xcc983761fde7dead,
-                0xb59a92ece33995b8,
-                0x244aa49ea9130cda,
-            ]),
-            11 => scalar_from_u64s([
-                0x4729bb7027bfdd99,
-                0xdf64bd0feaf67c15,
-                0x8cc9b0d12de55709,
-                0x40a15beba8374fe0,
-            ]),
-            16 => scalar_from_u64s([
-                0xf67e9a30521c3d4f,
-                0xbeeea09b929a2a2f,
-                0x4e5db73674d627dc,
-                0x56aa38382298301b,
-            ]),
-            24 => scalar_from_u64s([
-                0x8b16b38bb9557431,
-                0xe77d6220a3377b98,
-                0xbc2aca164ee95414,
-                0x62a5e49960d2142a,
-            ]),
-            36 => scalar_from_u64s([
-                0x06babda4ccdd4719,
-                0x0562f5669ba34b89,
-                0xbb0aa43f634414d5,
-                0x1f23ca60bf447ee8,
-            ]),
-            _ => {
-                dbg!(digest, test_arity);
-                panic!("Arity lacks test vector: {}", test_arity)
+        let expected = if strengthened {
+            // Strengthened round constants.
+            match test_arity {
+                2 => scalar_from_u64s([
+                    0x9c73a55b0f7e36ac,
+                    0xf9c52ce29cd74cbf,
+                    0x6c4d730745cd89ac,
+                    0x40a4273b52164927,
+                ]),
+                4 => scalar_from_u64s([
+                    0x67a565b67c568ebb,
+                    0x7d6c78b168fbc9e1,
+                    0x8ea0cbfe7f3f66c7,
+                    0x542a5fc880a5c567,
+                ]),
+                8 => scalar_from_u64s([
+                    0x18de742a48ad13f8,
+                    0x42ac38c86a22375e,
+                    0xeba16a26d213a67f,
+                    0x24d40d732428b98c,
+                ]),
+                11 => scalar_from_u64s([
+                    0x599ebcbd696f0cf6,
+                    0x8c9be7f825868218,
+                    0x8aea391ae085ce49,
+                    0x37c842b33b8784c3,
+                ]),
+                16 => scalar_from_u64s([
+                    0xc9e56eb39842d768,
+                    0xf5d1cf3b425d7bf2,
+                    0x2f8e689621d5c346,
+                    0x22fd6b4834c73053,
+                ]),
+                24 => scalar_from_u64s([
+                    0x34bdf83a90c1bda9,
+                    0x367ffcecff5800c3,
+                    0x46d6a00011232a72,
+                    0x58a0d30211d6dd4f,
+                ]),
+                36 => scalar_from_u64s([
+                    0x9d7cf471bd141c61,
+                    0xfa38b7ab2a609a39,
+                    0xc5ccb315b14f28dc,
+                    0x0edc38fc8f71e469,
+                ]),
+                _ => {
+                    dbg!(digest, test_arity);
+                    panic!("Arity lacks test vector: {}", test_arity)
+                }
+            }
+        } else {
+            // Currently secure round constants.
+            match test_arity {
+                2 => scalar_from_u64s([
+                    0xf97f149c4ec1cdf1,
+                    0x24f8cbdf5fb526ef,
+                    0x21ec4bad486a55ff,
+                    0x2ecf89b07e02625c,
+                ]),
+                4 => scalar_from_u64s([
+                    0x47539acc2403b893,
+                    0x95a0d8732306fbb8,
+                    0x569d89ba5529fe09,
+                    0x465f31b7337317c9,
+                ]),
+                8 => scalar_from_u64s([
+                    0xe2a2991d43ab0a02,
+                    0xcc983761fde7dead,
+                    0xb59a92ece33995b8,
+                    0x244aa49ea9130cda,
+                ]),
+                11 => scalar_from_u64s([
+                    0x4729bb7027bfdd99,
+                    0xdf64bd0feaf67c15,
+                    0x8cc9b0d12de55709,
+                    0x40a15beba8374fe0,
+                ]),
+                16 => scalar_from_u64s([
+                    0xf67e9a30521c3d4f,
+                    0xbeeea09b929a2a2f,
+                    0x4e5db73674d627dc,
+                    0x56aa38382298301b,
+                ]),
+                24 => scalar_from_u64s([
+                    0x8b16b38bb9557431,
+                    0xe77d6220a3377b98,
+                    0xbc2aca164ee95414,
+                    0x62a5e49960d2142a,
+                ]),
+                36 => scalar_from_u64s([
+                    0x06babda4ccdd4719,
+                    0x0562f5669ba34b89,
+                    0xbb0aa43f634414d5,
+                    0x1f23ca60bf447ee8,
+                ]),
+                _ => {
+                    dbg!(digest, test_arity);
+                    panic!("Arity lacks test vector: {}", test_arity)
+                }
             }
         };
         dbg!(test_arity);
         assert_eq!(expected, digest);
-
-        assert_eq!(
-            digest,
-            poseidon::<Bls12, A>(&preimage),
-            "Poseidon wrapper disagrees with element-at-a-time invocation."
-        );
     }
 
     #[test]

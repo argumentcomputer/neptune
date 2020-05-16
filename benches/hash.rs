@@ -102,6 +102,29 @@ where
         },
     );
 
+    group.bench_with_input(
+        BenchmarkId::new(
+            "Poseidon hash optimized (strengthened)",
+            "Generated scalars",
+        ),
+        &scalars,
+        |b, s| {
+            let constants = PoseidonConstants::new_strengthened();
+            let mut h = Poseidon::<Bls12, A>::new(&constants);
+            b.iter(|| {
+                h.reset();
+                std::iter::repeat(())
+                    .take(A::to_usize())
+                    .map(|_| s.choose(&mut OsRng).unwrap())
+                    .for_each(|scalar| {
+                        h.input(*scalar).unwrap();
+                    });
+
+                h.hash_in_mode(HashMode::OptimizedStatic);
+            })
+        },
+    );
+
     group.finish();
 }
 

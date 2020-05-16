@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![allow(unused_imports)]
 #[macro_use]
 extern crate lazy_static;
 
@@ -83,7 +84,10 @@ where
     }
 }
 
-pub fn round_numbers(arity: usize) -> (usize, usize) {
+// Round numbers for supported arities. Not all arities have been supplied.
+// If a new arity need be supported, the appropriate value should be included by running
+// the script: https://extgit.iaik.tugraz.at/krypto/hadeshash/blob/master/code/scripts/calc_round_numbers.py
+fn round_numbers_base(arity: usize) -> (usize, usize) {
     let width = arity + 1;
 
     let full_rounds = 8;
@@ -94,11 +98,35 @@ pub fn round_numbers(arity: usize) -> (usize, usize) {
         17 | 25 => 59,
         37 => 60,
         65 => 61,
-        //24 => 42, // Just for a comparative benchmark — don't use this.
-        _ => panic!(format!("unsupported arity {}", arity)),
+        _ => panic!(format!("unsupported arity, {}", arity)),
     };
 
     (full_rounds, partial_rounds)
+}
+
+// In case of newly-discovered attacks, we may need stronger security.
+// This option exists so we can preemptively create circuits in order to switch
+// to them quickly if needed.
+//
+// "A realistic alternative is to increase the number of partial rounds by 25%.
+// Then it is unlikely that a new attack breaks through this number,
+// but even if this happens then the complexity is almost surely above 2^64, and you will be safe."
+// - D Khovratovich
+fn round_numbers_strengthened(arity: usize) -> (usize, usize) {
+    let (full_round, partial_rounds) = round_numbers_base(arity);
+
+    // Increase by 25%, rounding up.
+    let strengthened_partial_rounds = f64::ceil(partial_rounds as f64 * 1.25) as usize;
+
+    (full_round, strengthened_partial_rounds)
+}
+
+pub fn round_numbers(arity: usize, strengthened: bool) -> (usize, usize) {
+    if strengthened {
+        round_numbers_strengthened(arity)
+    } else {
+        round_numbers_base(arity)
+    }
 }
 
 /// convert
@@ -114,10 +142,10 @@ pub fn scalar_from_u64s(parts: [u64; 4]) -> Scalar {
 const SBOX: u8 = 1; // x^5
 const FIELD: u8 = 1; // Gf(p)
 
-fn round_constants<E: ScalarEngine>(arity: usize) -> Vec<E::Fr> {
+fn round_constants<E: ScalarEngine>(arity: usize, strengthened: bool) -> Vec<E::Fr> {
     let t = arity + 1;
 
-    let (full_rounds, partial_rounds) = round_numbers(arity);
+    let (full_rounds, partial_rounds) = round_numbers(arity, strengthened);
 
     let r_f = full_rounds as u16;
     let r_p = partial_rounds as u16;
@@ -148,5 +176,41 @@ fn quintic_s_box<E: ScalarEngine>(
     l.mul_assign(&tmp);
     if let Some(x) = post_add {
         l.add_assign(x);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_strengthened_round_constants() {
+        let cases = [
+            (1, 69),
+            (2, 69),
+            (3, 70),
+            (4, 70),
+            (5, 70),
+            (6, 70),
+            (7, 72),
+            (8, 72),
+            (9, 72),
+            (10, 72),
+            (11, 72),
+            (16, 74),
+            (24, 74),
+            (36, 75),
+            (64, 77),
+        ];
+
+        cases.iter().for_each(|(arity, expected_rounds)| {
+            let (full_rounds, actual_rounds) = round_numbers_strengthened(*arity);
+            assert_eq!(8, full_rounds);
+            assert_eq!(
+                *expected_rounds, actual_rounds,
+                "wrong number of partial rounds for arity {}",
+                *arity
+            );
+        })
     }
 }
