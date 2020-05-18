@@ -253,7 +253,7 @@ mod tests {
     #[test]
     fn test_tree_builder() {
         // 16KiB tree has 512 leaves.
-        test_tree_builder_aux(None, 1024, 32, 512, 512);
+        test_tree_builder_aux(None, 512, 32, 512, 512);
         test_tree_builder_aux(Some(BatcherType::CPU), 512, 32, 512, 512);
 
         #[cfg(all(feature = "gpu", not(target_os = "macos")))]
