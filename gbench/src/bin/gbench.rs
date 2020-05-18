@@ -62,7 +62,7 @@ fn bench_column_building(
         .collect();
 
     info!("adding final column batch and building tree");
-    let res = builder.add_final_columns(final_columns.as_slice()).unwrap();
+    let (_, res) = builder.add_final_columns(final_columns.as_slice()).unwrap();
     info!("end commitment");
     let elapsed = start.elapsed();
     info!("commitment time: {:?}", elapsed);
