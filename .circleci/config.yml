@@ -2,13 +2,14 @@ version: 2.1
 
 executors:
   default:
-    docker:
-      - image: filecoin/rust:latest
-    working_directory: /mnt/crate
+    machine:
+      image: ubuntu-1604-cuda-10.1:201909-23
+    working_directory: ~/gpuci
+    resource_class: gpu.nvidia.medium
 
 restore-workspace: &restore-workspace
   attach_workspace:
-    at: /mnt
+    at: ~/
 
 restore-cache: &restore-cache
   restore_cache:
@@ -28,12 +29,26 @@ commands:
           name: Test (<< parameters.target >>)
           command: TARGET=<< parameters.target >> cargo test --release
           no_output_timeout: 5m
+      - run:
+          name: Test (GPU) (<< parameters.target >>)
+          command: TARGET=<< parameters.target >> cargo test --release --features gpu
+          no_output_timeout: 30m
 
 jobs:
   cargo_fetch:
     executor: default
     steps:
       - checkout
+      - run: curl https://sh.rustup.rs -sSf | sh -s -- -y
+      - run: echo 'export PATH="$HOME:~/.cargo/bin:$PATH"' >> $BASH_ENV
+      - run: echo $BASH_ENV
+      - run: echo $HOME
+      - run: source $BASH_ENV
+      - run: cargo --version
+      - run: rustc --version
+      - run:
+          name: Update submodules
+          command: git submodule update --init --recursive
       - run:
           name: Calculate dependencies
           command: cargo generate-lockfile
@@ -49,9 +64,9 @@ jobs:
       - run: rustc --version
       - run: rm -rf .git
       - persist_to_workspace:
-          root: /mnt
+          root: ~/
           paths:
-            - crate
+            - gpuci
       - save_cache:
           key: cargo-v0-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
           paths:
@@ -61,6 +76,11 @@ jobs:
   test_x86_64-unknown-linux-gnu:
     executor: default
     steps:
+      - run: echo 'export PATH="$HOME:~/.cargo/bin:$PATH"' >> $BASH_ENV
+      - run: source $BASH_ENV
+      - run: sudo apt-get update -y
+      - run: apt-cache search opencl
+      - run: sudo apt install -y ocl-icd-opencl-dev
       - test_target:
           target: "x86_64-unknown-linux-gnu"
 
@@ -69,6 +89,8 @@ jobs:
     steps:
       - *restore-workspace
       - *restore-cache
+      - run: echo 'export PATH="$HOME:~/.cargo/bin:$PATH"' >> $BASH_ENV
+      - run: source $BASH_ENV
       - run:
           name: Run cargo fmt
           command: cargo fmt --all -- --check
@@ -78,6 +100,11 @@ jobs:
     steps:
       - *restore-workspace
       - *restore-cache
+      - run: echo 'export PATH="$HOME:~/.cargo/bin:$PATH"' >> $BASH_ENV
+      - run: source $BASH_ENV
+      - run: sudo apt-get update -y
+      - run: apt-cache search opencl
+      - run: sudo apt install -y ocl-icd-opencl-dev
       - run:
           name: Run cargo clippy
           command: cargo clippy --all-features
@@ -87,6 +114,8 @@ jobs:
     steps:
       - *restore-workspace
       - *restore-cache
+      - run: echo 'export PATH="$HOME:~/.cargo/bin:$PATH"' >> $BASH_ENV
+      - run: source $BASH_ENV
       - run:
           name: Run cargo release build
           command: cargo build --release
@@ -96,18 +125,14 @@ jobs:
     steps:
       - *restore-workspace
       - *restore-cache
+      - run: echo 'export PATH="$HOME:~/.cargo/bin:$PATH"' >> $BASH_ENV
+      - run: source $BASH_ENV
+      - run: sudo apt-get update -y
+      - run: apt-cache search opencl
+      - run: sudo apt install -y ocl-icd-opencl-dev
       - run:
           name: Run cargo build --benches
           command: cargo build --benches --all-features --all --release
-
-  doc:
-    executor: default
-    steps:
-      - *restore-workspace
-      - *restore-cache
-      - run:
-          name: Run cargo doc
-          command: cargo doc --all-features --no-deps
 
 workflows:
   version: 2.1
@@ -128,8 +153,5 @@ workflows:
           requires:
             - cargo_fetch
       - benches:
-          requires:
-            - cargo_fetch
-      - doc:
           requires:
             - cargo_fetch
