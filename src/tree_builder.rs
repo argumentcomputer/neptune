@@ -26,6 +26,7 @@ where
     fill_index: usize,
     tree_constants: PoseidonConstants<Bls12, TreeArity>,
     tree_batcher: Option<Batcher<'a, TreeArity>>,
+    rows_to_discard: usize,
 }
 
 impl<TreeArity> TreeBuilderTrait<TreeArity> for TreeBuilder<'_, TreeArity>
@@ -50,7 +51,7 @@ where
     fn add_final_leaves(&mut self, leaves: &[Fr]) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
         self.add_leaves(leaves)?;
 
-        let res = self.build_tree(0);
+        let res = self.build_tree(self.rows_to_discard);
         self.reset();
 
         res
@@ -100,6 +101,7 @@ where
             } else {
                 None
             },
+            rows_to_discard,
         };
 
         // Cannot discard the base row or the root.
@@ -298,7 +300,7 @@ mod tests {
             let computed_root = res[res.len() - 1];
 
             let expected_root = builder.compute_uniform_tree_root(final_leaves[0]).unwrap();
-            let expected_size = builder.tree_size(0);
+            let expected_size = builder.tree_size(rows_to_discard);
 
             assert!(base.iter().all(|x| *x == Fr::zero()));
 
