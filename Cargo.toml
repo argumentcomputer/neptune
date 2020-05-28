@@ -23,6 +23,7 @@ rand = "0.7.0"
 sha2 = "0.8"
 tempdir = "0.3"
 rand_xorshift = "0.2.0"
+serde_json = "1.0.53"
 
 [build-dependencies]
 paired = "0.19.0"
