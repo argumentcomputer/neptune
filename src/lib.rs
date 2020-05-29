@@ -156,7 +156,7 @@ fn round_constants<E: ScalarEngine>(arity: usize, strength: &Strength) -> Vec<E:
 }
 
 /// Apply the quintic S-Box (s^5) to a given item
-fn quintic_s_box<E: ScalarEngine>(
+pub(crate) fn quintic_s_box<E: ScalarEngine>(
     l: &mut E::Fr,
     pre_add: Option<&E::Fr>,
     post_add: Option<&E::Fr>,
