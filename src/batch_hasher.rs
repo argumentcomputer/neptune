@@ -1,6 +1,6 @@
 use crate::error::Error;
 use crate::poseidon::SimplePoseidonBatchHasher;
-use crate::{Arity, BatchHasher};
+use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
 use generic_array::GenericArray;
 use paired::bls12_381::Fr;
 use std::marker::PhantomData;
@@ -36,23 +36,27 @@ where
         }
     }
 
-    #[cfg(all(feature = "gpu", not(target_os = "macos")))]
     pub(crate) fn new(t: &BatcherType, max_batch_size: usize) -> Result<Self, Error> {
-        match t {
-            BatcherType::GPU => Ok(Batcher::GPU(GPUBatchHasher::<A>::new(max_batch_size)?)),
-
-            BatcherType::CPU => Ok(Batcher::CPU(SimplePoseidonBatchHasher::<A>::new(
-                max_batch_size,
-            )?)),
-        }
+        Self::new_with_strength(DEFAULT_STRENGTH, t, max_batch_size)
     }
-    #[cfg(not(all(feature = "gpu", not(target_os = "macos"))))]
-    pub(crate) fn new(t: &BatcherType, max_batch_size: usize) -> Result<Self, Error> {
+
+    pub(crate) fn new_with_strength(
+        strength: Strength,
+        t: &BatcherType,
+        max_batch_size: usize,
+    ) -> Result<Self, Error> {
         match t {
-            BatcherType::GPU => Err(Error::Other("GPU not configured".to_string())),
-            BatcherType::CPU => Ok(Batcher::CPU(SimplePoseidonBatchHasher::<A>::new(
+            #[cfg(all(feature = "gpu", target_os = "macos"))]
+            BatcherType::GPU => panic!("GPU unimplemented on macos"),
+            #[cfg(all(feature = "gpu", not(target_os = "macos")))]
+            BatcherType::GPU => Ok(Batcher::GPU(GPUBatchHasher::<A>::new_with_strength(
+                strength,
                 max_batch_size,
             )?)),
+
+            BatcherType::CPU => Ok(Batcher::CPU(
+                SimplePoseidonBatchHasher::<A>::new_with_strength(strength, max_batch_size)?,
+            )),
         }
     }
 }

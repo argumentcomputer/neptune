@@ -567,7 +567,7 @@ mod tests {
     use super::*;
     use crate::poseidon::HashMode;
     use crate::test::TestConstraintSystem;
-    use crate::{scalar_from_u64, Poseidon};
+    use crate::{scalar_from_u64, Poseidon, Strength};
     use bellperson::ConstraintSystem;
     use generic_array::typenum;
     use paired::bls12_381::{Bls12, Fr};
@@ -576,33 +576,29 @@ mod tests {
 
     #[test]
     fn test_poseidon_hash() {
-        test_poseidon_hash_aux::<typenum::U2>(false, 314);
-        test_poseidon_hash_aux::<typenum::U4>(false, 380);
-        test_poseidon_hash_aux::<typenum::U8>(false, 508);
-        test_poseidon_hash_aux::<typenum::U16>(false, 764);
-        test_poseidon_hash_aux::<typenum::U24>(false, 1012);
-        test_poseidon_hash_aux::<typenum::U36>(false, 1388);
+        test_poseidon_hash_aux::<typenum::U2>(Strength::Standard, 314);
+        test_poseidon_hash_aux::<typenum::U4>(Strength::Standard, 380);
+        test_poseidon_hash_aux::<typenum::U8>(Strength::Standard, 508);
+        test_poseidon_hash_aux::<typenum::U16>(Strength::Standard, 764);
+        test_poseidon_hash_aux::<typenum::U24>(Strength::Standard, 1012);
+        test_poseidon_hash_aux::<typenum::U36>(Strength::Standard, 1388);
 
-        test_poseidon_hash_aux::<typenum::U2>(true, 370);
-        test_poseidon_hash_aux::<typenum::U4>(true, 436);
-        test_poseidon_hash_aux::<typenum::U8>(true, 568);
-        test_poseidon_hash_aux::<typenum::U16>(true, 824);
-        test_poseidon_hash_aux::<typenum::U24>(true, 1072);
-        test_poseidon_hash_aux::<typenum::U36>(true, 1448);
+        test_poseidon_hash_aux::<typenum::U2>(Strength::Strengthened, 370);
+        test_poseidon_hash_aux::<typenum::U4>(Strength::Strengthened, 436);
+        test_poseidon_hash_aux::<typenum::U8>(Strength::Strengthened, 568);
+        test_poseidon_hash_aux::<typenum::U16>(Strength::Strengthened, 824);
+        test_poseidon_hash_aux::<typenum::U24>(Strength::Strengthened, 1072);
+        test_poseidon_hash_aux::<typenum::U36>(Strength::Strengthened, 1448);
     }
 
-    fn test_poseidon_hash_aux<A>(strengthened: bool, expected_constraints: usize)
+    fn test_poseidon_hash_aux<A>(strength: Strength, expected_constraints: usize)
     where
         A: Arity<<Bls12 as Engine>::Fr>,
     {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
         let mut cs = TestConstraintSystem::<Bls12>::new();
         let arity = A::to_usize();
-        let constants = if strengthened {
-            PoseidonConstants::<Bls12, A>::new_strengthened()
-        } else {
-            PoseidonConstants::<Bls12, A>::new()
-        };
+        let constants = PoseidonConstants::<Bls12, A>::new_with_strength(strength);
 
         let expected_constraints_calculated = {
             let width = 1 + arity;

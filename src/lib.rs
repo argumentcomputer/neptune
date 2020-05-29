@@ -44,6 +44,14 @@ pub(crate) const TEST_SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
 ];
 
+#[derive(Copy, Clone, Debug)]
+pub enum Strength {
+    Standard,
+    Strengthened,
+}
+
+pub(crate) const DEFAULT_STRENGTH: Strength = Strength::Standard;
+
 pub trait BatchHasher<A>
 where
     A: Arity<Scalar>,
@@ -109,11 +117,10 @@ fn round_numbers_strengthened(arity: usize) -> (usize, usize) {
     (full_round, strengthened_partial_rounds)
 }
 
-pub fn round_numbers(arity: usize, strengthened: bool) -> (usize, usize) {
-    if strengthened {
-        round_numbers_strengthened(arity)
-    } else {
-        round_numbers_base(arity)
+pub fn round_numbers(arity: usize, strength: &Strength) -> (usize, usize) {
+    match strength {
+        Strength::Standard => round_numbers_base(arity),
+        Strength::Strengthened => round_numbers_strengthened(arity),
     }
 }
 
@@ -130,10 +137,10 @@ pub fn scalar_from_u64s(parts: [u64; 4]) -> Scalar {
 const SBOX: u8 = 1; // x^5
 const FIELD: u8 = 1; // Gf(p)
 
-fn round_constants<E: ScalarEngine>(arity: usize, strengthened: bool) -> Vec<E::Fr> {
+fn round_constants<E: ScalarEngine>(arity: usize, strength: &Strength) -> Vec<E::Fr> {
     let t = arity + 1;
 
-    let (full_rounds, partial_rounds) = round_numbers(arity, strengthened);
+    let (full_rounds, partial_rounds) = round_numbers(arity, strength);
 
     let r_f = full_rounds as u16;
     let r_p = partial_rounds as u16;
