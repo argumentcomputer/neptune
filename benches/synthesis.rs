@@ -37,7 +37,7 @@ impl<A: Arity<Fr>> Circuit<Bls12> for BenchCircuit<A> {
                     AllocatedNum::alloc(cs.namespace(|| format!("data {}", i)), || Ok(fr)).unwrap()
                 })
                 .collect::<Vec<_>>();
-            let out = poseidon_hash(&mut cs, data, &constants).expect("poseidon hashing failed");
+            let _ = poseidon_hash(&mut cs, data, &constants).expect("poseidon hashing failed");
         }
         Ok(())
     }
@@ -51,7 +51,7 @@ where
 
     let mut num_hashes = 1;
 
-    for i in 0..4 {
+    for _ in 0..4 {
         group.bench_with_input(
             BenchmarkId::new(
                 "Poseidon Synthesis",

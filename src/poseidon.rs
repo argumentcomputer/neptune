@@ -1,7 +1,7 @@
 use crate::matrix::Matrix;
 use crate::mds::{create_mds_matrices, factor_to_sparse_matrixes, MDSMatrices, SparseMatrix};
 use crate::preprocessing::compress_round_constants;
-use crate::{matrix, quintic_s_box, BatchHasher};
+use crate::{matrix, quintic_s_box, BatchHasher, Strength, DEFAULT_STRENGTH};
 use crate::{round_constants, round_numbers, scalar_from_u64, Error};
 use ff::{Field, PrimeField, ScalarEngine};
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
@@ -141,21 +141,18 @@ where
     A: Arity<E::Fr>,
 {
     pub fn new() -> Self {
-        Self::new_common(false)
+        Self::new_with_strength(DEFAULT_STRENGTH)
     }
 
-    pub fn new_strengthened() -> Self {
-        Self::new_common(true)
-    }
-    pub fn new_common(strengthened: bool) -> Self {
+    pub fn new_with_strength(strength: Strength) -> Self {
         let arity = A::to_usize();
         let width = arity + 1;
 
         let mds_matrices = create_mds_matrices::<E>(width);
 
-        let (full_rounds, partial_rounds) = round_numbers(arity, strengthened);
+        let (full_rounds, partial_rounds) = round_numbers(arity, &strength);
         let half_full_rounds = full_rounds / 2;
-        let round_constants = round_constants::<E>(arity, strengthened);
+        let round_constants = round_constants::<E>(arity, &strength);
         let compressed_round_constants = compress_round_constants::<E>(
             width,
             full_rounds,
@@ -677,8 +674,15 @@ where
     A: 'a + Arity<bls12_381::Fr>,
 {
     pub(crate) fn new(max_batch_size: usize) -> Result<Self, Error> {
+        Self::new_with_strength(DEFAULT_STRENGTH, max_batch_size)
+    }
+
+    pub(crate) fn new_with_strength(
+        strength: Strength,
+        max_batch_size: usize,
+    ) -> Result<Self, Error> {
         Ok(Self {
-            constants: PoseidonConstants::<Bls12, A>::new(),
+            constants: PoseidonConstants::<Bls12, A>::new_with_strength(strength),
             max_batch_size,
             _s: PhantomData::<Poseidon<'a, Bls12, A>>,
         })
@@ -757,30 +761,26 @@ mod tests {
 
     #[test]
     fn hash_values() {
-        hash_values_cases(false);
-        hash_values_cases(true);
+        hash_values_cases(Strength::Standard);
+        hash_values_cases(Strength::Strengthened);
     }
 
-    fn hash_values_cases(strengthened: bool) {
-        hash_values_aux::<typenum::U2>(strengthened);
-        hash_values_aux::<typenum::U4>(strengthened);
-        hash_values_aux::<typenum::U8>(strengthened);
-        hash_values_aux::<typenum::U11>(strengthened);
-        hash_values_aux::<typenum::U16>(strengthened);
-        hash_values_aux::<typenum::U24>(strengthened);
-        hash_values_aux::<typenum::U36>(strengthened);
+    fn hash_values_cases(strength: Strength) {
+        hash_values_aux::<typenum::U2>(strength);
+        hash_values_aux::<typenum::U4>(strength);
+        hash_values_aux::<typenum::U8>(strength);
+        hash_values_aux::<typenum::U11>(strength);
+        hash_values_aux::<typenum::U16>(strength);
+        hash_values_aux::<typenum::U24>(strength);
+        hash_values_aux::<typenum::U36>(strength);
     }
 
     /// Simple test vectors to ensure results don't change unintentionally in development.
-    fn hash_values_aux<A>(strengthened: bool)
+    fn hash_values_aux<A>(strength: Strength)
     where
         A: Arity<Fr>,
     {
-        let constants = if strengthened {
-            PoseidonConstants::<Bls12, A>::new_strengthened()
-        } else {
-            PoseidonConstants::<Bls12, A>::new()
-        };
+        let constants = PoseidonConstants::<Bls12, A>::new_with_strength(strength);
         let mut p = Poseidon::<Bls12, A>::new(&constants);
         let mut p2 = Poseidon::<Bls12, A>::new(&constants);
         let mut p3 = Poseidon::<Bls12, A>::new(&constants);
@@ -806,104 +806,108 @@ mod tests {
         assert_eq!(digest, digest3);
         assert_eq!(digest, digest4);
 
-        let expected = if strengthened {
-            // Strengthened round constants.
-            match test_arity {
-                2 => scalar_from_u64s([
-                    0x793dbaf54552cd69,
-                    0x5278ecbf17040ea6,
-                    0xc48b36ecc4cab748,
-                    0x33d28a753baee41b,
-                ]),
-                4 => scalar_from_u64s([
-                    0x4650ee190212aa9a,
-                    0xe5113a254d6f5c7e,
-                    0x54013bdaf68ba4c2,
-                    0x09d8207c51ca3f43,
-                ]),
-                8 => scalar_from_u64s([
-                    0x9f0c3c93c3fc894e,
-                    0xe843d4cfba662df1,
-                    0xd69aae8fe1cb63e8,
-                    0x69e61465981ae17e,
-                ]),
-                11 => scalar_from_u64s([
-                    0x778af344d8f9e8b7,
-                    0xc94fe2ca3f46d433,
-                    0x07abbcf9b406e8d8,
-                    0x28bb83ff439753c0,
-                ]),
-                16 => scalar_from_u64s([
-                    0x3cc2664c5fd6ae07,
-                    0xd7431eaaa5e43189,
-                    0x43ba5f418c6ef01d,
-                    0x68d7856395aa217e,
-                ]),
-                24 => scalar_from_u64s([
-                    0x1df1da58827cb39d,
-                    0x0566756b7b80fb10,
-                    0x222eb82c6666be3d,
-                    0x086e4e81a35bfd92,
-                ]),
-                36 => scalar_from_u64s([
-                    0x636401e9371dc311,
-                    0x8f69e35a702ed188,
-                    0x64d73b2ddc03d43b,
-                    0x609f8c6fe45cc054,
-                ]),
-                _ => {
-                    dbg!(digest, test_arity);
-                    panic!("Arity lacks test vector: {}", test_arity)
+        let expected = match strength {
+            Strength::Standard => {
+                // Currently secure round constants.
+                match test_arity {
+                    2 => scalar_from_u64s([
+                        0x2e203c369a02e7ff,
+                        0xa6fba9339d05a69d,
+                        0x739e0fd902efe161,
+                        0x396508d75e76a56b,
+                    ]),
+                    4 => scalar_from_u64s([
+                        0x019814ff6662075d,
+                        0xfb6b4605bf1327ec,
+                        0x00db3c6579229399,
+                        0x58a54b10a9e5848a,
+                    ]),
+                    8 => scalar_from_u64s([
+                        0x2a9934f56d38a5e6,
+                        0x4b682e9d9cc4aed9,
+                        0x1201004211677077,
+                        0x2394611da3a5de55,
+                    ]),
+                    11 => scalar_from_u64s([
+                        0xcee3bbc32b693163,
+                        0x09f3dcd8ccb08fc1,
+                        0x6ca537e232ebe87a,
+                        0x0c0fc1b2e5227f28,
+                    ]),
+                    16 => scalar_from_u64s([
+                        0x1291c74060266d37,
+                        0x5b8dbc6d30680a6f,
+                        0xc1c2fb5a6f871e63,
+                        0x2d3ae2663381ae8a,
+                    ]),
+                    24 => scalar_from_u64s([
+                        0xd7ef3569f585b321,
+                        0xc3e779f6468815b1,
+                        0x066f39bf783f3d9f,
+                        0x63beb8831f11ae15,
+                    ]),
+                    36 => scalar_from_u64s([
+                        0x4473606dfa4e8140,
+                        0x75cd368df8a8ac3c,
+                        0x540a30e03c10bbaa,
+                        0x699303082a6e5d5f,
+                    ]),
+                    _ => {
+                        dbg!(digest, test_arity);
+                        panic!("Arity lacks test vector: {}", test_arity)
+                    }
                 }
             }
-        } else {
-            // Currently secure round constants.
-            match test_arity {
-                2 => scalar_from_u64s([
-                    0x2e203c369a02e7ff,
-                    0xa6fba9339d05a69d,
-                    0x739e0fd902efe161,
-                    0x396508d75e76a56b,
-                ]),
-                4 => scalar_from_u64s([
-                    0x019814ff6662075d,
-                    0xfb6b4605bf1327ec,
-                    0x00db3c6579229399,
-                    0x58a54b10a9e5848a,
-                ]),
-                8 => scalar_from_u64s([
-                    0x2a9934f56d38a5e6,
-                    0x4b682e9d9cc4aed9,
-                    0x1201004211677077,
-                    0x2394611da3a5de55,
-                ]),
-                11 => scalar_from_u64s([
-                    0xcee3bbc32b693163,
-                    0x09f3dcd8ccb08fc1,
-                    0x6ca537e232ebe87a,
-                    0x0c0fc1b2e5227f28,
-                ]),
-                16 => scalar_from_u64s([
-                    0x1291c74060266d37,
-                    0x5b8dbc6d30680a6f,
-                    0xc1c2fb5a6f871e63,
-                    0x2d3ae2663381ae8a,
-                ]),
-                24 => scalar_from_u64s([
-                    0xd7ef3569f585b321,
-                    0xc3e779f6468815b1,
-                    0x066f39bf783f3d9f,
-                    0x63beb8831f11ae15,
-                ]),
-                36 => scalar_from_u64s([
-                    0x4473606dfa4e8140,
-                    0x75cd368df8a8ac3c,
-                    0x540a30e03c10bbaa,
-                    0x699303082a6e5d5f,
-                ]),
-                _ => {
-                    dbg!(digest, test_arity);
-                    panic!("Arity lacks test vector: {}", test_arity)
+            Strength::Strengthened =>
+            // Strengthened round constants.
+            {
+                match test_arity {
+                    2 => scalar_from_u64s([
+                        0x793dbaf54552cd69,
+                        0x5278ecbf17040ea6,
+                        0xc48b36ecc4cab748,
+                        0x33d28a753baee41b,
+                    ]),
+                    4 => scalar_from_u64s([
+                        0x4650ee190212aa9a,
+                        0xe5113a254d6f5c7e,
+                        0x54013bdaf68ba4c2,
+                        0x09d8207c51ca3f43,
+                    ]),
+                    8 => scalar_from_u64s([
+                        0x9f0c3c93c3fc894e,
+                        0xe843d4cfba662df1,
+                        0xd69aae8fe1cb63e8,
+                        0x69e61465981ae17e,
+                    ]),
+                    11 => scalar_from_u64s([
+                        0x778af344d8f9e8b7,
+                        0xc94fe2ca3f46d433,
+                        0x07abbcf9b406e8d8,
+                        0x28bb83ff439753c0,
+                    ]),
+                    16 => scalar_from_u64s([
+                        0x3cc2664c5fd6ae07,
+                        0xd7431eaaa5e43189,
+                        0x43ba5f418c6ef01d,
+                        0x68d7856395aa217e,
+                    ]),
+                    24 => scalar_from_u64s([
+                        0x1df1da58827cb39d,
+                        0x0566756b7b80fb10,
+                        0x222eb82c6666be3d,
+                        0x086e4e81a35bfd92,
+                    ]),
+                    36 => scalar_from_u64s([
+                        0x636401e9371dc311,
+                        0x8f69e35a702ed188,
+                        0x64d73b2ddc03d43b,
+                        0x609f8c6fe45cc054,
+                    ]),
+                    _ => {
+                        dbg!(digest, test_arity);
+                        panic!("Arity lacks test vector: {}", test_arity)
+                    }
                 }
             }
         };
@@ -932,5 +936,17 @@ mod tests {
 
         assert_eq!(digest_correct, digest_optimized_dynamic);
         assert_eq!(digest_correct, digest_optimized_static);
+    }
+
+    #[test]
+    fn default_is_standard() {
+        let default_constants = PoseidonConstants::<Bls12, U8>::new();
+        let standard_constants =
+            PoseidonConstants::<Bls12, U8>::new_with_strength(Strength::Standard);
+
+        assert_eq!(
+            standard_constants.partial_rounds,
+            default_constants.partial_rounds
+        );
     }
 }

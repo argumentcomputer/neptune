@@ -66,7 +66,7 @@ where
         BenchmarkId::new("Poseidon hash", "Generated scalars"),
         &scalars,
         |b, s| {
-            let constants = PoseidonConstants::new();
+            let constants = PoseidonConstants::new_with_strength(Strength::Standard);
             let mut h = Poseidon::<Bls12, A>::new(&constants);
             b.iter(|| {
                 h.reset();
@@ -86,7 +86,7 @@ where
         BenchmarkId::new("Poseidon hash optimized", "Generated scalars"),
         &scalars,
         |b, s| {
-            let constants = PoseidonConstants::new();
+            let constants = PoseidonConstants::new_with_strength(Strength::Standard);
             let mut h = Poseidon::<Bls12, A>::new(&constants);
             b.iter(|| {
                 h.reset();
@@ -109,7 +109,7 @@ where
         ),
         &scalars,
         |b, s| {
-            let constants = PoseidonConstants::new_strengthened();
+            let constants = PoseidonConstants::new_with_strength(Strength::Strengthened);
             let mut h = Poseidon::<Bls12, A>::new(&constants);
             b.iter(|| {
                 h.reset();
