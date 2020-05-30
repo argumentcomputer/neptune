@@ -1,5 +1,6 @@
 use crate::matrix::Matrix;
 use crate::mds::{create_mds_matrices, factor_to_sparse_matrixes, MDSMatrices, SparseMatrix};
+use crate::poseidon_alt::{hash_correct, hash_optimized_dynamic};
 use crate::preprocessing::compress_round_constants;
 use crate::{matrix, quintic_s_box, BatchHasher, Strength, DEFAULT_STRENGTH};
 use crate::{round_constants, round_numbers, scalar_from_u64, Error};
@@ -93,12 +94,12 @@ where
     E: ScalarEngine,
     A: Arity<E::Fr>,
 {
-    constants_offset: usize,
-    current_round: usize, // Used in static optimization only for now.
+    pub(crate) constants_offset: usize,
+    pub(crate) current_round: usize, // Used in static optimization only for now.
     /// the elements to permute
     pub elements: GenericArray<E::Fr, A::ConstantsSize>,
     pos: usize,
-    constants: &'a PoseidonConstants<E, A>,
+    pub(crate) constants: &'a PoseidonConstants<E, A>,
     _e: PhantomData<E>,
 }
 
@@ -286,8 +287,8 @@ where
 
     pub fn hash_in_mode(&mut self, mode: HashMode) -> E::Fr {
         match mode {
-            Correct => self.hash_correct(),
-            OptimizedDynamic => self.hash_optimized_dynamic(),
+            Correct => hash_correct(self),
+            OptimizedDynamic => hash_optimized_dynamic(self),
             OptimizedStatic => self.hash_optimized_static(),
         }
     }
@@ -296,69 +297,23 @@ where
         self.hash_in_mode(DEFAULT_HASH_MODE)
     }
 
-    /// The number of rounds is divided into two equal parts for the full rounds, plus the partial rounds.
-    ///
-    /// The returned element is the second poseidon element, the first is the arity tag.
-    pub fn hash_correct(&mut self) -> E::Fr {
-        // This counter is incremented when a round constants is read. Therefore, the round constants never repeat.
-        // The first full round should use the initial constants.
-        self.full_round();
-
-        for _ in 1..self.constants.half_full_rounds {
-            self.full_round();
-        }
-
-        self.partial_round();
-
-        for _ in 1..self.constants.partial_rounds {
-            self.partial_round();
-        }
-
-        for _ in 0..self.constants.half_full_rounds {
-            self.full_round();
-        }
-
-        self.elements[1]
-    }
-
-    pub fn hash_optimized_dynamic(&mut self) -> E::Fr {
-        // The first full round should use the initial constants.
-        self.full_round_dynamic(true, true);
-
-        for _ in 1..(self.constants.half_full_rounds) {
-            self.full_round_dynamic(false, true);
-        }
-
-        self.partial_round_dynamic();
-
-        for _ in 1..self.constants.partial_rounds {
-            self.partial_round();
-        }
-
-        for _ in 0..self.constants.half_full_rounds {
-            self.full_round_dynamic(true, false);
-        }
-
-        self.elements[1]
-    }
-
     pub fn hash_optimized_static(&mut self) -> E::Fr {
         // The first full round should use the initial constants.
-        self.add_round_constants_static();
+        self.add_round_constants();
 
         for _ in 0..self.constants.half_full_rounds {
-            self.full_round_static(false);
+            self.full_round(false);
         }
 
         for _ in 0..self.constants.partial_rounds {
-            self.partial_round_static();
+            self.partial_round();
         }
 
         // All but last full round.
         for _ in 1..self.constants.half_full_rounds {
-            self.full_round_static(false);
+            self.full_round(false);
         }
-        self.full_round_static(true);
+        self.full_round(true);
 
         assert_eq!(
             self.constants_offset,
@@ -371,123 +326,7 @@ where
         self.elements[1]
     }
 
-    pub fn full_round(&mut self) {
-        // Apply the quintic S-Box to all elements, after adding the round key.
-        // Round keys are added in the S-box to match circuits (where the addition is free)
-        // and in preparation for the shift to adding round keys after (rather than before) applying the S-box.
-
-        let pre_round_keys = self
-            .constants
-            .round_constants
-            .iter()
-            .skip(self.constants_offset)
-            .map(|x| Some(x));
-
-        self.elements
-            .iter_mut()
-            .zip(pre_round_keys)
-            .for_each(|(l, pre)| {
-                quintic_s_box::<E>(l, pre, None);
-            });
-
-        self.constants_offset += self.elements.len();
-
-        // M(B)
-        // Multiply the elements by the constant MDS matrix
-        self.product_mds();
-    }
-
-    pub fn full_round_dynamic(
-        &mut self,
-        add_current_round_keys: bool,
-        absorb_next_round_keys: bool,
-    ) {
-        // NOTE: decrease in performance is expected when using this pathway.
-        // We seek to preserve correctness while transforming the algorithm to an eventually more performant one.
-
-        // Round keys are added in the S-box to match circuits (where the addition is free).
-        // If requested, add round keys synthesized from following round after (rather than before) applying the S-box.
-        let pre_round_keys = self
-            .constants
-            .round_constants
-            .iter()
-            .skip(self.constants_offset)
-            .map(|x| {
-                if add_current_round_keys {
-                    Some(x)
-                } else {
-                    None
-                }
-            });
-
-        if absorb_next_round_keys {
-            // Using the notation from `test_inverse` in matrix.rs:
-            // S
-            let post_vec = self
-                .constants
-                .round_constants
-                .iter()
-                .skip(
-                    self.constants_offset
-                        + if add_current_round_keys {
-                            self.elements.len()
-                        } else {
-                            0
-                        },
-                )
-                .take(self.elements.len())
-                .map(|x| *x)
-                .collect::<Vec<_>>();
-
-            // Compute the constants which should be added *before* the next `product_mds`.
-            // in order to have the same effect as adding the given constants *after* the next `product_mds`.
-
-            // M^-1(S)
-            let inverted_vec =
-                matrix::apply_matrix::<E>(&self.constants.mds_matrices.m_inv, &post_vec);
-
-            // M(M^-1(S))
-            let original = matrix::apply_matrix::<E>(&self.constants.mds_matrices.m, &inverted_vec);
-
-            // S = M(M^-1(S))
-            assert_eq!(&post_vec, &original, "Oh no, the inversion trick failed.");
-
-            let post_round_keys = inverted_vec.iter();
-
-            // S-Box Output = B.
-            // With post-add, result is B + M^-1(S).
-            self.elements
-                .iter_mut()
-                .zip(pre_round_keys.zip(post_round_keys))
-                .for_each(|(l, (pre, post))| {
-                    quintic_s_box::<E>(l, pre, Some(post));
-                });
-        } else {
-            self.elements
-                .iter_mut()
-                .zip(pre_round_keys)
-                .for_each(|(l, pre)| {
-                    quintic_s_box::<E>(l, pre, None);
-                });
-        }
-        let mut consumed = 0;
-        if add_current_round_keys {
-            consumed += self.elements.len()
-        };
-        if absorb_next_round_keys {
-            consumed += self.elements.len()
-        };
-        self.constants_offset += consumed;
-
-        // If absorb_next_round_keys
-        //   M(B + M^-1(S)
-        // else
-        //   M(B)
-        // Multiply the elements by the constant MDS matrix
-        self.product_mds();
-    }
-
-    fn full_round_static(&mut self, last_round: bool) {
+    fn full_round(&mut self, last_round: bool) {
         let to_take = self.elements.len();
         let post_round_keys = self
             .constants
@@ -525,56 +364,21 @@ where
         } else {
             self.constants_offset += self.elements.len();
         }
-        self.product_mds_static();
-    }
-
-    /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
-    pub fn partial_round(&mut self) {
-        // Every element of the hash buffer is incremented by the round constants
-        self.add_round_constants();
-
-        // Apply the quintic S-Box to the first element
-        quintic_s_box::<E>(&mut self.elements[0], None, None);
-
-        // Multiply the elements by the constant MDS matrix
-        self.product_mds();
-    }
-
-    pub fn partial_round_dynamic(&mut self) {
-        // Apply the quintic S-Box to the first element
-        quintic_s_box::<E>(&mut self.elements[0], None, None);
-
-        // Multiply the elements by the constant MDS matrix
-        self.product_mds();
+        self.round_product_mds();
     }
 
     /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first (arity tag) poseidon leaf.
-    fn partial_round_static(&mut self) {
+    fn partial_round(&mut self) {
         let post_round_key = self.constants.compressed_round_constants[self.constants_offset];
 
         // Apply the quintic S-Box to the first element
         quintic_s_box::<E>(&mut self.elements[0], None, Some(&post_round_key));
         self.constants_offset += 1;
 
-        self.product_mds_static();
+        self.round_product_mds();
     }
 
-    /// For every leaf, add the round constants with index defined by the constants offset, and increment the
-    /// offset.
     fn add_round_constants(&mut self) {
-        for (element, round_constant) in self.elements.iter_mut().zip(
-            self.constants
-                .round_constants
-                .iter()
-                .skip(self.constants_offset),
-        ) {
-            element.add_assign(round_constant);
-        }
-
-        self.constants_offset += self.elements.len();
-    }
-
-    fn add_round_constants_static(&mut self) {
         for (element, round_constant) in self.elements.iter_mut().zip(
             self.constants
                 .compressed_round_constants
@@ -587,15 +391,9 @@ where
         self.constants_offset += self.elements.len();
     }
 
-    /// Set the provided elements with the result of the product between the elements and the constant
-    /// MDS matrix.
-    fn product_mds(&mut self) {
-        self.product_mds_with_matrix(&self.constants.mds_matrices.m);
-    }
-
     /// Set the provided elements with the result of the product between the elements and the appropriate
     /// MDS matrix.
-    fn product_mds_static(&mut self) {
+    fn round_product_mds(&mut self) {
         let full_half = self.constants.half_full_rounds;
         let sparse_offset = full_half - 1;
         if self.current_round == sparse_offset {
@@ -616,7 +414,13 @@ where
         self.current_round += 1;
     }
 
-    fn product_mds_with_matrix(&mut self, matrix: &Matrix<E::Fr>) {
+    /// Set the provided elements with the result of the product between the elements and the constant
+    /// MDS matrix.
+    pub(crate) fn product_mds(&mut self) {
+        self.product_mds_with_matrix(&self.constants.mds_matrices.m);
+    }
+
+    pub(crate) fn product_mds_with_matrix(&mut self, matrix: &Matrix<E::Fr>) {
         let mut result = GenericArray::<E::Fr, A::ConstantsSize>::generate(|_| E::Fr::zero());
 
         for (j, val) in result.iter_mut().enumerate() {
