@@ -19,6 +19,7 @@ mod mds;
 
 /// Poseidon hash
 pub mod poseidon;
+mod poseidon_alt;
 mod preprocessing;
 mod round_constants;
 mod test;
