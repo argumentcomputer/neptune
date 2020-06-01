@@ -217,6 +217,7 @@ mod tests {
         let expected_root = builder.compute_uniform_tree_root(final_columns[0]).unwrap();
         let expected_size = builder.tree_builder.tree_size(0);
 
+        assert_eq!(leaves, base.len());
         assert_eq!(expected_size, res.len());
         assert_eq!(expected_root, computed_root);
     }
