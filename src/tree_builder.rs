@@ -169,7 +169,7 @@ where
             }
         }
 
-        let base_row = Vec::new(); //tree_data[..self.leaf_count].to_vec();
+        let base_row = tree_data[..self.leaf_count].to_vec();
         let tree_to_keep = tree_data[tree_data.len() - final_tree_size..].to_vec();
         Ok((base_row, tree_to_keep))
     }
@@ -302,7 +302,8 @@ mod tests {
             let expected_root = builder.compute_uniform_tree_root(final_leaves[0]).unwrap();
             let expected_size = builder.tree_size(rows_to_discard);
 
-            assert!(base.iter().all(|x| *x == Fr::zero()));
+            assert_eq!(leaves, base.len());
+            assert!(base.iter().all(|x| *x == constant_element));
 
             assert_eq!(expected_size, res.len());
             assert_eq!(expected_root, computed_root);
