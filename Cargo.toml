@@ -2,7 +2,7 @@
 name = "neptune"
 description = "Poseidon hashing over BLS12-381 for Filecoin."
 version = "0.7.1"
-authors = ["porcuquine <porcuquine@users.noreply.github.com>"]
+authors = ["porcuquine <porcuquine@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/porcuquine/poseidon"
