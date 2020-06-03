@@ -34,22 +34,15 @@ pub fn generate_constants<E: ScalarEngine>(
     r_f: u16,
     r_p: u16,
 ) -> Vec<E::Fr> {
-    let n = field_size * t;
     let num_constants = (r_f + r_p) * t;
-    let bit_list_field: u128 = (field & 0b11).into(); // Bits 0-1
-    let bit_list_sbox: u128 = ((sbox & 0b1111) << 2).into(); // Bits 2-5
-    let bit_list_n: u128 = ((n & 0b111111111111) << 6).into(); // Bits 6-17
-    let bit_list_t: u128 = ((t as u128 & 0b111111111111) << 18).into(); // Bits 18-29
-    let bit_list_r_f: u128 = ((r_f as u128 & 0b1111111111) << 30).into(); // Bits 30-39
-    let bit_list_r_p: u128 = ((r_p as u128 & 0b1111111111) << 40).into(); // Bits 40-49
-    let bit_list_1: u128 = 0b111111111111111111111111111111u128 << 50; // Bits 50-79
-    let init_sequence = bit_list_field
-        + bit_list_sbox
-        + bit_list_n
-        + bit_list_t
-        + bit_list_r_f
-        + bit_list_r_p
-        + bit_list_1;
+    let mut init_sequence: Vec<bool> = Vec::new();
+    append_bits(&mut init_sequence, 2, field); // Bits 0-1
+    append_bits(&mut init_sequence, 4, sbox); // Bits 2-5
+    append_bits(&mut init_sequence, 12, field_size); // Bits 6-17
+    append_bits(&mut init_sequence, 12, t); // Bits 18-29
+    append_bits(&mut init_sequence, 10, r_f); // Bits 30-39
+    append_bits(&mut init_sequence, 10, r_p); // Bits 40-49
+    append_bits(&mut init_sequence, 30, 0b111111111111111111111111111111u128); // Bits 50-79
 
     let mut grain = Grain::new(init_sequence, field_size);
     let mut round_constants: Vec<E::Fr> = Vec::new();
@@ -76,25 +69,30 @@ pub fn generate_constants<E: ScalarEngine>(
     }
     return round_constants;
 }
+
+fn append_bits<T: Into<u128>>(vec: &mut Vec<bool>, n: usize, from: T) {
+    let val = from.into() as u128;
+    for i in (0..n).rev() {
+        vec.push((val >> i) & 1 != 0);
+    }
+}
+
 struct Grain {
     state: Vec<bool>,
     field_size: u16,
 }
 
 impl Grain {
-    fn new(init_sequence: u128, field_size: u16) -> Self {
-        let mut init = init_sequence;
-        let mut state: Vec<bool> = Vec::new();
-        for _ in 0..80 {
-            state.push(init & 1 == 1);
-            init >>= 1;
-        }
-        let mut g = Grain { state, field_size };
-        assert_eq!(0, init);
+    fn new(init_sequence: Vec<bool>, field_size: u16) -> Self {
+        assert_eq!(80, init_sequence.len());
+        let mut g = Grain {
+            state: init_sequence,
+            field_size,
+        };
         for _ in 0..160 {
             g.generate_new_bit();
         }
-        assert!(g.state.len() == 80);
+        assert_eq!(80, g.state.len());
         g
     }
 
@@ -204,4 +202,48 @@ fn bytes_into_fr<E: ScalarEngine>(bytes: &[u8]) -> Result<E::Fr, PrimeFieldDecod
         .map_err(|e| PrimeFieldDecodingError::NotInField(e.to_string()))?;
 
     E::Fr::from_repr(fr_repr)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    pub use paired::bls12_381::Bls12;
+    use serde_json::Value;
+    use std::fs::File;
+    use std::io::{BufRead, BufReader};
+    use std::path::Path;
+    #[test]
+    fn test_round_constants() {
+        // Bls12_381 modulus = 52435875175126190479447740508185965837690552500527637822603658699938581184513
+        // In hex: 73EDA753299D7D483339D80809A1D80553BDA402FFFE5BFEFFFFFFFF00000001
+        let path = Path::new("parameters/round_constants-1-1-255-9-8-57-73EDA753299D7D483339D80809A1D80553BDA402FFFE5BFEFFFFFFFF00000001.txt");
+        let input = File::open(path).unwrap();
+        let buffered = BufReader::new(input);
+        let line = buffered.lines().skip(8).next().unwrap().unwrap();
+        let replaced = line.replace("'", "\"");
+        let parsed: Vec<Value> = serde_json::from_str(&replaced).unwrap();
+
+        let expected = parsed.iter().map(|x| {
+            if let Value::String(s) = x {
+                s
+            } else {
+                panic!("Could not parse round constant string.")
+            }
+        });
+
+        let generated = generate_constants::<Bls12>(1, 1, 255, 9, 8, 57)
+            .iter()
+            .map(|x| {
+                let s = x.to_string();
+                s[3..s.len() - 1].to_string()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(expected.len(), generated.len());
+
+        generated
+            .iter()
+            .zip(expected)
+            .for_each(|(generated, expected)| assert_eq!(generated, expected));
+    }
 }

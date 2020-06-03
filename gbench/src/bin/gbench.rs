@@ -62,7 +62,7 @@ fn bench_column_building(
         .collect();
 
     info!("adding final column batch and building tree");
-    let res = builder.add_final_columns(final_columns.as_slice()).unwrap();
+    let (_, res) = builder.add_final_columns(final_columns.as_slice()).unwrap();
     info!("end commitment");
     let elapsed = start.elapsed();
     info!("commitment time: {:?}", elapsed);
@@ -91,7 +91,8 @@ fn bench_column_building(
 fn main() -> Result<(), Error> {
     env_logger::init();
 
-    let kib = 1024 * 1024 * 4;
+    let kib = 1024 * 1024 * 4; // 4GiB
+                               // let kib = 1024 * 512; // 512MiB
     let bytes = kib * 1024;
     let leaves = bytes / 32;
     let max_column_batch_size = 400000;
@@ -102,12 +103,17 @@ fn main() -> Result<(), Error> {
     info!("max column batch size: {}", max_column_batch_size);
     info!("max tree batch size: {}", max_tree_batch_size);
 
-    bench_column_building(
-        Some(BatcherType::GPU),
-        leaves,
-        max_column_batch_size,
-        max_tree_batch_size,
-    );
+    for i in 0..3 {
+        println!("--> Run {}", i);
+        bench_column_building(
+            Some(BatcherType::GPU),
+            leaves,
+            max_column_batch_size,
+            max_tree_batch_size,
+        );
+    }
     info!("end");
+    // Leave time to verify GPU memory usage goes to zero before exiting.
+    std::thread::sleep(std::time::Duration::from_millis(15000));
     Ok(())
 }

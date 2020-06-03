@@ -122,12 +122,9 @@ where
     A: Arity<E::Fr>,
 {
     /// Create a new Poseidon hasher for `preimage`.
-    pub fn new(
-        allocated_nums: Vec<AllocatedNum<E>>,
-        constants: &'a PoseidonConstants<E, A>,
-    ) -> Self {
+    fn new(elements: Vec<Elt<E>>, constants: &'a PoseidonConstants<E, A>) -> Self {
         let width = constants.width();
-        let elements = allocated_nums.into_iter().map(Elt::Allocated).collect();
+
         PoseidonCircuit {
             constants_offset: 0,
             width,
@@ -212,12 +209,21 @@ where
             };
 
             if first_round {
-                self.elements[i] = quintic_s_box_pre_add(
-                    cs.namespace(|| format!("quintic s-box {}", i)),
-                    &self.elements[i],
-                    pre_round_key,
-                    post_round_key,
-                )?;
+                if i == 0 {
+                    // The very first s-box for the constant arity tag can also be computed statically, as a constant.
+                    self.elements[i] = constant_quintic_s_box_pre_add_tag::<CS, E>(
+                        &self.elements[i],
+                        pre_round_key,
+                        post_round_key,
+                    );
+                } else {
+                    self.elements[i] = quintic_s_box_pre_add(
+                        cs.namespace(|| format!("quintic s-box {}", i)),
+                        &self.elements[i],
+                        pre_round_key,
+                        post_round_key,
+                    )?;
+                }
             } else {
                 self.elements[i] = quintic_s_box(
                     cs.namespace(|| format!("quintic s-box {}", i)),
@@ -332,8 +338,8 @@ where
 
 /// Create circuit for Poseidon hash.
 pub fn poseidon_hash<CS, E, A>(
-    mut cs: CS,
-    mut preimage: Vec<AllocatedNum<E>>,
+    cs: CS,
+    preimage: Vec<AllocatedNum<E>>,
     constants: &PoseidonConstants<E, A>,
 ) -> Result<AllocatedNum<E>, SynthesisError>
 where
@@ -341,13 +347,12 @@ where
     E: Engine,
     A: Arity<E::Fr>,
 {
-    // Add the arity tag to the front of the preimage.
-    let tag = constants.arity_tag;
-    let tag_num = AllocatedNum::alloc(cs.namespace(|| "arity tag"), || Ok(tag))?;
-    preimage.push(tag_num);
-    preimage.rotate_right(1);
+    let tag_element = Elt::num_from_fr::<CS>(constants.arity_tag);
+    let mut elements = Vec::with_capacity(A::to_usize());
+    elements.push(tag_element);
+    elements.extend(preimage.into_iter().map(Elt::Allocated));
 
-    let mut p = PoseidonCircuit::new(preimage, constants);
+    let mut p = PoseidonCircuit::new(elements, constants);
 
     p.hash(cs)
 }
@@ -401,6 +406,21 @@ fn quintic_s_box_pre_add<CS: ConstraintSystem<E>, E: Engine>(
     } else {
         panic!("pre_round_key and post_round_key must both be provided.");
     }
+}
+
+/// Compute l^5 and enforce constraint. If round_key is supplied, add it to l first.
+fn constant_quintic_s_box_pre_add_tag<CS: ConstraintSystem<E>, E: Engine>(
+    tag: &Elt<E>,
+    pre_round_key: Option<E::Fr>,
+    post_round_key: Option<E::Fr>,
+) -> Elt<E> {
+    let mut tag = tag.val().expect("missing tag val");
+    pre_round_key.expect("pre_round_key must be provided");
+    post_round_key.expect("post_round_key must be provided");
+
+    crate::quintic_s_box::<E>(&mut tag, pre_round_key.as_ref(), post_round_key.as_ref());
+
+    Elt::num_from_fr::<CS>(tag)
 }
 
 /// Calculates square of sum and enforces that constraint.
@@ -567,7 +587,7 @@ mod tests {
     use super::*;
     use crate::poseidon::HashMode;
     use crate::test::TestConstraintSystem;
-    use crate::{scalar_from_u64, Poseidon};
+    use crate::{scalar_from_u64, Poseidon, Strength};
     use bellperson::ConstraintSystem;
     use generic_array::typenum;
     use paired::bls12_381::{Bls12, Fr};
@@ -576,29 +596,39 @@ mod tests {
 
     #[test]
     fn test_poseidon_hash() {
-        test_poseidon_hash_aux::<typenum::U2>(314);
-        test_poseidon_hash_aux::<typenum::U4>(380);
-        test_poseidon_hash_aux::<typenum::U8>(508);
-        test_poseidon_hash_aux::<typenum::U16>(764);
-        test_poseidon_hash_aux::<typenum::U24>(1012);
-        test_poseidon_hash_aux::<typenum::U36>(1388);
+        test_poseidon_hash_aux::<typenum::U2>(Strength::Standard, 311);
+        test_poseidon_hash_aux::<typenum::U4>(Strength::Standard, 377);
+        test_poseidon_hash_aux::<typenum::U8>(Strength::Standard, 505);
+        test_poseidon_hash_aux::<typenum::U16>(Strength::Standard, 761);
+        test_poseidon_hash_aux::<typenum::U24>(Strength::Standard, 1009);
+        test_poseidon_hash_aux::<typenum::U36>(Strength::Standard, 1385);
+
+        test_poseidon_hash_aux::<typenum::U2>(Strength::Strengthened, 367);
+        test_poseidon_hash_aux::<typenum::U4>(Strength::Strengthened, 433);
+        test_poseidon_hash_aux::<typenum::U8>(Strength::Strengthened, 565);
+        test_poseidon_hash_aux::<typenum::U16>(Strength::Strengthened, 821);
+        test_poseidon_hash_aux::<typenum::U24>(Strength::Strengthened, 1069);
+        test_poseidon_hash_aux::<typenum::U36>(Strength::Strengthened, 1445);
     }
-    fn test_poseidon_hash_aux<A>(expected_constraints: usize)
+
+    fn test_poseidon_hash_aux<A>(strength: Strength, expected_constraints: usize)
     where
         A: Arity<<Bls12 as Engine>::Fr>,
     {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
         let mut cs = TestConstraintSystem::<Bls12>::new();
         let arity = A::to_usize();
-        let constants = PoseidonConstants::<Bls12, A>::new();
+        let constants = PoseidonConstants::<Bls12, A>::new_with_strength(strength);
 
         let expected_constraints_calculated = {
+            let arity_tag_constraints = 0;
             let width = 1 + arity;
-            let s_boxes = (width * constants.full_rounds) + constants.partial_rounds;
+            // The '- 1' term represents the first s-box for the arity tag, which is a constant and needs no constraint.
+            let s_boxes = (width * constants.full_rounds) + constants.partial_rounds - 1;
             let s_box_constraints = 3 * s_boxes;
             let mds_constraints =
                 (width * constants.full_rounds) + constants.partial_rounds - arity;
-            let total_constraints = s_box_constraints + mds_constraints;
+            let total_constraints = arity_tag_constraints + s_box_constraints + mds_constraints;
 
             total_constraints
         };
@@ -702,7 +732,7 @@ mod tests {
             assert!(res.is_num());
             assert_eq!(scalar_from_u64::<Fr>(56), res.val().unwrap());
 
-            res.lc().as_ref().iter().for_each(|(var, f)| {
+            res.lc().iter().for_each(|(var, f)| {
                 if var.get_unchecked() == n3.get_variable().get_unchecked() {
                     assert_eq!(*f, fr(6));
                 };
@@ -740,7 +770,7 @@ mod tests {
             assert!(res_vec[0].is_num());
             assert_eq!(fr(56), res_vec[0].val().unwrap());
 
-            res_vec[0].lc().as_ref().iter().for_each(|(var, f)| {
+            res_vec[0].lc().iter().for_each(|(var, f)| {
                 if var.get_unchecked() == n3.get_variable().get_unchecked() {
                     assert_eq!(*f, fr(6)); // 6 * three
                 };
@@ -758,7 +788,7 @@ mod tests {
             )
             .unwrap();
 
-            res2.lc().as_ref().iter().for_each(|(var, f)| {
+            res2.lc().iter().for_each(|(var, f)| {
                 if var.get_unchecked() == n3.get_variable().get_unchecked() {
                     assert_eq!(*f, fr(42)); // 7 * 6 * three
                 };
