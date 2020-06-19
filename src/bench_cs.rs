@@ -40,8 +40,14 @@ impl<E: Engine> Default for BenchCS<E> {
     }
 }
 
+unsafe impl<E: Engine> Send for BenchCS<E> {}
+
 impl<E: Engine> ConstraintSystem<E> for BenchCS<E> {
     type Root = Self;
+
+    fn new() -> Self {
+        BenchCS::default()
+    }
 
     fn alloc<F, A, AR>(&mut self, _: A, _f: F) -> Result<Variable, SynthesisError>
     where
