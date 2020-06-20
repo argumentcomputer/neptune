@@ -22,7 +22,6 @@ pub mod poseidon;
 mod poseidon_alt;
 mod preprocessing;
 mod round_constants;
-mod test;
 
 /// Tree Builder
 #[cfg(feature = "gpu")]
@@ -38,8 +37,6 @@ mod gpu;
 /// Batch Hasher
 #[cfg(feature = "gpu")]
 pub mod batch_hasher;
-
-pub mod bench_cs;
 
 pub(crate) const TEST_SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,

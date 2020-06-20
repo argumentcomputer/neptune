@@ -1,10 +1,10 @@
 use crate::poseidon::{Arity, PoseidonConstants};
 use bellperson::gadgets::num::AllocatedNum;
+use bellperson::util_cs::bench_cs::BenchCS;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ff::Field;
 use generic_array::typenum;
-use neptune::bench_cs::BenchCS;
 use neptune::circuit::poseidon_hash;
 use neptune::*;
 use paired::bls12_381::{Bls12, Fr};

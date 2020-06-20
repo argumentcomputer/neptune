@@ -586,8 +586,8 @@ fn scalar_product<E: Engine, CS: ConstraintSystem<E>>(
 mod tests {
     use super::*;
     use crate::poseidon::HashMode;
-    use crate::test::TestConstraintSystem;
     use crate::{scalar_from_u64, Poseidon, Strength};
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
     use bellperson::ConstraintSystem;
     use generic_array::typenum;
     use paired::bls12_381::{Bls12, Fr};
