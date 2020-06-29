@@ -34,6 +34,9 @@ pub mod column_tree_builder;
 #[cfg(feature = "gpu")]
 mod gpu;
 
+#[cfg(feature = "gpu")]
+pub mod cl;
+
 /// Batch Hasher
 #[cfg(feature = "gpu")]
 pub mod batch_hasher;
