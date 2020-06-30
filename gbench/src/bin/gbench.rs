@@ -4,11 +4,13 @@ use generic_array::typenum::{U11, U8};
 use generic_array::GenericArray;
 use log::info;
 use neptune::batch_hasher::BatcherType;
+use neptune::cl;
 use neptune::column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait};
 use neptune::error::Error;
 use neptune::BatchHasher;
 use paired::bls12_381::Fr;
 use std::result::Result;
+use std::thread;
 use std::time::Instant;
 
 fn bench_column_building(
@@ -103,14 +105,23 @@ fn main() -> Result<(), Error> {
     info!("max column batch size: {}", max_column_batch_size);
     info!("max tree batch size: {}", max_tree_batch_size);
 
-    for i in 0..3 {
-        println!("--> Run {}", i);
-        bench_column_building(
-            Some(BatcherType::GPU),
-            leaves,
-            max_column_batch_size,
-            max_tree_batch_size,
-        );
+    let mut threads = Vec::new();
+    let bus_ids = cl::get_all_bus_ids().unwrap();
+    for bus_id in bus_ids {
+        threads.push(thread::spawn(move || {
+            for i in 0..3 {
+                println!("GPU[Bus-id: {}] --> Run {}", bus_id, i);
+                bench_column_building(
+                    Some(BatcherType::CustomGPU(cl::GPUSelector::BusId(bus_id))),
+                    leaves,
+                    max_column_batch_size,
+                    max_tree_batch_size,
+                );
+            }
+        }));
+    }
+    for thread in threads {
+        thread.join().unwrap();
     }
     info!("end");
     // Leave time to verify GPU memory usage goes to zero before exiting.
