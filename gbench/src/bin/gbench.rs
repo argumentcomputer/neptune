@@ -127,6 +127,9 @@ fn main() -> Result<(), Error> {
                 );
             }
         }));
+        if std::env::var("NEPTUNE_MULTIGPU").is_err() {
+            break; // If multigpu flag is not set, break (Only run on a single GPU)
+        }
     }
     for thread in threads {
         thread.join().unwrap();
