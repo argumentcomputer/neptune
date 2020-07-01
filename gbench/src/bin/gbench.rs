@@ -111,8 +111,16 @@ fn main() -> Result<(), Error> {
     info!("max column batch size: {}", max_column_batch_size);
     info!("max tree batch size: {}", max_tree_batch_size);
 
+    // Comma separated list of GPU bus-ids
+    let bus_ids = std::env::var("NEPTUNE_GBENCH_GPUS")
+        .map(|v| {
+            v.split(",")
+                .map(|s| s.parse::<u32>().expect("Invalid Bus-Id number!"))
+                .collect::<Vec<u32>>()
+        })
+        .unwrap_or(cl::get_all_bus_ids().unwrap());
+
     let mut threads = Vec::new();
-    let bus_ids = cl::get_all_bus_ids().unwrap();
     for bus_id in bus_ids {
         threads.push(thread::spawn(move || {
             let log_prefix = format!("GPU[Bus-id: {}]", bus_id);
@@ -127,9 +135,6 @@ fn main() -> Result<(), Error> {
                 );
             }
         }));
-        if std::env::var("NEPTUNE_MULTIGPU").is_err() {
-            break; // If multigpu flag is not set, break (Only run on a single GPU)
-        }
     }
     for thread in threads {
         thread.join().unwrap();
