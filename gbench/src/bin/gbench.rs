@@ -14,12 +14,13 @@ use std::thread;
 use std::time::Instant;
 
 fn bench_column_building(
+    log_prefix: &str,
     batcher_type: Option<BatcherType>,
     leaves: usize,
     max_column_batch_size: usize,
     max_tree_batch_size: usize,
 ) -> Fr {
-    info!("Creating ColumnTreeBuilder");
+    info!("{}: Creating ColumnTreeBuilder", log_prefix);
     let mut builder = ColumnTreeBuilder::<U11, U8>::new(
         batcher_type,
         leaves,
@@ -27,7 +28,7 @@ fn bench_column_building(
         max_tree_batch_size,
     )
     .unwrap();
-    info!("ColumnTreeBuilder created");
+    info!("{}: ColumnTreeBuilder created", log_prefix);
 
     // Simplify computing the expected root.
     let constant_element = Fr::zero();
@@ -41,12 +42,12 @@ fn bench_column_building(
 
     let effective_batch_size = usize::min(leaves, max_batch_size);
     info!(
-        "Using effective batch size {} to build columns",
-        effective_batch_size
+        "{}: Using effective batch size {} to build columns",
+        log_prefix, effective_batch_size
     );
 
-    info!("adding column batches");
-    info!("start commitment");
+    info!("{}: adding column batches", log_prefix);
+    info!("{}: start commitment", log_prefix);
     let start = Instant::now();
     let mut total_columns = 0;
     while total_columns + effective_batch_size < leaves {
@@ -63,11 +64,14 @@ fn bench_column_building(
         .map(|_| GenericArray::<Fr, U11>::generate(|_| constant_element))
         .collect();
 
-    info!("adding final column batch and building tree");
+    info!(
+        "{}: adding final column batch and building tree",
+        log_prefix
+    );
     let (_, res) = builder.add_final_columns(final_columns.as_slice()).unwrap();
-    info!("end commitment");
+    info!("{}: end commitment", log_prefix);
     let elapsed = start.elapsed();
-    info!("commitment time: {:?}", elapsed);
+    info!("{}: commitment time: {:?}", log_prefix, elapsed);
 
     total_columns += final_columns.len();
     assert_eq!(total_columns, leaves);
@@ -80,11 +84,13 @@ fn bench_column_building(
     assert_eq!(
         expected_size,
         res.len(),
-        "result tree was not expected size"
+        "{}: result tree was not expected size",
+        log_prefix
     );
     assert_eq!(
         expected_root, computed_root,
-        "computed root was not the expected one"
+        "{}: computed root was not the expected one",
+        log_prefix
     );
 
     res[res.len() - 1]
@@ -109,9 +115,11 @@ fn main() -> Result<(), Error> {
     let bus_ids = cl::get_all_bus_ids().unwrap();
     for bus_id in bus_ids {
         threads.push(thread::spawn(move || {
+            let log_prefix = format!("GPU[Bus-id: {}]", bus_id);
             for i in 0..3 {
-                println!("GPU[Bus-id: {}] --> Run {}", bus_id, i);
+                info!("{} --> Run {}", log_prefix, i);
                 bench_column_building(
+                    &log_prefix,
                     Some(BatcherType::CustomGPU(cl::GPUSelector::BusId(bus_id))),
                     leaves,
                     max_column_batch_size,
