@@ -118,7 +118,7 @@ fn main() -> Result<(), Error> {
                 .map(|s| s.parse::<u32>().expect("Invalid Bus-Id number!"))
                 .collect::<Vec<u32>>()
         })
-        .unwrap_or(cl::get_all_bus_ids().unwrap());
+        .unwrap_or(vec![cl::get_all_bus_ids().unwrap()[0]]);
 
     let mut threads = Vec::new();
     for bus_id in bus_ids {
