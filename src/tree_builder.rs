@@ -253,6 +253,16 @@ mod tests {
     use generic_array::typenum::U8;
     use paired::bls12_381::Fr;
 
+    fn get_gpu_batcher() -> BatcherType {
+        std::env::var("NEPTUNE_TEST_GPU")
+            .map(|s| {
+                BatcherType::CustomGPU(GPUSelector::BusId(
+                    s.parse::<u32>().expect("Invalid Bus-Id number!"),
+                ))
+            })
+            .unwrap_or(BatcherType::GPU)
+    }
+
     #[test]
     fn test_tree_builder() {
         // 16KiB tree has 512 leaves.
@@ -260,7 +270,7 @@ mod tests {
         test_tree_builder_aux(Some(BatcherType::CPU), 512, 32, 512, 512);
 
         #[cfg(all(feature = "gpu", not(target_os = "macos")))]
-        test_tree_builder_aux(Some(BatcherType::GPU), 512, 32, 512, 512);
+        test_tree_builder_aux(Some(get_gpu_batcher()), 512, 32, 512, 512);
     }
 
     fn test_tree_builder_aux(
