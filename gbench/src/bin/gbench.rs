@@ -133,6 +133,9 @@ fn main() -> Result<(), Error> {
                     max_column_batch_size,
                     max_tree_batch_size,
                 );
+                
+                println!("Waiting to cool down...");
+                std::thread::sleep(std::time::Duration::from_millis(20000));
             }
         }));
     }
