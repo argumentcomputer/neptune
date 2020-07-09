@@ -15,5 +15,5 @@ env_logger = "0.7.1"
 ff = { version = "0.2.1", package = "fff" }
 generic-array = "0.13.2"
 log = "0.4.8"
-paired = "0.19.0"
+paired = "0.20.0"
 neptune = { path = "../", features=["gpu"] }
