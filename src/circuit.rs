@@ -1,6 +1,6 @@
 use crate::matrix::Matrix;
 use crate::mds::SparseMatrix;
-use crate::poseidon::{Arity, PoseidonConstants};
+use crate::poseidon::{Arity, HashType, PoseidonConstants};
 
 use bellperson::gadgets::boolean::Boolean;
 use bellperson::gadgets::num;
@@ -338,7 +338,7 @@ where
 
 /// Create circuit for Poseidon hash.
 pub fn poseidon_hash<CS, E, A>(
-    cs: CS,
+    mut cs: CS,
     preimage: Vec<AllocatedNum<E>>,
     constants: &PoseidonConstants<E, A>,
 ) -> Result<AllocatedNum<E>, SynthesisError>
@@ -347,10 +347,27 @@ where
     E: Engine,
     A: Arity<E::Fr>,
 {
-    let tag_element = Elt::num_from_fr::<CS>(constants.arity_tag);
-    let mut elements = Vec::with_capacity(A::to_usize());
+    let arity = A::to_usize();
+    let tag_element = Elt::num_from_fr::<CS>(constants.domain_tag);
+    let mut elements = Vec::with_capacity(arity + 1);
     elements.push(tag_element);
     elements.extend(preimage.into_iter().map(Elt::Allocated));
+
+    match constants.hash_type {
+        HashType::ConstantLength(length) => {
+            assert!(length <= arity, "illegal length: constants are malformed");
+            // Add zero-padding.
+            for i in 0..(arity - length) {
+                let allocated =
+                    AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
+                        Ok(E::Fr::zero())
+                    })?;
+                let elt = Elt::Allocated(allocated);
+                elements.push(elt);
+            }
+        }
+        _ => (),
+    }
 
     let mut p = PoseidonCircuit::new(elements, constants);
 
@@ -596,79 +613,104 @@ mod tests {
 
     #[test]
     fn test_poseidon_hash() {
-        test_poseidon_hash_aux::<typenum::U2>(Strength::Standard, 311);
-        test_poseidon_hash_aux::<typenum::U4>(Strength::Standard, 377);
-        test_poseidon_hash_aux::<typenum::U8>(Strength::Standard, 505);
-        test_poseidon_hash_aux::<typenum::U16>(Strength::Standard, 761);
-        test_poseidon_hash_aux::<typenum::U24>(Strength::Standard, 1009);
-        test_poseidon_hash_aux::<typenum::U36>(Strength::Standard, 1385);
+        test_poseidon_hash_aux::<typenum::U2>(Strength::Standard, 311, false);
+        test_poseidon_hash_aux::<typenum::U4>(Strength::Standard, 377, false);
+        test_poseidon_hash_aux::<typenum::U8>(Strength::Standard, 505, false);
+        test_poseidon_hash_aux::<typenum::U16>(Strength::Standard, 761, false);
+        test_poseidon_hash_aux::<typenum::U24>(Strength::Standard, 1009, false);
+        test_poseidon_hash_aux::<typenum::U36>(Strength::Standard, 1385, false);
 
-        test_poseidon_hash_aux::<typenum::U2>(Strength::Strengthened, 367);
-        test_poseidon_hash_aux::<typenum::U4>(Strength::Strengthened, 433);
-        test_poseidon_hash_aux::<typenum::U8>(Strength::Strengthened, 565);
-        test_poseidon_hash_aux::<typenum::U16>(Strength::Strengthened, 821);
-        test_poseidon_hash_aux::<typenum::U24>(Strength::Strengthened, 1069);
-        test_poseidon_hash_aux::<typenum::U36>(Strength::Strengthened, 1445);
+        test_poseidon_hash_aux::<typenum::U2>(Strength::Strengthened, 367, false);
+        test_poseidon_hash_aux::<typenum::U4>(Strength::Strengthened, 433, false);
+        test_poseidon_hash_aux::<typenum::U8>(Strength::Strengthened, 565, false);
+        test_poseidon_hash_aux::<typenum::U16>(Strength::Strengthened, 821, false);
+        test_poseidon_hash_aux::<typenum::U24>(Strength::Strengthened, 1069, false);
+        test_poseidon_hash_aux::<typenum::U36>(Strength::Strengthened, 1445, false);
+
+        test_poseidon_hash_aux::<typenum::U15>(Strength::Standard, 730, true);
     }
 
-    fn test_poseidon_hash_aux<A>(strength: Strength, expected_constraints: usize)
-    where
+    fn test_poseidon_hash_aux<A>(
+        strength: Strength,
+        expected_constraints: usize,
+        constant_length: bool,
+    ) where
         A: Arity<<Bls12 as Engine>::Fr>,
     {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
-        let mut cs = TestConstraintSystem::<Bls12>::new();
         let arity = A::to_usize();
-        let constants = PoseidonConstants::<Bls12, A>::new_with_strength(strength);
-
-        let expected_constraints_calculated = {
-            let arity_tag_constraints = 0;
-            let width = 1 + arity;
-            // The '- 1' term represents the first s-box for the arity tag, which is a constant and needs no constraint.
-            let s_boxes = (width * constants.full_rounds) + constants.partial_rounds - 1;
-            let s_box_constraints = 3 * s_boxes;
-            let mds_constraints =
-                (width * constants.full_rounds) + constants.partial_rounds - arity;
-            let total_constraints = arity_tag_constraints + s_box_constraints + mds_constraints;
-
-            total_constraints
+        let constants_x = if constant_length {
+            PoseidonConstants::<Bls12, A>::new_with_strength_and_type(
+                strength,
+                HashType::ConstantLength(arity),
+            )
+        } else {
+            PoseidonConstants::<Bls12, A>::new_with_strength(strength)
         };
-        let mut i = 0;
 
-        let mut fr_data = vec![Fr::zero(); arity];
-        let data: Vec<AllocatedNum<Bls12>> = (0..arity)
-            .enumerate()
-            .map(|_| {
-                let fr = Fr::random(&mut rng);
-                fr_data[i] = fr;
-                i += 1;
-                AllocatedNum::alloc(cs.namespace(|| format!("data {}", i)), || Ok(fr)).unwrap()
-            })
-            .collect::<Vec<_>>();
+        let range = if constant_length {
+            1..=arity
+        } else {
+            arity..=arity
+        };
+        for preimage_length in range {
+            let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        let out = poseidon_hash(&mut cs, data, &constants).expect("poseidon hashing failed");
+            let constants = if constant_length {
+                constants_x.with_length(preimage_length)
+            } else {
+                constants_x.clone()
+            };
+            let expected_constraints_calculated = {
+                let arity_tag_constraints = 0;
+                let width = 1 + arity;
+                // The '- 1' term represents the first s-box for the arity tag, which is a constant and needs no constraint.
+                let s_boxes = (width * constants.full_rounds) + constants.partial_rounds - 1;
+                let s_box_constraints = 3 * s_boxes;
+                let mds_constraints =
+                    (width * constants.full_rounds) + constants.partial_rounds - arity;
+                let total_constraints = arity_tag_constraints + s_box_constraints + mds_constraints;
 
-        let mut p = Poseidon::<Bls12, A>::new_with_preimage(&fr_data, &constants);
-        let expected: Fr = p.hash_in_mode(HashMode::Correct);
+                total_constraints
+            };
+            let mut i = 0;
 
-        assert!(cs.is_satisfied(), "constraints not satisfied");
+            let mut fr_data = vec![Fr::zero(); preimage_length];
+            let data: Vec<AllocatedNum<Bls12>> = (0..preimage_length)
+                .enumerate()
+                .map(|_| {
+                    let fr = Fr::random(&mut rng);
+                    fr_data[i] = fr;
+                    i += 1;
+                    AllocatedNum::alloc(cs.namespace(|| format!("data {}", i)), || Ok(fr)).unwrap()
+                })
+                .collect::<Vec<_>>();
 
-        assert_eq!(
-            expected,
-            out.get_value().unwrap(),
-            "circuit and non-circuit do not match"
-        );
+            let out = poseidon_hash(&mut cs, data, &constants).expect("poseidon hashing failed");
 
-        assert_eq!(
-            expected_constraints_calculated,
-            cs.num_constraints(),
-            "constraint number miscalculated"
-        );
+            let mut p = Poseidon::<Bls12, A>::new_with_preimage(&fr_data, &constants);
+            let expected: Fr = p.hash_in_mode(HashMode::Correct);
 
-        assert_eq!(
-            expected_constraints,
-            cs.num_constraints(),
-            "constraint number changed",
-        );
+            assert!(cs.is_satisfied(), "constraints not satisfied");
+
+            assert_eq!(
+                expected,
+                out.get_value().unwrap(),
+                "circuit and non-circuit do not match"
+            );
+
+            assert_eq!(
+                expected_constraints_calculated,
+                cs.num_constraints(),
+                "constraint number miscalculated"
+            );
+
+            assert_eq!(
+                expected_constraints,
+                cs.num_constraints(),
+                "constraint number changed",
+            );
+        }
     }
 
     fn fr(n: u64) -> <Bls12 as Engine>::Fr {
