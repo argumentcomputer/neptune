@@ -1,6 +1,6 @@
 use crate::batch_hasher::{Batcher, BatcherType};
-use crate::cl::GPUSelector;
 use crate::error::Error;
+use crate::gpu::GPUSelector;
 use crate::poseidon::{Poseidon, PoseidonConstants};
 use crate::tree_builder::{TreeBuilder, TreeBuilderTrait};
 use crate::{Arity, BatchHasher};
