@@ -15,6 +15,7 @@ where
     fn add_final_leaves(&mut self, leaves: &[Fr]) -> Result<(Vec<Fr>, Vec<Fr>), Error>;
 
     fn reset(&mut self);
+    fn clear_caches(&self);
 }
 
 pub struct TreeBuilder<TreeArity>
@@ -61,6 +62,14 @@ where
     fn reset(&mut self) {
         self.fill_index = 0;
         self.data.iter_mut().for_each(|place| *place = Fr::zero());
+    }
+
+    fn clear_caches(&self) {
+        if let Some(ref batcher) = self.tree_batcher {
+            if let Batcher::GPU(ref gpu_batcher) = batcher {
+                gpu_batcher.clear_caches();
+            }
+        }
     }
 }
 

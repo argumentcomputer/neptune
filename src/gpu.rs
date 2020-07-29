@@ -91,7 +91,7 @@ impl BatcherState {
 }
 
 /// `GPUBatchHasher` implements `BatchHasher` and performs the batched hashing on GPU.
-pub struct GPUBatchHasher<A> {
+pub struct GPUBatchHasher<A: Arity<Fr>> {
     ctx: Arc<Mutex<FutharkContext>>,
     state: BatcherState,
     /// If `tree_builder_state` is provided, use it to build the final 64MiB tree on the GPU with one call.
@@ -126,14 +126,18 @@ where
             _a: PhantomData::<A>,
         })
     }
-}
 
-impl<A> Drop for GPUBatchHasher<A> {
-    fn drop(&mut self) {
+    pub(crate) fn clear_caches(&self) {
         let ctx = self.ctx.lock().unwrap();
         unsafe {
             triton::bindings::futhark_context_clear_caches(ctx.context);
         }
+    }
+}
+
+impl<A: Arity<Fr>> Drop for GPUBatchHasher<A> {
+    fn drop(&mut self) {
+        self.clear_caches();
     }
 }
 
