@@ -276,7 +276,32 @@ pub fn futhark_context(selector: GPUSelector) -> ClResult<Arc<Mutex<FutharkConte
 }
 
 pub fn default_futhark_context() -> ClResult<Arc<Mutex<FutharkContext>>> {
-    futhark_context(GPUSelector::Index(0))
+    let bus_id = std::env::var("NEPTUNE_DEFAULT_GPU")
+        .ok()
+        .and_then(|v| match v.parse::<u32>() {
+            Ok(bus_id) => Some(bus_id),
+            Err(_) => {
+                error!("Bus-id '{}' is given in wrong format!", v);
+                None
+            }
+        });
+
+    match bus_id {
+        Some(bus_id) => {
+            info!(
+                "Using device with bus-id {} for creating the FutharkContext...",
+                bus_id
+            );
+            futhark_context(GPUSelector::BusId(bus_id))
+        }
+        .or_else(|_| {
+            error!(
+                "A device with the given bus-id doesn't exist! Defaulting to the first device..."
+            );
+            futhark_context(GPUSelector::Index(0))
+        }),
+        None => futhark_context(GPUSelector::Index(0)),
+    }
 }
 
 fn to_u32(inp: &[u8]) -> u32 {
