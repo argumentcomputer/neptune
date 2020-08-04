@@ -41,6 +41,9 @@ The following are likely areas of future work:
 
 Neptune was originally bootstrapped from [Dusk's reference implementation](https://github.com/dusk-network/dusk-poseidon-merkle).
 
+## Changes
+[CHANGELOG](CHANGELOG.md)
+
 ## License
 
 MIT or Apache 2.0
