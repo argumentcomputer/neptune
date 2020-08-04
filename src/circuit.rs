@@ -1,7 +1,7 @@
+use crate::hash_type::HashType;
 use crate::matrix::Matrix;
 use crate::mds::SparseMatrix;
-use crate::poseidon::{Arity, HashType, PoseidonConstants};
-
+use crate::poseidon::{Arity, PoseidonConstants};
 use bellperson::gadgets::boolean::Boolean;
 use bellperson::gadgets::num;
 use bellperson::gadgets::num::AllocatedNum;

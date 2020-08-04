@@ -23,6 +23,9 @@ mod poseidon_alt;
 mod preprocessing;
 mod round_constants;
 
+/// Hash types and domain separation tags.
+pub mod hash_type;
+
 /// Tree Builder
 #[cfg(feature = "gpu")]
 pub mod tree_builder;
