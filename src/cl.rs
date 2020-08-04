@@ -1,3 +1,4 @@
+use crate::gpu::GPUSelector;
 use log::*;
 use std::collections::HashMap;
 use std::fmt;
@@ -21,12 +22,6 @@ struct cl_amd_device_topology {
 lazy_static! {
     pub static ref FUTHARK_CONTEXT_MAP: Mutex<HashMap<u32, Arc<Mutex<FutharkContext>>>> =
         Mutex::new(HashMap::new());
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum GPUSelector {
-    BusId(u32),
-    Index(usize),
 }
 
 #[derive(Debug, Clone)]
