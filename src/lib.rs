@@ -23,6 +23,9 @@ mod poseidon_alt;
 mod preprocessing;
 mod round_constants;
 
+/// Hash types and domain separation tags.
+pub mod hash_type;
+
 /// Tree Builder
 #[cfg(feature = "gpu")]
 pub mod tree_builder;
@@ -48,7 +51,7 @@ pub(crate) const TEST_SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
 ];
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Strength {
     Standard,
     Strengthened,
@@ -94,8 +97,8 @@ fn round_numbers_base(arity: usize) -> (usize, usize) {
     let partial_rounds = match width {
         2 | 3 => 55,
         4 | 5 | 6 | 7 => 56,
-        8 | 9 | 10 | 11 | 12 => 57,
-        17 | 25 => 59,
+        8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 => 57,
+        16 | 17 | 25 => 59,
         37 => 60,
         65 => 61,
         _ => panic!(format!("unsupported arity, {}", arity)),

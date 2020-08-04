@@ -1,4 +1,5 @@
 use crate::error::Error;
+use crate::hash_type::HashType;
 use crate::poseidon::PoseidonConstants;
 use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
 use ff::{PrimeField, PrimeFieldDecodingError};
@@ -172,7 +173,7 @@ where
     A: Arity<Fr>,
 {
     fn arity_tag(&self, ctx: &FutharkContext) -> Result<Array_u64_1d, Error> {
-        let arity_tag = self.0.arity_tag;
+        let arity_tag = self.0.domain_tag;
         array_u64_1d_from_fr(ctx, arity_tag)
     }
 
