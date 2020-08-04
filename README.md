@@ -33,9 +33,9 @@ At the time of the 1.0.0 release, Neptune on RTX 2080Ti GPU can build 8-ary Merk
 
 The following are likely areas of future work:
 
-- Support for multiple GPUs.
-- Support domain separation tag.
-- Improve throughput (?) by using OpenCL directly.
+- [x] Support for multiple GPUs.
+- [x] Support domain separation tag.
+- [ ] Improve throughput (?) by using OpenCL directly.
 
 ## History
 

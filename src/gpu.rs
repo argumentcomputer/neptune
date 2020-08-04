@@ -1,5 +1,6 @@
 use crate::error::Error;
-use crate::poseidon::{HashType, PoseidonConstants};
+use crate::hash_type::HashType;
+use crate::poseidon::PoseidonConstants;
 use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
 use ff::{PrimeField, PrimeFieldDecodingError};
 use generic_array::{typenum, ArrayLength, GenericArray};

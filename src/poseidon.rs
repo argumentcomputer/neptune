@@ -175,6 +175,7 @@ where
     }
 
     pub fn new_with_strength_and_type(strength: Strength, hash_type: HashType<E::Fr, A>) -> Self {
+        assert!(hash_type.is_supported());
         let arity = A::to_usize();
         let width = arity + 1;
 
@@ -628,7 +629,7 @@ mod tests {
 
     #[test]
     fn hash_values() {
-        // hash_values_cases(Strength::Standard);
+        hash_values_cases(Strength::Standard);
         hash_values_cases(Strength::Strengthened);
     }
 
