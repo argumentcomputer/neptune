@@ -3,7 +3,7 @@ use ff::PrimeField;
 use generic_array::typenum;
 use neptune::poseidon::{HashMode, PoseidonConstants};
 use neptune::*;
-use paired::bls12_381::{Bls12, Fr};
+use bellperson::bls::{Bls12, Fr};
 use rand::rngs::OsRng;
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256, Sha512};

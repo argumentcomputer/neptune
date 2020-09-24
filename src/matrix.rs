@@ -353,7 +353,7 @@ pub(crate) fn invert<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> Option<Matr
 mod tests {
     use super::*;
     use crate::scalar_from_u64;
-    use paired::bls12_381::{Bls12, Fr};
+    use bellperson::bls::{Bls12, Fr};
 
     #[test]
     fn test_minor() {

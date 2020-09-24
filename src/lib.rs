@@ -8,8 +8,8 @@ use crate::round_constants::generate_constants;
 pub use error::Error;
 use ff::{Field, PrimeField, ScalarEngine};
 use generic_array::GenericArray;
-pub use paired::bls12_381::Fr as Scalar;
-use paired::bls12_381::FrRepr;
+pub use bellperson::bls::Fr as Scalar;
+use bellperson::bls::FrRepr;
 
 /// Poseidon circuit
 pub mod circuit;

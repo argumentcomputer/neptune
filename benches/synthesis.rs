@@ -7,7 +7,7 @@ use ff::Field;
 use generic_array::typenum;
 use neptune::circuit::poseidon_hash;
 use neptune::*;
-use paired::bls12_381::{Bls12, Fr};
+use bellperson::bls::{Bls12, Fr};
 use rand::thread_rng;
 use std::marker::PhantomData;
 

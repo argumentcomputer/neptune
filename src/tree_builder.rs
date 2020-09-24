@@ -6,7 +6,7 @@ use crate::poseidon::{Poseidon, PoseidonConstants};
 use crate::{Arity, BatchHasher};
 use ff::Field;
 use generic_array::GenericArray;
-use paired::bls12_381::{Bls12, Fr};
+use bellperson::bls::{Bls12, Fr};
 
 pub trait TreeBuilderTrait<TreeArity>
 where
@@ -252,7 +252,7 @@ mod tests {
     use super::*;
     use ff::Field;
     use generic_array::typenum::U8;
-    use paired::bls12_381::Fr;
+    use bellperson::bls::Fr;
 
     #[test]
     fn test_tree_builder() {

@@ -7,7 +7,7 @@ use neptune::batch_hasher::BatcherType;
 use neptune::column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait};
 use neptune::error::Error;
 use neptune::BatchHasher;
-use paired::bls12_381::Fr;
+use bellperson::bls::Fr;
 use std::result::Result;
 use std::thread;
 use std::time::Instant;

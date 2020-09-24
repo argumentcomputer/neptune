@@ -7,7 +7,7 @@ use crate::error::Error;
 use crate::poseidon::SimplePoseidonBatchHasher;
 use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
 use generic_array::GenericArray;
-use paired::bls12_381::Fr;
+use bellperson::bls::Fr;
 use std::marker::PhantomData;
 use triton::FutharkContext;
 

@@ -212,7 +212,7 @@ mod tests {
     use super::*;
     use crate::*;
     use matrix::left_apply_matrix;
-    use paired::bls12_381::{Bls12, Fr};
+    use bellperson::bls::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 

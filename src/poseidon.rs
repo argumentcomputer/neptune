@@ -7,8 +7,7 @@ use crate::{matrix, quintic_s_box, BatchHasher, Strength, DEFAULT_STRENGTH};
 use crate::{round_constants, round_numbers, scalar_from_u64, Error};
 use ff::{Field, PrimeField, ScalarEngine};
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
-use paired::bls12_381;
-use paired::bls12_381::Bls12;
+use bellperson::bls::{Fr, Bls12};
 use std::marker::PhantomData;
 use typenum::marker_traits::Unsigned;
 use typenum::*;
@@ -532,7 +531,7 @@ where
 #[derive(Debug)]
 pub struct SimplePoseidonBatchHasher<A>
 where
-    A: Arity<bls12_381::Fr>,
+    A: Arity<Fr>,
 {
     constants: PoseidonConstants<Bls12, A>,
     max_batch_size: usize,
@@ -540,7 +539,7 @@ where
 
 impl<A> SimplePoseidonBatchHasher<A>
 where
-    A: Arity<bls12_381::Fr>,
+    A: Arity<Fr>,
 {
     pub(crate) fn new(max_batch_size: usize) -> Result<Self, Error> {
         Self::new_with_strength(DEFAULT_STRENGTH, max_batch_size)
@@ -558,12 +557,12 @@ where
 }
 impl<A> BatchHasher<A> for SimplePoseidonBatchHasher<A>
 where
-    A: Arity<bls12_381::Fr>,
+    A: Arity<Fr>,
 {
     fn hash(
         &mut self,
-        preimages: &[GenericArray<bls12_381::Fr, A>],
-    ) -> Result<Vec<bls12_381::Fr>, Error> {
+        preimages: &[GenericArray<Fr, A>],
+    ) -> Result<Vec<Fr>, Error> {
         Ok(preimages
             .iter()
             .map(|preimage| Poseidon::new_with_preimage(&preimage, &self.constants).hash())
@@ -581,7 +580,7 @@ mod tests {
     use crate::*;
     use ff::Field;
     use generic_array::typenum;
-    use paired::bls12_381::{Bls12, Fr};
+    use bellperson::bls::{Bls12, Fr};
 
     #[test]
     fn reset() {

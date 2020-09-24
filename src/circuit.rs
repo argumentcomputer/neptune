@@ -607,7 +607,7 @@ mod tests {
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use bellperson::ConstraintSystem;
     use generic_array::typenum;
-    use paired::bls12_381::{Bls12, Fr};
+    use bellperson::bls::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 

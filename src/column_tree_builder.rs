@@ -7,7 +7,7 @@ use crate::tree_builder::{TreeBuilder, TreeBuilderTrait};
 use crate::{Arity, BatchHasher};
 use ff::Field;
 use generic_array::GenericArray;
-use paired::bls12_381::{Bls12, Fr};
+use bellperson::bls::{Bls12, Fr};
 
 pub trait ColumnTreeBuilderTrait<ColumnArity, TreeArity>
 where
@@ -170,7 +170,7 @@ mod tests {
     use ff::Field;
     use generic_array::sequence::GenericSequence;
     use generic_array::typenum::{U11, U8};
-    use paired::bls12_381::Fr;
+    use bellperson::bls::Fr;
 
     #[test]
     fn test_column_tree_builder() {

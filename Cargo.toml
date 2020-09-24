@@ -9,14 +9,12 @@ repository = "https://github.com/porcuquine/poseidon"
 
 [dependencies]
 lazy_static = "1.4.0"
-bellperson = "0.9.2"
+bellperson = { git = "https://github.com/filecoin-project/bellman", branch = "blstrs", default-features = false }
 blake2s_simd = "0.5"
 byteorder = "1"
 ff = { version = "0.2.1", package = "fff" }
 generic-array = "0.13.2"
-paired = "0.20.0"
 triton = { version = "2.0.0", package = "neptune-triton", default-features = false, features = ["opencl"], optional = true }
-
 log = "0.4.8"
 
 [dev-dependencies]
@@ -28,7 +26,7 @@ rand_xorshift = "0.2.0"
 serde_json = "1.0.53"
 
 [build-dependencies]
-paired = "0.20.0"
+bellperson = { git = "https://github.com/filecoin-project/bellman", branch = "blstrs", default-features = false }
 ff = { version = "0.2.1", package = "fff" }
 
 [[bench]]
@@ -44,4 +42,7 @@ incremental = false
 codegen-units = 1
 
 [features]
+default = ["pairing"]
 gpu = ["triton"]
+pairing = ["bellperson/pairing"]
+blst = ["bellperson/blst"]
