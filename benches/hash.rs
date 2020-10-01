@@ -32,11 +32,11 @@ where
                     .map(|_| s.choose(&mut OsRng).unwrap())
                     .for_each(|scalar| {
                         for val in scalar.into_repr().as_ref() {
-                            h.input(&val.to_le_bytes());
+                            h.update(&val.to_le_bytes());
                         }
                     });
 
-                h.result();
+                h.finalize();
             })
         },
     );
@@ -53,11 +53,11 @@ where
                     .map(|_| s.choose(&mut OsRng).unwrap())
                     .for_each(|scalar| {
                         for val in scalar.into_repr().as_ref() {
-                            h.input(&val.to_le_bytes());
+                            h.update(&val.to_le_bytes());
                         }
                     });
 
-                h.result();
+                h.finalize();
             })
         },
     );
