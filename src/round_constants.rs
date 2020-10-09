@@ -1,6 +1,6 @@
 pub use crate::Error;
-use ff::{PrimeField, PrimeFieldDecodingError, PrimeFieldRepr, ScalarEngine};
 pub use bellperson::bls::Fr as Scalar;
+use ff::{PrimeField, PrimeFieldDecodingError, PrimeFieldRepr, ScalarEngine};
 
 /// From the paper ():
 /// The round constants are generated using the Grain LFSR [23] in a self-shrinking

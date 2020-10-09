@@ -5,11 +5,11 @@ extern crate lazy_static;
 
 pub use crate::poseidon::{Arity, Poseidon};
 use crate::round_constants::generate_constants;
+pub use bellperson::bls::Fr as Scalar;
+use bellperson::bls::FrRepr;
 pub use error::Error;
 use ff::{Field, PrimeField, ScalarEngine};
 use generic_array::GenericArray;
-pub use bellperson::bls::Fr as Scalar;
-use bellperson::bls::FrRepr;
 
 /// Poseidon circuit
 pub mod circuit;

@@ -5,9 +5,9 @@ use crate::poseidon_alt::{hash_correct, hash_optimized_dynamic};
 use crate::preprocessing::compress_round_constants;
 use crate::{matrix, quintic_s_box, BatchHasher, Strength, DEFAULT_STRENGTH};
 use crate::{round_constants, round_numbers, scalar_from_u64, Error};
+use bellperson::bls::{Bls12, Fr};
 use ff::{Field, PrimeField, ScalarEngine};
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
-use bellperson::bls::{Fr, Bls12};
 use std::marker::PhantomData;
 use typenum::marker_traits::Unsigned;
 use typenum::*;
@@ -559,10 +559,7 @@ impl<A> BatchHasher<A> for SimplePoseidonBatchHasher<A>
 where
     A: Arity<Fr>,
 {
-    fn hash(
-        &mut self,
-        preimages: &[GenericArray<Fr, A>],
-    ) -> Result<Vec<Fr>, Error> {
+    fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
         Ok(preimages
             .iter()
             .map(|preimage| Poseidon::new_with_preimage(&preimage, &self.constants).hash())
@@ -578,9 +575,9 @@ where
 mod tests {
     use super::*;
     use crate::*;
+    use bellperson::bls::{Bls12, Fr};
     use ff::Field;
     use generic_array::typenum;
-    use bellperson::bls::{Bls12, Fr};
 
     #[test]
     fn reset() {

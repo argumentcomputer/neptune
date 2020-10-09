@@ -6,8 +6,8 @@ use crate::cl;
 use crate::error::Error;
 use crate::poseidon::SimplePoseidonBatchHasher;
 use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
-use generic_array::GenericArray;
 use bellperson::bls::Fr;
+use generic_array::GenericArray;
 use std::marker::PhantomData;
 use triton::FutharkContext;
 

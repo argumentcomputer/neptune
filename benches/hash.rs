@@ -1,9 +1,9 @@
+use bellperson::bls::{Bls12, Fr};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ff::PrimeField;
 use generic_array::typenum;
 use neptune::poseidon::{HashMode, PoseidonConstants};
 use neptune::*;
-use bellperson::bls::{Bls12, Fr};
 use rand::rngs::OsRng;
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256, Sha512};
