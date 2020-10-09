@@ -124,8 +124,11 @@ jobs:
       - run: apt-cache search opencl
       - run: sudo apt install -y ocl-icd-opencl-dev
       - run:
-          name: Run cargo clippy
-          command: cargo clippy --all-features
+          name: Run cargo clippy (pairing)
+          command: cargo clippy --no-default-features --features pairing,gpu
+      - run:
+          name: Run cargo clippy (blst)
+          command: cargo clippy --no-default-features --features blst,gpu
 
   build:
     executor: default
@@ -135,8 +138,15 @@ jobs:
       - run: echo 'export PATH="$HOME:~/.cargo/bin:$PATH"' >> $BASH_ENV
       - run: source $BASH_ENV
       - run:
-          name: Run cargo release build
-          command: cargo build --release
+          name: Run cargo release build (pairing)
+          command: cargo build --release --no-default-features --features pairing
+      - run:
+          name: Run cargo release build (blst)
+          command: cargo build --release --no-default-features --features blst
+      - run:
+          name: Run cargo release build (gpu)
+          command: cargo build --release --features gpu
+
 
   benches:
     executor: default
@@ -149,8 +159,11 @@ jobs:
       - run: apt-cache search opencl
       - run: sudo apt install -y ocl-icd-opencl-dev
       - run:
-          name: Run cargo build --benches
-          command: cargo build --benches --all-features --all --release
+          name: Run cargo build --benches (pairing)
+          command: cargo build --benches --no-default-features --features pairing --all --release
+      - run:
+          name: Run cargo build --benches (blst)
+          command: cargo build --benches --no-default-features --features blst --all --release
 
 workflows:
   version: 2.1
