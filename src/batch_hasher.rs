@@ -1,4 +1,5 @@
 use std::fmt::{self, Debug};
+use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
 #[cfg(all(feature = "gpu", not(target_os = "macos")))]
@@ -8,7 +9,6 @@ use crate::poseidon::SimplePoseidonBatchHasher;
 use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
 use bellperson::bls::Fr;
 use generic_array::GenericArray;
-use std::marker::PhantomData;
 use triton::FutharkContext;
 
 #[derive(Clone)]
