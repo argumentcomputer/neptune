@@ -1,4 +1,3 @@
-use crate::gpu::GPUSelector;
 use log::*;
 use std::collections::HashMap;
 use std::fmt;
@@ -225,6 +224,12 @@ fn create_queue(
     } else {
         Err(ClError::CannotCreateQueue)
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum GPUSelector {
+    BusId(u32),
+    Index(usize),
 }
 
 impl GPUSelector {

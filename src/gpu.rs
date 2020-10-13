@@ -1,3 +1,5 @@
+#[cfg(all(feature = "gpu", not(target_os = "macos")))]
+use crate::cl;
 use crate::error::Error;
 use crate::hash_type::HashType;
 use crate::poseidon::PoseidonConstants;
@@ -12,9 +14,6 @@ use triton::FutharkContext;
 use triton::{Array_u64_1d, Array_u64_2d, Array_u64_3d};
 use typenum::{U11, U2, U8};
 
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
-use crate::cl;
-
 /// Convenience type aliases for opaque pointers from the generated Futhark bindings.
 type P2State = triton::FutharkOpaqueP2State;
 type P8State = triton::FutharkOpaqueP8State;
@@ -25,12 +24,6 @@ type S8State = triton::FutharkOpaqueS8State;
 type S11State = triton::FutharkOpaqueS11State;
 
 pub(crate) type T864MState = triton::FutharkOpaqueT864MState;
-
-#[derive(Debug, Clone, Copy)]
-pub enum GPUSelector {
-    BusId(u32),
-    Index(usize),
-}
 
 /// Container to hold the state corresponding to each supported arity.
 enum BatcherState {
@@ -846,7 +839,9 @@ mod tests {
     fn test_custom_gpus() {
         let bus_ids = cl::get_all_bus_ids().unwrap();
         for bus_id in bus_ids {
-            test_mbatch_hash8_on_device(cl::futhark_context(GPUSelector::BusId(bus_id)).unwrap());
+            test_mbatch_hash8_on_device(
+                cl::futhark_context(cl::GPUSelector::BusId(bus_id)).unwrap(),
+            );
         }
     }
 }
