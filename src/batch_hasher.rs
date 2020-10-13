@@ -1,3 +1,4 @@
+#[cfg(all(feature = "gpu", not(target_os = "macos")))]
 use crate::cl;
 use crate::error::Error;
 use crate::poseidon::SimplePoseidonBatchHasher;
@@ -8,7 +9,10 @@ use std::marker::PhantomData;
 
 #[derive(Clone, Copy, Debug)]
 pub enum BatcherType {
+    #[cfg(all(feature = "gpu", not(target_os = "macos")))]
     CustomGPU(cl::GPUSelector),
+    #[cfg(all(feature = "gpu", target_os = "macos"))]
+    CustomGPU(()),
     GPU,
     CPU,
 }
