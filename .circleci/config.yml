@@ -26,12 +26,21 @@ commands:
       - *restore-workspace
       - *restore-cache
       - run:
-          name: Test (<< parameters.target >>)
+          name: Test (pairing) (<< parameters.target >>)
           command: TARGET=<< parameters.target >> cargo test --release
           no_output_timeout: 5m
       - run:
-          name: Test (GPU) (<< parameters.target >>)
-          command: TARGET=<< parameters.target >> cargo test --release --features gpu -- --test-threads=1
+          name: Test (blst) (<< parameters.target >>)
+          command: TARGET=<< parameters.target >> cargo test --no-default-features --features blst --release  -- --test-threads=1
+          no_output_timeout: 5m
+      - run:
+          name: Test (pairing, GPU) (<< parameters.target >>)
+          command: TARGET=<< parameters.target >> cargo test --release --features gpu  -- --test-threads=1
+          no_output_timeout: 30m
+
+      - run:
+          name: Test (pairing, GPU) (<< parameters.target >>)
+          command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features blst,gpu
           no_output_timeout: 30m
 
 jobs:
@@ -144,8 +153,11 @@ jobs:
           name: Run cargo release build (blst)
           command: cargo build --release --no-default-features --features blst
       - run:
-          name: Run cargo release build (gpu)
-          command: cargo build --release --features gpu
+          name: Run cargo release build (pairing, gpu)
+          command: cargo build --release --no-default-features --features pairing,gpu
+      - run:
+          name: Run cargo release build (blst, gpu)
+          command: cargo build --release --no-default-features --features blst,gpu
 
 
   benches:
