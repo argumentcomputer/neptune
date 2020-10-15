@@ -13,6 +13,8 @@ pub enum Error {
     GPUError(String),
     #[cfg(all(feature = "gpu", not(target_os = "macos")))]
     ClError(cl::ClError),
+    #[cfg(feature = "gpu")]
+    TritonError(String),
     DecodingError,
     Other(String),
 }
@@ -21,6 +23,13 @@ pub enum Error {
 impl From<cl::ClError> for Error {
     fn from(e: cl::ClError) -> Self {
         Self::ClError(e)
+    }
+}
+
+#[cfg(feature = "gpu")]
+impl From<triton::Error> for Error {
+    fn from(e: triton::Error) -> Self {
+        Self::TritonError(e.to_string())
     }
 }
 
@@ -37,6 +46,8 @@ impl fmt::Display for Error {
             Error::GPUError(s) => write!(f, "GPU Error: {}", s),
             #[cfg(all(feature = "gpu", not(target_os = "macos")))]
             Error::ClError(e) => write!(f, "OpenCL Error: {}", e),
+            #[cfg(feature = "gpu")]
+            Error::TritonError(e) => write!(f, "Neptune-triton Error: {}", e),
             Error::DecodingError => write!(f, "PrimeFieldDecodingError"),
             Error::Other(s) => write!(f, "{}", s),
         }
