@@ -31,7 +31,7 @@ commands:
           no_output_timeout: 5m
       - run:
           name: Test (GPU) (<< parameters.target >>)
-          command: TARGET=<< parameters.target >> cargo test --release --features gpu
+          command: TARGET=<< parameters.target >> cargo test --release --features gpu -- --test-threads=1
           no_output_timeout: 30m
 
 jobs:

@@ -469,7 +469,7 @@ where
         .mbatch_hash2(state, input)
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
-    let (vec, _shape) = res.to_vec();
+    let (vec, _shape) = res.to_vec()?;
     let frs = unpack_fr_array_from_monts(vec.as_slice())?;
 
     Ok((frs.to_vec(), state))
@@ -492,7 +492,7 @@ where
         .mbatch_hash8(state, input)
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
-    let (vec, _shape) = res.to_vec();
+    let (vec, _shape) = res.to_vec()?;
     let frs = unpack_fr_array_from_monts(vec.as_slice())?;
 
     Ok((frs.to_vec(), state))
@@ -515,7 +515,7 @@ where
         .mbatch_hash11(state, input)
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
-    let (vec, _shape) = res.to_vec();
+    let (vec, _shape) = res.to_vec()?;
     let frs = unpack_fr_array_from_monts(vec.as_slice())?;
 
     Ok((frs.to_vec(), state))
@@ -538,7 +538,7 @@ where
         .mbatch_hash2s(state, input)
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
-    let (vec, _shape) = res.to_vec();
+    let (vec, _shape) = res.to_vec()?;
     let frs = unpack_fr_array_from_monts(vec.as_slice())?;
 
     Ok((frs.to_vec(), state))
@@ -561,7 +561,7 @@ where
         .mbatch_hash8s(state, input)
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
-    let (vec, _shape) = res.to_vec();
+    let (vec, _shape) = res.to_vec()?;
     let frs = unpack_fr_array_from_monts(vec.as_slice())?;
 
     Ok((frs.to_vec(), state))
@@ -584,7 +584,7 @@ where
         .mbatch_hash11s(state, input)
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
-    let (vec, _shape) = res.to_vec();
+    let (vec, _shape) = res.to_vec()?;
     let frs = unpack_fr_array_from_monts(vec.as_slice())?;
 
     Ok((frs.to_vec(), state))
@@ -609,7 +609,7 @@ mod tests {
     #[test]
     fn test_mbatch_hash2() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
-        let mut ctx = FutharkContext::new();
+        let mut ctx = FutharkContext::new().unwrap();
         let mut state =
             if let BatcherState::Arity2(s) = init_hash2(&mut ctx, Strength::Standard).unwrap() {
                 s
@@ -643,7 +643,7 @@ mod tests {
     #[test]
     fn test_mbatch_hash2s() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
-        let mut ctx = FutharkContext::new();
+        let mut ctx = FutharkContext::new().unwrap();
         let mut state = if let BatcherState::Arity2s(s) =
             init_hash2(&mut ctx, Strength::Strengthened).unwrap()
         {
@@ -678,7 +678,7 @@ mod tests {
     #[test]
     fn test_mbatch_hash8() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
-        let mut ctx = FutharkContext::new();
+        let mut ctx = FutharkContext::new().unwrap();
         let mut state =
             if let BatcherState::Arity8(s) = init_hash8(&mut ctx, Strength::Standard).unwrap() {
                 s
@@ -712,7 +712,7 @@ mod tests {
     #[test]
     fn test_mbatch_hash8s() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
-        let mut ctx = FutharkContext::new();
+        let mut ctx = FutharkContext::new().unwrap();
         let mut state = if let BatcherState::Arity8s(s) =
             init_hash8(&mut ctx, Strength::Strengthened).unwrap()
         {
@@ -747,7 +747,7 @@ mod tests {
     #[test]
     fn test_mbatch_hash11() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
-        let mut ctx = FutharkContext::new();
+        let mut ctx = FutharkContext::new().unwrap();
         let mut state =
             if let BatcherState::Arity11(s) = init_hash11(&mut ctx, Strength::Standard).unwrap() {
                 s
@@ -781,7 +781,7 @@ mod tests {
     #[test]
     fn test_mbatch_hash11s() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
-        let mut ctx = FutharkContext::new();
+        let mut ctx = FutharkContext::new().unwrap();
         let mut state = if let BatcherState::Arity11s(s) =
             init_hash11(&mut ctx, Strength::Strengthened).unwrap()
         {
@@ -815,7 +815,7 @@ mod tests {
 
     fn test_mbatch_hash8_on_device(dev: Arc<Mutex<FutharkContext>>) {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
-        let mut ctx = FutharkContext::new();
+        let mut ctx = FutharkContext::new().unwrap();
         let mut state =
             if let BatcherState::Arity8(s) = init_hash8(&mut ctx, Strength::Standard).unwrap() {
                 s
