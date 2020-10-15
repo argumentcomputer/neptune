@@ -37,9 +37,6 @@ pub mod column_tree_builder;
 #[cfg(feature = "gpu")]
 mod gpu;
 
-#[cfg(feature = "gpu")]
-pub use gpu::GPUSelector;
-
 #[cfg(all(feature = "gpu", not(target_os = "macos")))]
 mod cl;
 
