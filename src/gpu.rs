@@ -5,9 +5,8 @@ use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
 use ff::{PrimeField, PrimeFieldDecodingError};
 use generic_array::{typenum, ArrayLength, GenericArray};
 use paired::bls12_381::{Bls12, Fr, FrRepr};
-use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use triton::FutharkContext;
 use triton::{Array_u64_1d, Array_u64_2d, Array_u64_3d};
 use typenum::{U11, U2, U8};
@@ -26,10 +25,8 @@ type S11State = triton::FutharkOpaqueS11State;
 
 pub(crate) type T864MState = triton::FutharkOpaqueT864MState;
 
-#[derive(Debug, Clone, Copy)]
-pub enum GPUSelector {
-    BusId(u32),
-    Index(usize),
+lazy_static! {
+    pub static ref FUTHARK_CONTEXT: Mutex<FutharkContext> = Mutex::new(FutharkContext::new());
 }
 
 /// Container to hold the state corresponding to each supported arity.
@@ -45,11 +42,11 @@ enum BatcherState {
 impl BatcherState {
     /// Create a new state for use in batch hashing preimages of `Arity` elements.
     /// State is an opaque pointer supplied to the corresponding GPU entry point when processing a batch.
-    fn new<A: Arity<Fr>>(ctx: Arc<Mutex<FutharkContext>>) -> Result<Self, Error> {
+    fn new<A: Arity<Fr>>(ctx: &Mutex<FutharkContext>) -> Result<Self, Error> {
         Self::new_with_strength::<A>(ctx, DEFAULT_STRENGTH)
     }
     fn new_with_strength<A: Arity<Fr>>(
-        ctx: Arc<Mutex<FutharkContext>>,
+        ctx: &Mutex<FutharkContext>,
         strength: Strength,
     ) -> Result<Self, Error> {
         let mut ctx = ctx.lock().unwrap();
@@ -100,8 +97,8 @@ impl BatcherState {
 }
 
 /// `GPUBatchHasher` implements `BatchHasher` and performs the batched hashing on GPU.
-pub struct GPUBatchHasher<A> {
-    ctx: Arc<Mutex<FutharkContext>>,
+pub struct GPUBatchHasher<'a, A> {
+    ctx: &'a Mutex<FutharkContext>,
     state: BatcherState,
     /// If `tree_builder_state` is provided, use it to build the final 64MiB tree on the GPU with one call.
     tree_builder_state: Option<T864MState>,
@@ -109,27 +106,24 @@ pub struct GPUBatchHasher<A> {
     _a: PhantomData<A>,
 }
 
-impl<A> GPUBatchHasher<A>
+impl<A> GPUBatchHasher<'_, A>
 where
     A: Arity<Fr>,
 {
     /// Create a new `GPUBatchHasher` and initialize it with state corresponding with its `A`.
-    pub(crate) fn new(
-        ctx: Arc<Mutex<FutharkContext>>,
-        max_batch_size: usize,
-    ) -> Result<Self, Error> {
-        Self::new_with_strength(ctx, DEFAULT_STRENGTH, max_batch_size)
+    pub(crate) fn new(max_batch_size: usize) -> Result<Self, Error> {
+        Self::new_with_strength(DEFAULT_STRENGTH, max_batch_size)
     }
 
     /// Create a new `GPUBatchHasher` and initialize it with state corresponding with its `A`.
     pub(crate) fn new_with_strength(
-        ctx: Arc<Mutex<FutharkContext>>,
         strength: Strength,
         max_batch_size: usize,
     ) -> Result<Self, Error> {
+        let ctx = &*FUTHARK_CONTEXT;
         Ok(Self {
-            ctx: Arc::clone(&ctx),
-            state: BatcherState::new_with_strength::<A>(Arc::clone(&ctx), strength)?,
+            ctx,
+            state: BatcherState::new_with_strength::<A>(ctx, strength)?,
             tree_builder_state: None,
             max_batch_size,
             _a: PhantomData::<A>,
@@ -137,7 +131,7 @@ where
     }
 }
 
-impl<A> Drop for GPUBatchHasher<A> {
+impl<A> Drop for GPUBatchHasher<'_, A> {
     fn drop(&mut self) {
         let ctx = self.ctx.lock().unwrap();
         unsafe {
@@ -146,7 +140,7 @@ impl<A> Drop for GPUBatchHasher<A> {
     }
 }
 
-impl<A> BatchHasher<A> for GPUBatchHasher<A>
+impl<A> BatchHasher<A> for GPUBatchHasher<'_, A>
 where
     A: Arity<Fr>,
 {
@@ -618,12 +612,8 @@ mod tests {
             };
         let batch_size = 100;
 
-        let mut gpu_hasher = GPUBatchHasher::<U2>::new_with_strength(
-            cl::default_futhark_context().unwrap(),
-            Strength::Standard,
-            batch_size,
-        )
-        .unwrap();
+        let mut gpu_hasher =
+            GPUBatchHasher::<U2>::new_with_strength(Strength::Standard, batch_size).unwrap();
         let mut simple_hasher =
             SimplePoseidonBatchHasher::<U2>::new_with_strength(Strength::Standard, batch_size)
                 .unwrap();
@@ -653,12 +643,8 @@ mod tests {
         };
         let batch_size = 100;
 
-        let mut gpu_hasher = GPUBatchHasher::<U2>::new_with_strength(
-            cl::default_futhark_context().unwrap(),
-            Strength::Strengthened,
-            batch_size,
-        )
-        .unwrap();
+        let mut gpu_hasher =
+            GPUBatchHasher::<U2>::new_with_strength(Strength::Strengthened, batch_size).unwrap();
         let mut simple_hasher =
             SimplePoseidonBatchHasher::<U2>::new_with_strength(Strength::Strengthened, batch_size)
                 .unwrap();
@@ -687,12 +673,8 @@ mod tests {
             };
         let batch_size = 100;
 
-        let mut gpu_hasher = GPUBatchHasher::<U8>::new_with_strength(
-            cl::default_futhark_context().unwrap(),
-            Strength::Standard,
-            batch_size,
-        )
-        .unwrap();
+        let mut gpu_hasher =
+            GPUBatchHasher::<U8>::new_with_strength(Strength::Standard, batch_size).unwrap();
         let mut simple_hasher =
             SimplePoseidonBatchHasher::<U8>::new_with_strength(Strength::Standard, batch_size)
                 .unwrap();
@@ -722,12 +704,8 @@ mod tests {
         };
         let batch_size = 100;
 
-        let mut gpu_hasher = GPUBatchHasher::<U8>::new_with_strength(
-            cl::default_futhark_context().unwrap(),
-            Strength::Strengthened,
-            batch_size,
-        )
-        .unwrap();
+        let mut gpu_hasher =
+            GPUBatchHasher::<U8>::new_with_strength(Strength::Strengthened, batch_size).unwrap();
         let mut simple_hasher =
             SimplePoseidonBatchHasher::<U8>::new_with_strength(Strength::Strengthened, batch_size)
                 .unwrap();
@@ -756,12 +734,8 @@ mod tests {
             };
         let batch_size = 100;
 
-        let mut gpu_hasher = GPUBatchHasher::<U11>::new_with_strength(
-            cl::default_futhark_context().unwrap(),
-            Strength::Standard,
-            batch_size,
-        )
-        .unwrap();
+        let mut gpu_hasher =
+            GPUBatchHasher::<U11>::new_with_strength(Strength::Standard, batch_size).unwrap();
         let mut simple_hasher =
             SimplePoseidonBatchHasher::<U11>::new_with_strength(Strength::Standard, batch_size)
                 .unwrap();
@@ -791,12 +765,8 @@ mod tests {
         };
         let batch_size = 100;
 
-        let mut gpu_hasher = GPUBatchHasher::<U11>::new_with_strength(
-            cl::default_futhark_context().unwrap(),
-            Strength::Strengthened,
-            batch_size,
-        )
-        .unwrap();
+        let mut gpu_hasher =
+            GPUBatchHasher::<U11>::new_with_strength(Strength::Strengthened, batch_size).unwrap();
         let mut simple_hasher =
             SimplePoseidonBatchHasher::<U11>::new_with_strength(Strength::Strengthened, batch_size)
                 .unwrap();

@@ -1,6 +1,5 @@
 use crate::batch_hasher::{Batcher, BatcherType};
 use crate::error::Error;
-use crate::gpu::GPUSelector;
 use crate::poseidon::{Poseidon, PoseidonConstants};
 use crate::{Arity, BatchHasher};
 use ff::Field;
@@ -17,7 +16,7 @@ where
     fn reset(&mut self);
 }
 
-pub struct TreeBuilder<TreeArity>
+pub struct TreeBuilder<'a, TreeArity>
 where
     TreeArity: Arity<Fr>,
 {
@@ -26,11 +25,11 @@ where
     /// Index of the first unfilled datum.
     fill_index: usize,
     tree_constants: PoseidonConstants<Bls12, TreeArity>,
-    tree_batcher: Option<Batcher<TreeArity>>,
+    tree_batcher: Option<Batcher<'a, TreeArity>>,
     rows_to_discard: usize,
 }
 
-impl<TreeArity> TreeBuilderTrait<TreeArity> for TreeBuilder<TreeArity>
+impl<TreeArity> TreeBuilderTrait<TreeArity> for TreeBuilder<'_, TreeArity>
 where
     TreeArity: Arity<Fr>,
 {
@@ -82,7 +81,7 @@ fn as_generic_arrays<'a, A: Arity<Fr>>(vec: &'a [Fr]) -> &'a [GenericArray<Fr, A
     }
 }
 
-impl<TreeArity> TreeBuilder<TreeArity>
+impl<TreeArity> TreeBuilder<'_, TreeArity>
 where
     TreeArity: Arity<Fr>,
 {

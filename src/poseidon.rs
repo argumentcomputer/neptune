@@ -530,17 +530,18 @@ where
 }
 
 #[derive(Debug)]
-pub struct SimplePoseidonBatchHasher<A>
+pub struct SimplePoseidonBatchHasher<'a, A>
 where
     A: Arity<bls12_381::Fr>,
 {
     constants: PoseidonConstants<Bls12, A>,
     max_batch_size: usize,
+    _s: PhantomData<Poseidon<'a, Bls12, A>>,
 }
 
-impl<A> SimplePoseidonBatchHasher<A>
+impl<'a, A> SimplePoseidonBatchHasher<'a, A>
 where
-    A: Arity<bls12_381::Fr>,
+    A: 'a + Arity<bls12_381::Fr>,
 {
     pub(crate) fn new(max_batch_size: usize) -> Result<Self, Error> {
         Self::new_with_strength(DEFAULT_STRENGTH, max_batch_size)
@@ -553,12 +554,13 @@ where
         Ok(Self {
             constants: PoseidonConstants::<Bls12, A>::new_with_strength(strength),
             max_batch_size,
+            _s: PhantomData::<Poseidon<'a, Bls12, A>>,
         })
     }
 }
-impl<A> BatchHasher<A> for SimplePoseidonBatchHasher<A>
+impl<'a, A> BatchHasher<A> for SimplePoseidonBatchHasher<'a, A>
 where
-    A: Arity<bls12_381::Fr>,
+    A: 'a + Arity<bls12_381::Fr>,
 {
     fn hash(
         &mut self,

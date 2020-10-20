@@ -1,6 +1,5 @@
 use crate::batch_hasher::{Batcher, BatcherType};
 use crate::error::Error;
-use crate::gpu::GPUSelector;
 use crate::poseidon::{Poseidon, PoseidonConstants};
 use crate::tree_builder::{TreeBuilder, TreeBuilderTrait};
 use crate::{Arity, BatchHasher};
@@ -22,7 +21,7 @@ where
     fn reset(&mut self);
 }
 
-pub struct ColumnTreeBuilder<ColumnArity, TreeArity>
+pub struct ColumnTreeBuilder<'a, ColumnArity, TreeArity>
 where
     ColumnArity: Arity<Fr>,
     TreeArity: Arity<Fr>,
@@ -32,12 +31,12 @@ where
     /// Index of the first unfilled datum.
     fill_index: usize,
     column_constants: PoseidonConstants<Bls12, ColumnArity>,
-    pub column_batcher: Option<Batcher<ColumnArity>>,
-    tree_builder: TreeBuilder<TreeArity>,
+    pub column_batcher: Option<Batcher<'a, ColumnArity>>,
+    tree_builder: TreeBuilder<'a, TreeArity>,
 }
 
 impl<ColumnArity, TreeArity> ColumnTreeBuilderTrait<ColumnArity, TreeArity>
-    for ColumnTreeBuilder<ColumnArity, TreeArity>
+    for ColumnTreeBuilder<'_, ColumnArity, TreeArity>
 where
     ColumnArity: Arity<Fr>,
     TreeArity: Arity<Fr>,
@@ -101,7 +100,7 @@ fn as_generic_arrays<'a, A: Arity<Fr>>(vec: &'a [Fr]) -> &'a [GenericArray<Fr, A
     }
 }
 
-impl<ColumnArity, TreeArity> ColumnTreeBuilder<ColumnArity, TreeArity>
+impl<ColumnArity, TreeArity> ColumnTreeBuilder<'_, ColumnArity, TreeArity>
 where
     ColumnArity: Arity<Fr>,
     TreeArity: Arity<Fr>,
