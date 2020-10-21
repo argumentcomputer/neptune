@@ -174,7 +174,20 @@ fn get_device_by_bus_id(bus_id: u32) -> ClResult<bindings::cl_device_id> {
 
 fn get_all_devices() -> ClResult<Vec<bindings::cl_device_id>> {
     let mut devices = Vec::new();
-    for platform in get_platforms()? {
+
+    let mut platforms = get_platforms()?;
+
+    if let Ok(platform) = get_platform_by_name("NVIDIA CUDA") {
+        // If there is an Nvidia platform, make it the first, so any Nvidia card will be the default.
+        platforms = platforms
+            .iter()
+            .filter(|x| **x != platform)
+            .map(|x| *x)
+            .collect::<Vec<_>>();
+        platforms.insert(0, platform);
+    }
+
+    for platform in platforms {
         if let Ok(devs) = get_devices(platform) {
             for dev in devs {
                 devices.push(dev);
@@ -262,10 +275,12 @@ pub fn get_all_nvidia_devices() -> ClResult<Vec<bindings::cl_device_id>> {
 pub fn get_all_bus_ids() -> ClResult<Vec<u32>> {
     let mut bus_ids = Vec::new();
     for dev in get_all_devices()? {
-        bus_ids.push(get_bus_id(dev)?);
+        match get_bus_id(dev) {
+            Ok(bus_id) => bus_ids.push(bus_id),
+            Err(_) => (),
+        }
     }
     bus_ids.sort_unstable();
-    bus_ids.dedup();
     Ok(bus_ids)
 }
 
@@ -320,8 +335,14 @@ mod tests {
 
     #[test]
     fn test_bus_id_uniqueness() {
-        let devices = get_all_devices().unwrap();
-        let bus_ids = get_all_bus_ids().unwrap();
-        assert_eq!(devices.len(), bus_ids.len());
+        let mut bus_ids = get_all_bus_ids().unwrap();
+        let count = bus_ids.len();
+
+        bus_ids.dedup();
+        assert_eq!(
+            count,
+            bus_ids.len(),
+            "get_all_bus_ids() returned duplicates"
+        );
     }
 }
