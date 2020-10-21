@@ -15,7 +15,6 @@ pub enum Error {
     Other(String),
 }
 
-
 #[cfg(feature = "gpu")]
 impl From<triton::Error> for Error {
     fn from(e: triton::Error) -> Self {
