@@ -25,7 +25,8 @@ type S11State = triton::FutharkOpaqueS11State;
 pub(crate) type T864MState = triton::FutharkOpaqueT864MState;
 
 lazy_static! {
-    pub static ref FUTHARK_CONTEXT: Mutex<FutharkContext> = Mutex::new(FutharkContext::new());
+    pub static ref FUTHARK_CONTEXT: Mutex<FutharkContext> =
+        Mutex::new(FutharkContext::new().unwrap());
 }
 
 /// Container to hold the state corresponding to each supported arity.
