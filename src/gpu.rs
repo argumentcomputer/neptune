@@ -1,3 +1,5 @@
+#[cfg(all(feature = "gpu", not(target_os = "macos")))]
+use crate::cl;
 use crate::error::Error;
 use crate::hash_type::HashType;
 use crate::poseidon::PoseidonConstants;
@@ -10,9 +12,6 @@ use std::sync::Mutex;
 use triton::FutharkContext;
 use triton::{Array_u64_1d, Array_u64_2d, Array_u64_3d};
 use typenum::{U11, U2, U8};
-
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
-use crate::cl;
 
 /// Convenience type aliases for opaque pointers from the generated Futhark bindings.
 type P2State = triton::FutharkOpaqueP2State;
@@ -463,7 +462,7 @@ where
         .mbatch_hash2(state, input)
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
-    let (vec, _shape) = res.to_vec();
+    let (vec, _shape) = res.to_vec()?;
     let frs = unpack_fr_array_from_monts(vec.as_slice())?;
 
     Ok((frs.to_vec(), state))
@@ -486,7 +485,7 @@ where
         .mbatch_hash8(state, input)
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
-    let (vec, _shape) = res.to_vec();
+    let (vec, _shape) = res.to_vec()?;
     let frs = unpack_fr_array_from_monts(vec.as_slice())?;
 
     Ok((frs.to_vec(), state))
@@ -509,7 +508,7 @@ where
         .mbatch_hash11(state, input)
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
-    let (vec, _shape) = res.to_vec();
+    let (vec, _shape) = res.to_vec()?;
     let frs = unpack_fr_array_from_monts(vec.as_slice())?;
 
     Ok((frs.to_vec(), state))
@@ -532,7 +531,7 @@ where
         .mbatch_hash2s(state, input)
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
-    let (vec, _shape) = res.to_vec();
+    let (vec, _shape) = res.to_vec()?;
     let frs = unpack_fr_array_from_monts(vec.as_slice())?;
 
     Ok((frs.to_vec(), state))
@@ -555,7 +554,7 @@ where
         .mbatch_hash8s(state, input)
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
-    let (vec, _shape) = res.to_vec();
+    let (vec, _shape) = res.to_vec()?;
     let frs = unpack_fr_array_from_monts(vec.as_slice())?;
 
     Ok((frs.to_vec(), state))
@@ -578,7 +577,7 @@ where
         .mbatch_hash11s(state, input)
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
-    let (vec, _shape) = res.to_vec();
+    let (vec, _shape) = res.to_vec()?;
     let frs = unpack_fr_array_from_monts(vec.as_slice())?;
 
     Ok((frs.to_vec(), state))
@@ -603,7 +602,7 @@ mod tests {
     #[test]
     fn test_mbatch_hash2() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
-        let mut ctx = FutharkContext::new();
+        let mut ctx = FutharkContext::new().unwrap();
         let mut state =
             if let BatcherState::Arity2(s) = init_hash2(&mut ctx, Strength::Standard).unwrap() {
                 s
@@ -633,7 +632,7 @@ mod tests {
     #[test]
     fn test_mbatch_hash2s() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
-        let mut ctx = FutharkContext::new();
+        let mut ctx = FutharkContext::new().unwrap();
         let mut state = if let BatcherState::Arity2s(s) =
             init_hash2(&mut ctx, Strength::Strengthened).unwrap()
         {
@@ -664,7 +663,7 @@ mod tests {
     #[test]
     fn test_mbatch_hash8() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
-        let mut ctx = FutharkContext::new();
+        let mut ctx = FutharkContext::new().unwrap();
         let mut state =
             if let BatcherState::Arity8(s) = init_hash8(&mut ctx, Strength::Standard).unwrap() {
                 s
@@ -694,7 +693,7 @@ mod tests {
     #[test]
     fn test_mbatch_hash8s() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
-        let mut ctx = FutharkContext::new();
+        let mut ctx = FutharkContext::new().unwrap();
         let mut state = if let BatcherState::Arity8s(s) =
             init_hash8(&mut ctx, Strength::Strengthened).unwrap()
         {
@@ -725,7 +724,7 @@ mod tests {
     #[test]
     fn test_mbatch_hash11() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
-        let mut ctx = FutharkContext::new();
+        let mut ctx = FutharkContext::new().unwrap();
         let mut state =
             if let BatcherState::Arity11(s) = init_hash11(&mut ctx, Strength::Standard).unwrap() {
                 s
@@ -755,7 +754,7 @@ mod tests {
     #[test]
     fn test_mbatch_hash11s() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
-        let mut ctx = FutharkContext::new();
+        let mut ctx = FutharkContext::new().unwrap();
         let mut state = if let BatcherState::Arity11s(s) =
             init_hash11(&mut ctx, Strength::Strengthened).unwrap()
         {
@@ -785,7 +784,7 @@ mod tests {
 
     fn test_mbatch_hash8_on_device(dev: Arc<Mutex<FutharkContext>>) {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
-        let mut ctx = FutharkContext::new();
+        let mut ctx = FutharkContext::new().unwrap();
         let mut state =
             if let BatcherState::Arity8(s) = init_hash8(&mut ctx, Strength::Standard).unwrap() {
                 s
@@ -816,7 +815,9 @@ mod tests {
     fn test_custom_gpus() {
         let bus_ids = cl::get_all_bus_ids().unwrap();
         for bus_id in bus_ids {
-            test_mbatch_hash8_on_device(cl::futhark_context(GPUSelector::BusId(bus_id)).unwrap());
+            test_mbatch_hash8_on_device(
+                cl::futhark_context(cl::GPUSelector::BusId(bus_id)).unwrap(),
+            );
         }
     }
 }

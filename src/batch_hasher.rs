@@ -1,12 +1,11 @@
+#[cfg(all(feature = "gpu", not(target_os = "macos")))]
+use crate::cl;
 use crate::error::Error;
 use crate::poseidon::SimplePoseidonBatchHasher;
 use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
 use generic_array::GenericArray;
 use paired::bls12_381::Fr;
 use std::marker::PhantomData;
-
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
-use crate::cl;
 
 #[derive(Clone, Copy, Debug)]
 pub enum BatcherType {

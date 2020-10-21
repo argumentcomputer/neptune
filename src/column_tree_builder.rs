@@ -1,4 +1,6 @@
 use crate::batch_hasher::{Batcher, BatcherType};
+#[cfg(all(feature = "gpu", not(target_os = "macos")))]
+use crate::cl::GPUSelector;
 use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
 use crate::tree_builder::{TreeBuilder, TreeBuilderTrait};
