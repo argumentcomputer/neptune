@@ -38,7 +38,7 @@ pub mod column_tree_builder;
 mod gpu;
 
 #[cfg(all(feature = "gpu", not(target_os = "macos")))]
-mod cl;
+pub mod cl;
 
 /// Batch Hasher
 #[cfg(feature = "gpu")]

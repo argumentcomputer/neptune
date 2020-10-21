@@ -115,7 +115,7 @@ fn main() -> Result<(), Error> {
         .map(|v| {
             v.split(",")
                 .map(|s| s.parse::<u32>().expect("Invalid Bus-Id number!"))
-                .map(|bus_id| BatcherType::CustomGPU(neptune::GPUSelector::BusId(bus_id)))
+                .map(|bus_id| BatcherType::CustomGPU(neptune::cl::GPUSelector::BusId(bus_id)))
                 .collect::<Vec<_>>()
         })
         .unwrap_or(vec![BatcherType::GPU]);
