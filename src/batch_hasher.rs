@@ -1,3 +1,6 @@
+use std::fmt::{self, Debug};
+use std::sync::{Arc, Mutex};
+
 #[cfg(all(feature = "gpu", not(target_os = "macos")))]
 use crate::cl;
 use crate::error::Error;
@@ -6,15 +9,29 @@ use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
 use generic_array::GenericArray;
 use paired::bls12_381::Fr;
 use std::marker::PhantomData;
+use triton::FutharkContext;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone)]
 pub enum BatcherType {
     #[cfg(all(feature = "gpu", not(target_os = "macos")))]
     CustomGPU(cl::GPUSelector),
     #[cfg(all(feature = "gpu", target_os = "macos"))]
     CustomGPU(()),
+    FromFutharkContext(Arc<Mutex<FutharkContext>>),
     GPU,
     CPU,
+}
+
+impl Debug for BatcherType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("BatcherType::"))?;
+        match self {
+            BatcherType::FromFutharkContext(_) => f.write_fmt(format_args!("FromFutharkContext")),
+            BatcherType::CustomGPU(x) => f.write_fmt(format_args!("CustomGPU({:?})", x)),
+            BatcherType::CPU => f.write_fmt(format_args!("CPU")),
+            BatcherType::GPU => f.write_fmt(format_args!("GPU")),
+        }
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -53,15 +70,15 @@ where
     ) -> Result<Self, Error> {
         match t {
             #[cfg(all(feature = "gpu", target_os = "macos"))]
-            BatcherType::GPU => panic!("GPU unimplemented on macos"),
-            #[cfg(all(feature = "gpu", target_os = "macos"))]
-            BatcherType::CustomGPU(_) => panic!("GPU unimplemented on macos"),
+            BatcherType::GPU => unimplemented!("GPU unsupported on macos"),
             #[cfg(all(feature = "gpu", not(target_os = "macos")))]
             BatcherType::GPU => Ok(Batcher::GPU(GPUBatchHasher::<A>::new_with_strength(
                 cl::default_futhark_context()?,
                 strength,
                 max_batch_size,
             )?)),
+            #[cfg(all(feature = "gpu", target_os = "macos"))]
+            BatcherType::CustomGPU(_) => unimplemented!("GPU unsupported on macos"),
             #[cfg(all(feature = "gpu", not(target_os = "macos")))]
             BatcherType::CustomGPU(selector) => {
                 Ok(Batcher::GPU(GPUBatchHasher::<A>::new_with_strength(
@@ -70,10 +87,26 @@ where
                     max_batch_size,
                 )?))
             }
-
             BatcherType::CPU => Ok(Batcher::CPU(
                 SimplePoseidonBatchHasher::<A>::new_with_strength(strength, max_batch_size)?,
             )),
+            #[cfg(all(feature = "gpu", not(target_os = "macos")))]
+            BatcherType::FromFutharkContext(futhark_context) => {
+                Ok(Batcher::GPU(GPUBatchHasher::<A>::new_with_strength(
+                    futhark_context.clone(),
+                    strength,
+                    max_batch_size,
+                )?))
+            }
+            #[cfg(all(feature = "gpu", target_os = "macos"))]
+            BatcherType::FromFutharkContext(_) => unimplemented!("GPU unsupported on macos"),
+        }
+    }
+
+    pub(crate) fn futhark_context(&self) -> Option<Arc<Mutex<FutharkContext>>> {
+        match self {
+            Batcher::GPU(b) => Some(b.futhark_context()),
+            _ => None,
         }
     }
 }
@@ -111,5 +144,14 @@ where
 
     fn max_batch_size(&self) -> usize {
         unimplemented!();
+    }
+}
+
+impl<A> NoGPUBatchHasher<A>
+where
+    A: Arity<Fr>,
+{
+    fn futhark_context(&self) -> Arc<Mutex<FutharkContext>> {
+        unimplemented!()
     }
 }

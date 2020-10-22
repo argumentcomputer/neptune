@@ -274,9 +274,13 @@ mod tests {
         let batch_size = leaves / num_batches;
 
         for rows_to_discard in 0..3 {
-            let mut builder =
-                TreeBuilder::<U8>::new(batcher_type, leaves, max_tree_batch_size, rows_to_discard)
-                    .unwrap();
+            let mut builder = TreeBuilder::<U8>::new(
+                batcher_type.clone(),
+                leaves,
+                max_tree_batch_size,
+                rows_to_discard,
+            )
+            .unwrap();
 
             // Simplify computing the expected root.
             let constant_element = Fr::zero();

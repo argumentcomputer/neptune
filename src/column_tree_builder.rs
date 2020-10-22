@@ -113,17 +113,33 @@ where
         max_column_batch_size: usize,
         max_tree_batch_size: usize,
     ) -> Result<Self, Error> {
+        let column_batcher = match &t {
+            Some(t) => Some(Batcher::<ColumnArity>::new(t, max_column_batch_size)?),
+            None => None,
+        };
+
+        let tree_builder = match {
+            match &column_batcher {
+                Some(b) => b.futhark_context(),
+                None => None,
+            }
+        } {
+            Some(ctx) => TreeBuilder::<TreeArity>::new(
+                Some(BatcherType::FromFutharkContext(ctx)),
+                leaf_count,
+                max_tree_batch_size,
+                0,
+            )?,
+            None => TreeBuilder::<TreeArity>::new(t, leaf_count, max_tree_batch_size, 0)?,
+        };
+
         let builder = Self {
             leaf_count,
             data: vec![Fr::zero(); leaf_count],
             fill_index: 0,
             column_constants: PoseidonConstants::<Bls12, ColumnArity>::new(),
-            column_batcher: if let Some(t) = &t {
-                Some(Batcher::<ColumnArity>::new(t, max_column_batch_size)?)
-            } else {
-                None
-            },
-            tree_builder: TreeBuilder::<TreeArity>::new(t, leaf_count, max_tree_batch_size, 0)?,
+            column_batcher,
+            tree_builder,
         };
 
         Ok(builder)
