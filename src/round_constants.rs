@@ -235,7 +235,8 @@ mod tests {
             .iter()
             .map(|x| {
                 let s = x.to_string();
-                s[3..s.len() - 1].to_string()
+                let start = s.find('(').unwrap() + 1;
+                s[start..s.len() - 1].to_string()
             })
             .collect::<Vec<_>>();
 
