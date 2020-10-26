@@ -117,8 +117,8 @@ fn x_pow2<Fr: PrimeField, A: Arity<Fr>>(coeff: u64, n: i32) -> Fr {
 mod tests {
     use super::*;
     use crate::{scalar_from_u64s, Strength};
+    use bellperson::bls::{Bls12, Fr, FrRepr};
     use generic_array::typenum::{U15, U8};
-    use paired::bls12_381::{Bls12, Fr, FrRepr};
     use std::collections::HashSet;
 
     #[test]
