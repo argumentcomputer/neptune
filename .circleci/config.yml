@@ -146,6 +146,9 @@ jobs:
       - *restore-cache
       - run: echo 'export PATH="$HOME:~/.cargo/bin:$PATH"' >> $BASH_ENV
       - run: source $BASH_ENV
+      - run: sudo apt-get update -y
+      - run: apt-cache search opencl
+      - run: sudo apt install -y ocl-icd-opencl-dev
       - run:
           name: Run cargo release build (pairing)
           command: cargo build --release --no-default-features --features pairing
