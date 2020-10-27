@@ -24,19 +24,18 @@ where
         BenchmarkId::new("Sha2 256", "Generated scalars"),
         &scalars,
         |b, s| {
+            let mut h = Sha256::new();
             b.iter(|| {
-                let mut h = Sha256::new();
-
                 std::iter::repeat(())
                     .take(A::to_usize())
                     .map(|_| s.choose(&mut OsRng).unwrap())
                     .for_each(|scalar| {
                         for val in scalar.into_repr().as_ref() {
-                            h.input(&val.to_le_bytes());
+                            h.update(&val.to_le_bytes());
                         }
                     });
 
-                h.result();
+                h.finalize_reset()
             })
         },
     );
@@ -45,19 +44,19 @@ where
         BenchmarkId::new("Sha2 512", "Generated scalars"),
         &scalars,
         |b, s| {
-            b.iter(|| {
-                let mut h = Sha512::new();
+            let mut h = Sha512::new();
 
+            b.iter(|| {
                 std::iter::repeat(())
                     .take(A::to_usize())
                     .map(|_| s.choose(&mut OsRng).unwrap())
                     .for_each(|scalar| {
                         for val in scalar.into_repr().as_ref() {
-                            h.input(&val.to_le_bytes());
+                            h.update(&val.to_le_bytes());
                         }
                     });
 
-                h.result();
+                h.finalize_reset()
             })
         },
     );

@@ -68,6 +68,7 @@ jobs:
       - run: cargo fetch
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
+      - run: rustup install nightly
       - run: rustup component add rustfmt-preview
       - run: rustup component add clippy-preview
       - run: rustc --version
@@ -162,6 +163,22 @@ jobs:
           name: Run cargo release build (blst, gpu)
           command: cargo build --release --no-default-features --features blst,gpu
 
+  build_gbench:
+    executor: default
+    steps:
+      - *restore-workspace
+      - *restore-cache
+      - run: echo 'export PATH="$HOME:~/.cargo/bin:$PATH"' >> $BASH_ENV
+      - run: source $BASH_ENV
+      - run: sudo apt-get update -y
+      - run: apt-cache search opencl
+      - run: sudo apt install -y ocl-icd-opencl-dev
+      - run:
+          name: Run cargo release build (pairing, gpu)
+          command: cargo +nightly build -Zpackage-features --release -p gbench --no-default-features --features pairing,gpu
+      - run:
+          name: Run cargo release build (blst, gpu)
+          command: cargo +nightly build -Zpackage-features --release -p gbench --no-default-features --features blst,gpu
 
   benches:
     executor: default
@@ -199,6 +216,9 @@ workflows:
           requires:
             - cargo_fetch
       - build:
+          requires:
+            - cargo_fetch
+      - build_gbench:
           requires:
             - cargo_fetch
       - benches:
