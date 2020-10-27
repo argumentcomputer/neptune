@@ -192,10 +192,10 @@ jobs:
       - run: sudo apt install -y ocl-icd-opencl-dev
       - run:
           name: Run cargo build --benches (pairing)
-          command: cargo build --benches --no-default-features --features pairing --all --release
+          command: cargo build --benches --no-default-features --features pairing --release
       - run:
           name: Run cargo build --benches (blst)
-          command: cargo build --benches --no-default-features --features blst --all --release
+          command: cargo build --benches --no-default-features --features blst --release
 
 workflows:
   version: 2.1
