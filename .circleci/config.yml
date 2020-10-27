@@ -39,7 +39,7 @@ commands:
           no_output_timeout: 30m
 
       - run:
-          name: Test (pairing, GPU) (<< parameters.target >>)
+          name: Test (blst, GPU) (<< parameters.target >>)
           command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features blst,gpu
           no_output_timeout: 30m
 
