@@ -26,7 +26,7 @@ impl From<cl::ClError> for Error {
     }
 }
 
-#[cfg(feature = "gpu")]
+#[cfg(all(feature = "gpu", not(target_os = "macos")))]
 impl From<triton::Error> for Error {
     fn from(e: triton::Error) -> Self {
         Self::TritonError(e.to_string())

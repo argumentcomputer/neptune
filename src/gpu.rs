@@ -1,4 +1,3 @@
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
 use crate::cl;
 use crate::error::Error;
 use crate::hash_type::HashType;

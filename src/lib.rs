@@ -34,7 +34,7 @@ pub mod tree_builder;
 #[cfg(feature = "gpu")]
 pub mod column_tree_builder;
 
-#[cfg(feature = "gpu")]
+#[cfg(all(feature = "gpu", not(target_os = "macos")))]
 mod gpu;
 
 #[cfg(all(feature = "gpu", not(target_os = "macos")))]
