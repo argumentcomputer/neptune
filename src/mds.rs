@@ -211,8 +211,8 @@ fn make_v_w<E: ScalarEngine>(m: &Matrix<Scalar<E>>) -> (Vec<Scalar<E>>, Vec<Scal
 mod tests {
     use super::*;
     use crate::*;
+    use bellperson::bls::{Bls12, Fr};
     use matrix::left_apply_matrix;
-    use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 

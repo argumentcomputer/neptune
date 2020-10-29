@@ -604,10 +604,10 @@ mod tests {
     use super::*;
     use crate::poseidon::HashMode;
     use crate::{scalar_from_u64, Poseidon, Strength};
+    use bellperson::bls::{Bls12, Fr};
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use bellperson::ConstraintSystem;
     use generic_array::typenum;
-    use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 

@@ -5,9 +5,9 @@ use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
 use crate::tree_builder::{TreeBuilder, TreeBuilderTrait};
 use crate::{Arity, BatchHasher};
+use bellperson::bls::{Bls12, Fr};
 use ff::Field;
 use generic_array::GenericArray;
-use paired::bls12_381::{Bls12, Fr};
 
 pub trait ColumnTreeBuilderTrait<ColumnArity, TreeArity>
 where
@@ -167,10 +167,10 @@ mod tests {
     use super::*;
     use crate::poseidon::Poseidon;
     use crate::BatchHasher;
+    use bellperson::bls::Fr;
     use ff::Field;
     use generic_array::sequence::GenericSequence;
     use generic_array::typenum::{U11, U8};
-    use paired::bls12_381::Fr;
 
     #[test]
     fn test_column_tree_builder() {

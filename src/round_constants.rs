@@ -1,6 +1,6 @@
 pub use crate::Error;
+pub use bellperson::bls::Fr as Scalar;
 use ff::{PrimeField, PrimeFieldDecodingError, PrimeFieldRepr, ScalarEngine};
-pub use paired::bls12_381::Fr as Scalar;
 
 /// From the paper ():
 /// The round constants are generated using the Grain LFSR [23] in a self-shrinking
@@ -207,7 +207,7 @@ fn bytes_into_fr<E: ScalarEngine>(bytes: &[u8]) -> Result<E::Fr, PrimeFieldDecod
 #[cfg(test)]
 mod tests {
     use super::*;
-    pub use paired::bls12_381::Bls12;
+    pub use bellperson::bls::Bls12;
     use serde_json::Value;
     use std::fs::File;
     use std::io::{BufRead, BufReader};
@@ -235,7 +235,8 @@ mod tests {
             .iter()
             .map(|x| {
                 let s = x.to_string();
-                s[3..s.len() - 1].to_string()
+                let start = s.find('(').unwrap() + 1;
+                s[start..s.len() - 1].to_string()
             })
             .collect::<Vec<_>>();
 

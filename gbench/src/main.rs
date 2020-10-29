@@ -1,3 +1,4 @@
+use bellperson::bls::Fr;
 use ff::Field;
 use generic_array::sequence::GenericSequence;
 use generic_array::typenum::{U11, U8};
@@ -7,7 +8,6 @@ use neptune::batch_hasher::BatcherType;
 use neptune::column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait};
 use neptune::error::Error;
 use neptune::BatchHasher;
-use paired::bls12_381::Fr;
 use std::result::Result;
 use std::thread;
 use std::time::Instant;
@@ -57,7 +57,7 @@ fn bench_column_building(
         let _ = builder.add_columns(columns.as_slice()).unwrap();
         total_columns += columns.len();
     }
-    println!("");
+    println!();
 
     let final_columns: Vec<_> = (0..leaves - total_columns)
         .map(|_| GenericArray::<Fr, U11>::generate(|_| constant_element))

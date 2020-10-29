@@ -1,4 +1,5 @@
 use crate::poseidon::{Arity, PoseidonConstants};
+use bellperson::bls::{Bls12, Fr};
 use bellperson::gadgets::num::AllocatedNum;
 use bellperson::util_cs::bench_cs::BenchCS;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
@@ -7,7 +8,6 @@ use ff::Field;
 use generic_array::typenum;
 use neptune::circuit::poseidon_hash;
 use neptune::*;
-use paired::bls12_381::{Bls12, Fr};
 use rand::thread_rng;
 use std::marker::PhantomData;
 

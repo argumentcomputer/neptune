@@ -1,12 +1,11 @@
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
 use crate::cl;
 use crate::error::Error;
 use crate::hash_type::HashType;
 use crate::poseidon::PoseidonConstants;
 use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
+use bellperson::bls::{Bls12, Fr, FrRepr};
 use ff::{PrimeField, PrimeFieldDecodingError};
 use generic_array::{typenum, ArrayLength, GenericArray};
-use paired::bls12_381::{Bls12, Fr, FrRepr};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
@@ -136,9 +135,12 @@ where
 
 impl<A> Drop for GPUBatchHasher<A> {
     fn drop(&mut self) {
-        let ctx = self.ctx.lock().unwrap();
-        unsafe {
-            triton::bindings::futhark_context_clear_caches(ctx.context);
+        // Clear cache iff the Arc is the last one
+        if let Some(ctx) = Arc::get_mut(&mut self.ctx) {
+            let ctx = ctx.lock().unwrap();
+            unsafe {
+                triton::bindings::futhark_context_clear_caches(ctx.context);
+            }
         }
     }
 }

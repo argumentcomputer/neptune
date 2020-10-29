@@ -8,12 +8,18 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 lazy_static = "1.4.0"
-bellperson = "0.6.3"
+bellperson = { version = "0.11", default-features = false }
 blake2s_simd = "0.5"
 byteorder = "1"
 env_logger = "0.7.1"
 ff = { version = "0.2.1", package = "fff" }
-generic-array = "0.13.2"
+generic-array = "0.14.4"
 log = "0.4.8"
-paired = "0.20.0"
-neptune = { path = "../", features=["gpu"] }
+neptune = { path = "../", default-features = false }
+
+[features]
+default = ["pairing", "gpu"]
+gpu = ["neptune/gpu"]
+pairing = ["neptune/pairing", "bellperson/pairing"]
+blst = ["neptune/blst", "bellperson/blst"]
+

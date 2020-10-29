@@ -1,9 +1,9 @@
+use bellperson::bls::{Bls12, Fr};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ff::PrimeField;
 use generic_array::typenum;
 use neptune::poseidon::{HashMode, PoseidonConstants};
 use neptune::*;
-use paired::bls12_381::{Bls12, Fr};
 use rand::rngs::OsRng;
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256, Sha512};
@@ -24,19 +24,18 @@ where
         BenchmarkId::new("Sha2 256", "Generated scalars"),
         &scalars,
         |b, s| {
+            let mut h = Sha256::new();
             b.iter(|| {
-                let mut h = Sha256::new();
-
                 std::iter::repeat(())
                     .take(A::to_usize())
                     .map(|_| s.choose(&mut OsRng).unwrap())
                     .for_each(|scalar| {
                         for val in scalar.into_repr().as_ref() {
-                            h.input(&val.to_le_bytes());
+                            h.update(&val.to_le_bytes());
                         }
                     });
 
-                h.result();
+                h.finalize_reset()
             })
         },
     );
@@ -45,19 +44,19 @@ where
         BenchmarkId::new("Sha2 512", "Generated scalars"),
         &scalars,
         |b, s| {
-            b.iter(|| {
-                let mut h = Sha512::new();
+            let mut h = Sha512::new();
 
+            b.iter(|| {
                 std::iter::repeat(())
                     .take(A::to_usize())
                     .map(|_| s.choose(&mut OsRng).unwrap())
                     .for_each(|scalar| {
                         for val in scalar.into_repr().as_ref() {
-                            h.input(&val.to_le_bytes());
+                            h.update(&val.to_le_bytes());
                         }
                     });
 
-                h.result();
+                h.finalize_reset()
             })
         },
     );

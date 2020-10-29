@@ -4,9 +4,9 @@ use crate::cl::GPUSelector;
 use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
 use crate::{Arity, BatchHasher};
+use bellperson::bls::{Bls12, Fr};
 use ff::Field;
 use generic_array::GenericArray;
-use paired::bls12_381::{Bls12, Fr};
 
 pub trait TreeBuilderTrait<TreeArity>
 where
@@ -250,9 +250,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bellperson::bls::Fr;
     use ff::Field;
     use generic_array::typenum::U8;
-    use paired::bls12_381::Fr;
 
     #[test]
     fn test_tree_builder() {

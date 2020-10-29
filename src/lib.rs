@@ -5,11 +5,11 @@ extern crate lazy_static;
 
 pub use crate::poseidon::{Arity, Poseidon};
 use crate::round_constants::generate_constants;
+pub use bellperson::bls::Fr as Scalar;
+use bellperson::bls::FrRepr;
 pub use error::Error;
 use ff::{Field, PrimeField, ScalarEngine};
 use generic_array::GenericArray;
-pub use paired::bls12_381::Fr as Scalar;
-use paired::bls12_381::FrRepr;
 
 /// Poseidon circuit
 pub mod circuit;
@@ -34,7 +34,7 @@ pub mod tree_builder;
 #[cfg(feature = "gpu")]
 pub mod column_tree_builder;
 
-#[cfg(feature = "gpu")]
+#[cfg(all(feature = "gpu", not(target_os = "macos")))]
 mod gpu;
 
 #[cfg(all(feature = "gpu", not(target_os = "macos")))]

@@ -1,4 +1,5 @@
 use std::fmt::{self, Debug};
+use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
 #[cfg(all(feature = "gpu", not(target_os = "macos")))]
@@ -6,9 +7,9 @@ use crate::cl;
 use crate::error::Error;
 use crate::poseidon::SimplePoseidonBatchHasher;
 use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
+use bellperson::bls::Fr;
 use generic_array::GenericArray;
-use paired::bls12_381::Fr;
-use std::marker::PhantomData;
+#[cfg(all(feature = "gpu", not(target_os = "macos")))]
 use triton::FutharkContext;
 
 #[derive(Clone)]
@@ -17,7 +18,10 @@ pub enum BatcherType {
     CustomGPU(cl::GPUSelector),
     #[cfg(all(feature = "gpu", target_os = "macos"))]
     CustomGPU(()),
+    #[cfg(all(feature = "gpu", not(target_os = "macos")))]
     FromFutharkContext(Arc<Mutex<FutharkContext>>),
+    #[cfg(all(feature = "gpu", target_os = "macos"))]
+    FromFutharkContext(()),
     GPU,
     CPU,
 }
@@ -103,9 +107,17 @@ where
         }
     }
 
+    #[cfg(all(feature = "gpu", not(target_os = "macos")))]
     pub(crate) fn futhark_context(&self) -> Option<Arc<Mutex<FutharkContext>>> {
         match self {
             Batcher::GPU(b) => Some(b.futhark_context()),
+            _ => None,
+        }
+    }
+
+    #[cfg(all(feature = "gpu", target_os = "macos"))]
+    pub(crate) fn futhark_context(&self) -> Option<()> {
+        match self {
             _ => None,
         }
     }
@@ -147,11 +159,22 @@ where
     }
 }
 
+#[cfg(all(feature = "gpu", not(target_os = "macos")))]
 impl<A> NoGPUBatchHasher<A>
 where
     A: Arity<Fr>,
 {
     fn futhark_context(&self) -> Arc<Mutex<FutharkContext>> {
+        unimplemented!()
+    }
+}
+
+#[cfg(all(feature = "gpu", target_os = "macos"))]
+impl<A> NoGPUBatchHasher<A>
+where
+    A: Arity<Fr>,
+{
+    fn futhark_context(&self) -> () {
         unimplemented!()
     }
 }
