@@ -134,7 +134,6 @@ where
         max_batch_size: usize,
     ) -> Result<Self, Error> {
         let id = ID_COUNTER.fetch_add(1, SeqCst);
-
         let new = Self {
             ctx: Arc::clone(&ctx),
             state: BatcherState::new_with_strength::<A>(Arc::clone(&ctx), strength)?,
@@ -144,9 +143,14 @@ where
             _a: PhantomData::<A>,
         };
 
+        let ptr = {
+            let ctx = ctx.lock().unwrap();
+            FutharkContextPointer(&*ctx)
+        };
+        
         // Remember this instance is active for this context.
         (*BATCH_HASHERS.lock().unwrap())
-            .entry(FutharkContextPointer(&*ctx.lock().unwrap()))
+            .entry(ptr)
             .or_insert(HashSet::default())
             .insert(id);
 
@@ -161,9 +165,9 @@ where
 impl<A> Drop for GPUBatchHasher<A> {
     fn drop(&mut self) {
         let mut locked = BATCH_HASHERS.lock().unwrap();
-
+        let ctx = self.ctx.lock().unwrap();
         (*locked)
-            .entry(FutharkContextPointer(&*self.ctx.lock().unwrap()))
+            .entry(FutharkContextPointer(&*ctx))
             .and_modify(|s| {
                 s.remove(&self.id);
 
@@ -173,7 +177,7 @@ impl<A> Drop for GPUBatchHasher<A> {
                     // So there will be no concurrent uses of the context while we clear caches.
                     unsafe {
                         triton::bindings::futhark_context_clear_caches(
-                            (*self.ctx).lock().unwrap().context,
+                            ctx.context,
                         );
                     }
                 }
