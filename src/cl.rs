@@ -2,7 +2,7 @@ use log::*;
 use std::collections::HashMap;
 use std::fmt;
 use std::ptr;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 use triton::bindings;
 use triton::FutharkContext;
 
@@ -19,8 +19,8 @@ struct cl_amd_device_topology {
 }
 
 lazy_static! {
-    pub static ref FUTHARK_CONTEXT_MAP: RwLock<HashMap<u32, Arc<Mutex<FutharkContext>>>> =
-        RwLock::new(HashMap::new());
+    pub static ref FUTHARK_CONTEXT_MAP: Mutex<HashMap<u32, Arc<Mutex<FutharkContext>>>> =
+        Mutex::new(HashMap::new());
 }
 
 #[derive(Debug, Clone)]
@@ -285,8 +285,7 @@ pub fn get_all_bus_ids() -> ClResult<Vec<u32>> {
 }
 
 pub fn futhark_context(selector: GPUSelector) -> ClResult<Arc<Mutex<FutharkContext>>> {
-    info!("getting context for ~{:?}", selector);
-    let mut map = FUTHARK_CONTEXT_MAP.write().unwrap();
+    let mut map = FUTHARK_CONTEXT_MAP.lock().unwrap();
     let bus_id = selector.get_bus_id()?;
     if !map.contains_key(&bus_id) {
         let device = get_device_by_bus_id(bus_id)?;
