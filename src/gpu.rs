@@ -6,8 +6,9 @@ use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
 use bellperson::bls::{Bls12, Fr, FrRepr};
 use ff::{PrimeField, PrimeFieldDecodingError};
 use generic_array::{typenum, ArrayLength, GenericArray};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
+use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
 use std::sync::{Arc, Mutex};
 use triton::FutharkContext;
 use triton::{Array_u64_1d, Array_u64_2d, Array_u64_3d};
@@ -23,6 +24,18 @@ type S8State = triton::FutharkOpaqueS8State;
 type S11State = triton::FutharkOpaqueS11State;
 
 pub(crate) type T864MState = triton::FutharkOpaqueT864MState;
+
+#[derive(Clone, Hash, Eq, PartialEq)]
+struct FutharkContextPointer(*const FutharkContext);
+unsafe impl Send for FutharkContextPointer {}
+unsafe impl Sync for FutharkContextPointer {}
+
+pub const ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+lazy_static! {
+    static ref BATCH_HASHERS: Mutex<HashMap<FutharkContextPointer, HashSet<usize>>> =
+        Mutex::new(HashMap::default());
+}
 
 /// Container to hold the state corresponding to each supported arity.
 enum BatcherState {
@@ -98,6 +111,7 @@ pub struct GPUBatchHasher<A> {
     /// If `tree_builder_state` is provided, use it to build the final 64MiB tree on the GPU with one call.
     tree_builder_state: Option<T864MState>,
     max_batch_size: usize,
+    id: usize,
     _a: PhantomData<A>,
 }
 
@@ -119,13 +133,24 @@ where
         strength: Strength,
         max_batch_size: usize,
     ) -> Result<Self, Error> {
-        Ok(Self {
+        let id = ID_COUNTER.fetch_add(1, SeqCst);
+
+        let new = Self {
             ctx: Arc::clone(&ctx),
             state: BatcherState::new_with_strength::<A>(Arc::clone(&ctx), strength)?,
             tree_builder_state: None,
             max_batch_size,
+            id,
             _a: PhantomData::<A>,
-        })
+        };
+
+        // Remember this instance is active for this context.
+        (*BATCH_HASHERS.lock().unwrap())
+            .entry(FutharkContextPointer(&*ctx.lock().unwrap()))
+            .or_insert(HashSet::default())
+            .insert(id);
+
+        Ok(new)
     }
 
     pub(crate) fn futhark_context(&self) -> Arc<Mutex<FutharkContext>> {
@@ -135,13 +160,24 @@ where
 
 impl<A> Drop for GPUBatchHasher<A> {
     fn drop(&mut self) {
-        // Clear cache iff the Arc is the last one
-        if let Some(ctx) = Arc::get_mut(&mut self.ctx) {
-            let ctx = ctx.lock().unwrap();
-            unsafe {
-                triton::bindings::futhark_context_clear_caches(ctx.context);
-            }
-        }
+        let mut locked = BATCH_HASHERS.lock().unwrap();
+
+        (*locked)
+            .entry(FutharkContextPointer(&*self.ctx.lock().unwrap()))
+            .and_modify(|s| {
+                s.remove(&self.id);
+
+                if s.is_empty() {
+                    // SAFETY: this is the last instance associated with the context,
+                    // and a new one cannot be created while we hold the Mutex.
+                    // So there will be no concurrent uses of the context while we clear caches.
+                    unsafe {
+                        triton::bindings::futhark_context_clear_caches(
+                            (*self.ctx).lock().unwrap().context,
+                        );
+                    }
+                }
+            });
     }
 }
 
