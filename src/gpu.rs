@@ -135,12 +135,10 @@ where
 
 impl<A> Drop for GPUBatchHasher<A> {
     fn drop(&mut self) {
-        // Clear cache iff the Arc is the last one
-        if let Some(ctx) = Arc::get_mut(&mut self.ctx) {
-            let ctx = ctx.lock().unwrap();
-            unsafe {
-                triton::bindings::futhark_context_clear_caches(ctx.context);
-            }
+        // Clear cache
+        let ctx = self.ctx.lock().unwrap();
+        unsafe {
+            triton::bindings::futhark_context_clear_caches(ctx.context);
         }
     }
 }
