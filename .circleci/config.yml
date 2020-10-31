@@ -40,7 +40,7 @@ commands:
 
       - run:
           name: Test (blst, GPU) (<< parameters.target >>)
-          command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features blst,gpu
+          command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features blst,gpu -- --test-threads=1
           no_output_timeout: 30m
 
 jobs:
