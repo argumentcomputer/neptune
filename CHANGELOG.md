@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+- Update `bellperson` to `0.12.0`
+  [67](https://github.com/filecoin-project/neptune/pull/67)
+
 ## 2.1.0 - 2020-10-29
 
 - Enable `blst` backend.
