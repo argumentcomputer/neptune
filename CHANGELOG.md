@@ -7,8 +7,15 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 2.2.0 - 2020-11-01
+
 - Update `bellperson` to `0.12.0`
   [67](https://github.com/filecoin-project/neptune/pull/67)
+
+## 2.1.1 - 2020-10-30
+
+- Fix `GPUBatchHasher` not clearing GPU caches
+  [66](https://github.com/filecoin-project/neptune/pull/66)
 
 ## 2.1.0 - 2020-10-29
 
