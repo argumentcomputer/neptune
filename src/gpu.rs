@@ -8,6 +8,7 @@ use ff::{PrimeField, PrimeFieldDecodingError};
 use generic_array::{typenum, ArrayLength, GenericArray};
 use std::collections::HashMap;
 use std::marker::PhantomData;
+use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
 use std::sync::{Arc, Mutex};
 use triton::FutharkContext;
 use triton::{Array_u64_1d, Array_u64_2d, Array_u64_3d};
@@ -23,6 +24,16 @@ type S8State = triton::FutharkOpaqueS8State;
 type S11State = triton::FutharkOpaqueS11State;
 
 pub(crate) type T864MState = triton::FutharkOpaqueT864MState;
+
+#[derive(Clone, Hash, Eq, PartialEq)]
+struct FutharkContextPointer(*const FutharkContext);
+unsafe impl Send for FutharkContextPointer {}
+unsafe impl Sync for FutharkContextPointer {}
+
+lazy_static! {
+    static ref BATCH_HASHERS: Mutex<HashMap<FutharkContextPointer, usize>> =
+        Mutex::new(HashMap::default());
+}
 
 /// Container to hold the state corresponding to each supported arity.
 enum BatcherState {
@@ -119,13 +130,24 @@ where
         strength: Strength,
         max_batch_size: usize,
     ) -> Result<Self, Error> {
-        Ok(Self {
+        let new = Self {
             ctx: Arc::clone(&ctx),
             state: BatcherState::new_with_strength::<A>(Arc::clone(&ctx), strength)?,
             tree_builder_state: None,
             max_batch_size,
             _a: PhantomData::<A>,
-        })
+        };
+
+        let ptr = {
+            let ctx = ctx.lock().unwrap();
+            FutharkContextPointer(&*ctx)
+        };
+
+        let mut locked = BATCH_HASHERS.lock().unwrap();
+        let entry = (*locked).entry(ptr).or_default();
+        *entry += 1;
+
+        Ok(new)
     }
 
     pub(crate) fn futhark_context(&self) -> Arc<Mutex<FutharkContext>> {
@@ -135,11 +157,20 @@ where
 
 impl<A> Drop for GPUBatchHasher<A> {
     fn drop(&mut self) {
-        // Clear cache
         let ctx = self.ctx.lock().unwrap();
-        unsafe {
-            triton::bindings::futhark_context_clear_caches(ctx.context);
-        }
+        let mut locked = BATCH_HASHERS.lock().unwrap();
+        let entry = (*locked).entry(FutharkContextPointer(&*ctx)).or_default();
+
+        *entry -= 1;
+
+        if *entry == 0 {
+            // SAFETY: this is the last instance associated with the context,
+            // and a new one cannot be created while we hold the Mutex.
+            // So there will be no concurrent uses of the context while we clear caches.
+            unsafe {
+                triton::bindings::futhark_context_clear_caches(ctx.context);
+            }
+        };
     }
 }
 
