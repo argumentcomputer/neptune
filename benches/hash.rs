@@ -87,11 +87,6 @@ where
         |b, s| {
             let constants = PoseidonConstants::new_with_strength(Strength::Standard);
             let mut h = Poseidon::<Bls12, A>::new(&constants);
-            // gperftools::profiler::PROFILER
-            //     .lock()
-            //     .unwrap()
-            //     .start("./oct.prof")
-            //     .unwrap();
             b.iter(|| {
                 h.reset();
                 std::iter::repeat(())
@@ -103,11 +98,6 @@ where
 
                 h.hash_in_mode(HashMode::OptimizedStatic);
             });
-            // gperftools::profiler::PROFILER
-            //     .lock()
-            //     .unwrap()
-            //     .stop()
-            //     .unwrap();
         },
     );
 

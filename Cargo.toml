@@ -15,7 +15,6 @@ byteorder = "1"
 ff = { version = "0.2.1", package = "fff" }
 generic-array = "0.14.4"
 log = "0.4.8"
-gperftools = "*"
 triton = { path = "../neptune-triton/library/neptune-triton", package = "neptune-triton", default-features = false, features = ["opencl"], optional = true }
 
 [dev-dependencies]
