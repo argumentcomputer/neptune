@@ -15,6 +15,7 @@ byteorder = "1"
 ff = { version = "0.2.1", package = "fff" }
 generic-array = "0.14.4"
 log = "0.4.8"
+rust-gpu-tools = { version = "0.2.2", optional = true }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 triton = { version = "2.0.0", package = "neptune-triton", default-features = false, features = ["opencl"], optional = true }
@@ -45,7 +46,7 @@ codegen-units = 1
 
 [features]
 default = ["pairing"]
-gpu = ["triton"]
+gpu = ["triton", "rust-gpu-tools"]
 pairing = ["bellperson/pairing"]
 blst = ["bellperson/blst"]
 

@@ -9,13 +9,14 @@ use crate::poseidon::SimplePoseidonBatchHasher;
 use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
 use bellperson::bls::Fr;
 use generic_array::GenericArray;
+use rust_gpu_tools::opencl::GPUSelector;
 #[cfg(all(feature = "gpu", not(target_os = "macos")))]
 use triton::FutharkContext;
 
 #[derive(Clone)]
 pub enum BatcherType {
     #[cfg(all(feature = "gpu", not(target_os = "macos")))]
-    CustomGPU(cl::GPUSelector),
+    CustomGPU(GPUSelector),
     #[cfg(all(feature = "gpu", target_os = "macos"))]
     CustomGPU(()),
     #[cfg(all(feature = "gpu", not(target_os = "macos")))]

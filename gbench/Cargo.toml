@@ -15,7 +15,8 @@ env_logger = "0.7.1"
 ff = { version = "0.2.1", package = "fff" }
 generic-array = "0.14.4"
 log = "0.4.8"
-neptune = { path = "../", default-features = false }
+neptune = { path = "../", default-features = false, features=["gpu"] }
+rust-gpu-tools = { version = "0.2.2" }
 
 [features]
 default = ["pairing", "gpu"]

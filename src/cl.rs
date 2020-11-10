@@ -1,11 +1,11 @@
 use log::*;
+use rust_gpu_tools::opencl::{cl_device_id, Device, GPUSelector};
 use std::collections::HashMap;
 use std::fmt;
 use std::ptr;
 use std::sync::{Arc, Mutex, RwLock};
 use triton::bindings;
 use triton::FutharkContext;
-
 const MAX_LEN: usize = 128;
 
 #[repr(C)]
@@ -33,6 +33,8 @@ pub enum ClError {
     PlatformNameNotAvailable,
     CannotCreateContext,
     CannotCreateQueue,
+    GetBusIdError,
+    GetDeviceError,
 }
 pub type ClResult<T> = std::result::Result<T, ClError>;
 
@@ -53,158 +55,10 @@ impl fmt::Display for ClError {
             }
             ClError::CannotCreateContext => write!(f, "Cannot create cl_context."),
             ClError::CannotCreateQueue => write!(f, "Cannot create cl_command_queue."),
+            ClError::GetBusIdError => write!(f, "Cannot get BusId"),
+            ClError::GetDeviceError => write!(f, "Cannot get Device"),
         }
     }
-}
-
-fn get_platforms() -> ClResult<Vec<bindings::cl_platform_id>> {
-    let mut platforms = [ptr::null_mut(); MAX_LEN];
-    let mut num_platforms = 0u32;
-    let res = unsafe {
-        bindings::clGetPlatformIDs(MAX_LEN as u32, platforms.as_mut_ptr(), &mut num_platforms)
-    };
-    if res == bindings::CL_SUCCESS as i32 {
-        Ok(platforms[..num_platforms as usize].to_vec())
-    } else {
-        Err(ClError::PlatformNotFound)
-    }
-}
-
-fn get_platform_name(platform_id: bindings::cl_platform_id) -> ClResult<String> {
-    let mut name = [0u8; MAX_LEN];
-    let mut len = 0u64;
-    let res = unsafe {
-        bindings::clGetPlatformInfo(
-            platform_id,
-            bindings::CL_PLATFORM_NAME as u32,
-            MAX_LEN as u64,
-            name.as_mut_ptr() as *mut std::ffi::c_void,
-            &mut len,
-        )
-    };
-    if res == bindings::CL_SUCCESS as i32 {
-        Ok(String::from_utf8(name[..len as usize - 1].to_vec()).unwrap())
-    } else {
-        Err(ClError::PlatformNameNotAvailable)
-    }
-}
-
-fn get_platform_by_name(name: &str) -> ClResult<bindings::cl_platform_id> {
-    for plat in get_platforms()? {
-        if get_platform_name(plat)? == name {
-            return Ok(plat);
-        }
-    }
-    Err(ClError::PlatformNotFound)
-}
-
-fn get_devices(platform_id: bindings::cl_platform_id) -> ClResult<Vec<bindings::cl_device_id>> {
-    let mut devs = [ptr::null_mut(); MAX_LEN];
-    let mut num_devs = 0u32;
-    let res = unsafe {
-        bindings::clGetDeviceIDs(
-            platform_id,
-            bindings::CL_DEVICE_TYPE_GPU as u64,
-            MAX_LEN as u32,
-            devs.as_mut_ptr(),
-            &mut num_devs,
-        )
-    };
-    if res == bindings::CL_SUCCESS as i32 {
-        Ok(devs[..num_devs as usize].to_vec())
-    } else {
-        Err(ClError::DeviceNotFound)
-    }
-}
-
-fn get_bus_id(device: bindings::cl_device_id) -> ClResult<u32> {
-    get_nvidia_bus_id(device)
-        .or_else(|_| Ok(get_amd_topology(device)?.bus as u32))
-        .map_err(|_: ClError| ClError::BusIdNotAvailable)
-}
-
-fn get_nvidia_bus_id(device: bindings::cl_device_id) -> ClResult<u32> {
-    let mut ret = [0u8; MAX_LEN];
-    let mut len = 0u64;
-    let res = unsafe {
-        bindings::clGetDeviceInfo(
-            device,
-            0x4008 as u32,
-            MAX_LEN as u64,
-            ret.as_mut_ptr() as *mut std::ffi::c_void,
-            &mut len,
-        )
-    };
-    if res == bindings::CL_SUCCESS as i32 && len == 4 {
-        Ok(to_u32(&ret[..4]))
-    } else {
-        Err(ClError::NvidiaBusIdNotAvailable)
-    }
-}
-
-fn get_amd_topology(device: bindings::cl_device_id) -> ClResult<cl_amd_device_topology> {
-    let mut ret = cl_amd_device_topology::default();
-    let size = std::mem::size_of::<cl_amd_device_topology>() as u64;
-    let mut len = 0u64;
-    let res = unsafe {
-        bindings::clGetDeviceInfo(
-            device,
-            0x4037 as u32,
-            size,
-            &mut ret as *mut cl_amd_device_topology as *mut std::ffi::c_void,
-            &mut len,
-        )
-    };
-    if res == bindings::CL_SUCCESS as i32 && len == size {
-        Ok(ret)
-    } else {
-        Err(ClError::AmdTopologyNotAvailable)
-    }
-}
-
-fn get_device_by_bus_id(bus_id: u32) -> ClResult<bindings::cl_device_id> {
-    for dev in get_all_devices()? {
-        if get_bus_id(dev)? == bus_id {
-            return Ok(dev);
-        }
-    }
-
-    Err(ClError::DeviceNotFound)
-}
-
-fn get_all_devices() -> ClResult<Vec<bindings::cl_device_id>> {
-    let mut devices = Vec::new();
-
-    let mut platforms = get_platforms()?;
-
-    if let Ok(platform) = get_platform_by_name("NVIDIA CUDA") {
-        // If there is an Nvidia platform, make it the first, so any Nvidia card will be the default.
-        platforms = platforms
-            .iter()
-            .filter(|x| **x != platform)
-            .map(|x| *x)
-            .collect::<Vec<_>>();
-        platforms.insert(0, platform);
-    }
-
-    for platform in platforms {
-        if let Ok(devs) = get_devices(platform) {
-            for dev in devs {
-                devices.push(dev);
-            }
-        } else {
-            warn!(
-                "Cannot get device list for platform: {}!",
-                get_platform_name(platform)?
-            );
-        }
-    }
-    Ok(devices)
-}
-
-fn get_first_device() -> ClResult<bindings::cl_device_id> {
-    let devs = get_all_devices()?;
-    devs.first().map(|d| *d).ok_or(ClError::DeviceNotFound)
 }
 
 fn create_context(device: bindings::cl_device_id) -> ClResult<bindings::cl_context> {
@@ -239,21 +93,6 @@ fn create_queue(
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum GPUSelector {
-    BusId(u32),
-    Index(usize),
-}
-
-impl GPUSelector {
-    pub fn get_bus_id(&self) -> ClResult<u32> {
-        match self {
-            GPUSelector::BusId(bus_id) => Ok(*bus_id),
-            GPUSelector::Index(index) => Ok(get_bus_id(get_all_devices()?[*index])?),
-        }
-    }
-}
-
 fn create_futhark_context(device: bindings::cl_device_id) -> ClResult<FutharkContext> {
     unsafe {
         let context = create_context(device)?;
@@ -268,29 +107,16 @@ fn create_futhark_context(device: bindings::cl_device_id) -> ClResult<FutharkCon
     }
 }
 
-pub fn get_all_nvidia_devices() -> ClResult<Vec<bindings::cl_device_id>> {
-    Ok(get_devices(get_platform_by_name("NVIDIA CUDA")?)?)
-}
-
-pub fn get_all_bus_ids() -> ClResult<Vec<u32>> {
-    let mut bus_ids = Vec::new();
-    for dev in get_all_devices()? {
-        match get_bus_id(dev) {
-            Ok(bus_id) => bus_ids.push(bus_id),
-            Err(_) => (),
-        }
-    }
-    bus_ids.sort_unstable();
-    Ok(bus_ids)
-}
-
 pub fn futhark_context(selector: GPUSelector) -> ClResult<Arc<Mutex<FutharkContext>>> {
     info!("getting context for ~{:?}", selector);
     let mut map = FUTHARK_CONTEXT_MAP.write().unwrap();
-    let bus_id = selector.get_bus_id()?;
+    let bus_id = selector.get_bus_id().map_err(|_| ClError::GetBusIdError)?;
     if !map.contains_key(&bus_id) {
-        let device = get_device_by_bus_id(bus_id)?;
-        let context = create_futhark_context(device)?;
+        let device = Device::by_bus_id(bus_id).map_err(|_| ClError::GetDeviceError)?;
+        let cl_device_id = unsafe {
+            std::mem::transmute::<cl_device_id, bindings::cl_device_id>(device.cl_device_id())
+        };
+        let context = create_futhark_context(cl_device_id)?;
         map.insert(bus_id, Arc::new(Mutex::new(context)));
     }
     Ok(Arc::clone(&map[&bus_id]))
@@ -327,23 +153,4 @@ pub fn default_futhark_context() -> ClResult<Arc<Mutex<FutharkContext>>> {
 
 fn to_u32(inp: &[u8]) -> u32 {
     (inp[0] as u32) + ((inp[1] as u32) << 8) + ((inp[2] as u32) << 16) + ((inp[3] as u32) << 24)
-}
-
-#[cfg(test)]
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_bus_id_uniqueness() {
-        let mut bus_ids = get_all_bus_ids().unwrap();
-        let count = bus_ids.len();
-
-        bus_ids.dedup();
-        assert_eq!(
-            count,
-            bus_ids.len(),
-            "get_all_bus_ids() returned duplicates"
-        );
-    }
 }
