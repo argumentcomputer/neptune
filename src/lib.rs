@@ -34,10 +34,10 @@ pub mod tree_builder;
 #[cfg(feature = "gpu")]
 pub mod column_tree_builder;
 
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
+#[cfg(feature = "gpu")]
 mod gpu;
 
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
+#[cfg(feature = "gpu")]
 pub mod cl;
 
 /// Batch Hasher
@@ -160,6 +160,7 @@ fn round_constants<E: ScalarEngine>(arity: usize, strength: &Strength) -> Vec<E:
 }
 
 /// Apply the quintic S-Box (s^5) to a given item
+#[inline]
 pub(crate) fn quintic_s_box<E: ScalarEngine>(
     l: &mut E::Fr,
     pre_add: Option<&E::Fr>,
@@ -168,11 +169,11 @@ pub(crate) fn quintic_s_box<E: ScalarEngine>(
     if let Some(x) = pre_add {
         l.add_assign(x);
     }
-    let c = *l;
-    let mut tmp = l.clone();
-    tmp.mul_assign(&c);
-    tmp.mul_assign(&tmp.clone());
-    l.mul_assign(&tmp);
+    let mut l4 = *l;
+    l4.square(); // s**2
+    l4.square(); // s**4
+    l.mul_assign(&l4); // s**5
+
     if let Some(x) = post_add {
         l.add_assign(x);
     }

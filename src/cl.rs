@@ -330,7 +330,7 @@ fn to_u32(inp: &[u8]) -> u32 {
 }
 
 #[cfg(test)]
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
+#[cfg(feature = "gpu")]
 mod tests {
     use super::*;
 

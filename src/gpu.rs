@@ -623,7 +623,7 @@ fn u64_vec<'a, U: ArrayLength<Fr>>(vec: &'a [GenericArray<Fr, U>]) -> Vec<u64> {
 }
 
 #[cfg(test)]
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
+#[cfg(feature = "gpu")]
 mod tests {
     use super::*;
     use crate::gpu::BatcherState;

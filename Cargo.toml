@@ -15,9 +15,8 @@ byteorder = "1"
 ff = { version = "0.2.1", package = "fff" }
 generic-array = "0.14.4"
 log = "0.4.8"
-
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-triton = { version = "2.0.0", package = "neptune-triton", default-features = false, features = ["opencl"], optional = true }
+gperftools = "*"
+triton = { path = "../neptune-triton/library/neptune-triton", package = "neptune-triton", default-features = false, features = ["opencl"], optional = true }
 
 [dev-dependencies]
 criterion = "0.3"

@@ -392,6 +392,14 @@ where
     }
 
     fn full_round(&mut self, last_round: bool) {
+        if last_round {
+            self.full_round_last();
+        } else {
+            self.full_round_regular();
+        }
+    }
+
+    fn full_round_regular(&mut self) {
         let to_take = self.elements.len();
         let post_round_keys = self
             .constants
@@ -400,34 +408,24 @@ where
             .skip(self.constants_offset)
             .take(to_take);
 
-        if !last_round {
-            let needed = self.constants_offset + to_take;
-            assert!(
-                needed <= self.constants.compressed_round_constants.len(),
-                "Not enough preprocessed round constants ({}), need {}.",
-                self.constants.compressed_round_constants.len(),
-                needed
-            );
+        let needed = self.constants_offset + to_take;
+        assert!(
+            needed <= self.constants.compressed_round_constants.len(),
+            "Not enough preprocessed round constants ({}), need {}.",
+            self.constants.compressed_round_constants.len(),
+            needed
+        );
+
+        for (l, post) in self.elements.iter_mut().zip(post_round_keys) {
+            quintic_s_box::<E>(l, None, Some(post));
         }
-        self.elements
-            .iter_mut()
-            .zip(post_round_keys)
-            .for_each(|(l, post)| {
-                // Be explicit that no round key is added after last round of S-boxes.
-                let post_key = if last_round {
-                    panic!("Trying to skip last full round, but there is a key here! ({})");
-                } else {
-                    Some(post)
-                };
-                quintic_s_box::<E>(l, None, post_key);
-            });
-        // We need this because post_round_keys will have been empty, so it didn't happen in the for_each. :(
-        if last_round {
-            self.elements
-                .iter_mut()
-                .for_each(|l| quintic_s_box::<E>(l, None, None));
-        } else {
-            self.constants_offset += self.elements.len();
+        self.constants_offset += self.elements.len();
+        self.round_product_mds();
+    }
+
+    fn full_round_last(&mut self) {
+        for l in &mut self.elements {
+            quintic_s_box::<E>(l, None, None);
         }
         self.round_product_mds();
     }

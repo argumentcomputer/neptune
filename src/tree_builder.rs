@@ -1,5 +1,5 @@
 use crate::batch_hasher::{Batcher, BatcherType};
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
+#[cfg(feature = "gpu")]
 use crate::cl::GPUSelector;
 use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
@@ -260,7 +260,7 @@ mod tests {
         test_tree_builder_aux(None, 512, 32, 512, 512);
         test_tree_builder_aux(Some(BatcherType::CPU), 512, 32, 512, 512);
 
-        #[cfg(all(feature = "gpu", not(target_os = "macos")))]
+        #[cfg(feature = "gpu")]
         test_tree_builder_aux(Some(BatcherType::GPU), 512, 32, 512, 512);
     }
 
