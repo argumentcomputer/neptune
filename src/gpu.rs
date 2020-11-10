@@ -880,14 +880,4 @@ mod tests {
         assert_eq!(expected_hashes, hashes);
         assert_eq!(expected_hashes, gpu_hashes);
     }
-
-    #[test]
-    fn test_custom_gpus() {
-        let bus_ids = cl::get_all_bus_ids().unwrap();
-        for bus_id in bus_ids {
-            test_mbatch_hash8_on_device(
-                cl::futhark_context(cl::GPUSelector::BusId(bus_id)).unwrap(),
-            );
-        }
-    }
 }
