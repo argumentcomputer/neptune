@@ -34,10 +34,10 @@ pub mod tree_builder;
 #[cfg(feature = "gpu")]
 pub mod column_tree_builder;
 
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
+#[cfg(feature = "gpu")]
 mod gpu;
 
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
+#[cfg(feature = "gpu")]
 pub mod cl;
 
 /// Batch Hasher
@@ -168,11 +168,10 @@ pub(crate) fn quintic_s_box<E: ScalarEngine>(
     if let Some(x) = pre_add {
         l.add_assign(x);
     }
-    let c = *l;
     let mut tmp = l.clone();
-    tmp.mul_assign(&c);
-    tmp.mul_assign(&tmp.clone());
-    l.mul_assign(&tmp);
+    tmp.square(); // l^2
+    tmp.square(); // l^4
+    l.mul_assign(&tmp); // l^5
     if let Some(x) = post_add {
         l.add_assign(x);
     }

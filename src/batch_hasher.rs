@@ -2,7 +2,7 @@ use std::fmt::{self, Debug};
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
+#[cfg(feature = "gpu")]
 use crate::cl;
 use crate::error::Error;
 use crate::poseidon::SimplePoseidonBatchHasher;
@@ -10,19 +10,16 @@ use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
 use bellperson::bls::Fr;
 use generic_array::GenericArray;
 use rust_gpu_tools::opencl::GPUSelector;
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
+
+#[cfg(feature = "gpu")]
 use triton::FutharkContext;
 
 #[derive(Clone)]
 pub enum BatcherType {
-    #[cfg(all(feature = "gpu", not(target_os = "macos")))]
+    #[cfg(feature = "gpu")]
     CustomGPU(GPUSelector),
-    #[cfg(all(feature = "gpu", target_os = "macos"))]
-    CustomGPU(()),
-    #[cfg(all(feature = "gpu", not(target_os = "macos")))]
+    #[cfg(feature = "gpu")]
     FromFutharkContext(Arc<Mutex<FutharkContext>>),
-    #[cfg(all(feature = "gpu", target_os = "macos"))]
-    FromFutharkContext(()),
     GPU,
     CPU,
 }
@@ -39,17 +36,13 @@ impl Debug for BatcherType {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
 use crate::gpu::GPUBatchHasher;
 
 pub enum Batcher<A>
 where
     A: Arity<Fr>,
 {
-    #[cfg(not(target_os = "macos"))]
     GPU(GPUBatchHasher<A>),
-    #[cfg(target_os = "macos")]
-    GPU(NoGPUBatchHasher<A>),
     CPU(SimplePoseidonBatchHasher<A>),
 }
 
@@ -74,17 +67,13 @@ where
         max_batch_size: usize,
     ) -> Result<Self, Error> {
         match t {
-            #[cfg(all(feature = "gpu", target_os = "macos"))]
-            BatcherType::GPU => unimplemented!("GPU unsupported on macos"),
-            #[cfg(all(feature = "gpu", not(target_os = "macos")))]
+            #[cfg(feature = "gpu")]
             BatcherType::GPU => Ok(Batcher::GPU(GPUBatchHasher::<A>::new_with_strength(
                 cl::default_futhark_context()?,
                 strength,
                 max_batch_size,
             )?)),
-            #[cfg(all(feature = "gpu", target_os = "macos"))]
-            BatcherType::CustomGPU(_) => unimplemented!("GPU unsupported on macos"),
-            #[cfg(all(feature = "gpu", not(target_os = "macos")))]
+            #[cfg(feature = "gpu")]
             BatcherType::CustomGPU(selector) => {
                 Ok(Batcher::GPU(GPUBatchHasher::<A>::new_with_strength(
                     cl::futhark_context(*selector)?,
@@ -95,7 +84,7 @@ where
             BatcherType::CPU => Ok(Batcher::CPU(
                 SimplePoseidonBatchHasher::<A>::new_with_strength(strength, max_batch_size)?,
             )),
-            #[cfg(all(feature = "gpu", not(target_os = "macos")))]
+            #[cfg(feature = "gpu")]
             BatcherType::FromFutharkContext(futhark_context) => {
                 Ok(Batcher::GPU(GPUBatchHasher::<A>::new_with_strength(
                     futhark_context.clone(),
@@ -103,22 +92,13 @@ where
                     max_batch_size,
                 )?))
             }
-            #[cfg(all(feature = "gpu", target_os = "macos"))]
-            BatcherType::FromFutharkContext(_) => unimplemented!("GPU unsupported on macos"),
         }
     }
 
-    #[cfg(all(feature = "gpu", not(target_os = "macos")))]
+    #[cfg(feature = "gpu")]
     pub(crate) fn futhark_context(&self) -> Option<Arc<Mutex<FutharkContext>>> {
         match self {
             Batcher::GPU(b) => Some(b.futhark_context()),
-            _ => None,
-        }
-    }
-
-    #[cfg(all(feature = "gpu", target_os = "macos"))]
-    pub(crate) fn futhark_context(&self) -> Option<()> {
-        match self {
             _ => None,
         }
     }
@@ -160,22 +140,12 @@ where
     }
 }
 
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
+#[cfg(feature = "gpu")]
 impl<A> NoGPUBatchHasher<A>
 where
     A: Arity<Fr>,
 {
     fn futhark_context(&self) -> Arc<Mutex<FutharkContext>> {
-        unimplemented!()
-    }
-}
-
-#[cfg(all(feature = "gpu", target_os = "macos"))]
-impl<A> NoGPUBatchHasher<A>
-where
-    A: Arity<Fr>,
-{
-    fn futhark_context(&self) -> () {
         unimplemented!()
     }
 }

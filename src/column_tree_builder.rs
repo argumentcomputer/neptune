@@ -162,6 +162,7 @@ where
     }
 }
 
+#[cfg(all(feature = "gpu", not(target_os = "macos")))]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -178,7 +179,7 @@ mod tests {
         test_column_tree_builder_aux(None, 512, 32, 512, 512);
         test_column_tree_builder_aux(Some(BatcherType::CPU), 512, 32, 512, 512);
 
-        #[cfg(all(feature = "gpu", not(target_os = "macos")))]
+        #[cfg(feature = "gpu")]
         test_column_tree_builder_aux(Some(BatcherType::GPU), 512, 32, 512, 512);
     }
 

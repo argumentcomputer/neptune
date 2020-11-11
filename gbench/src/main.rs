@@ -97,6 +97,8 @@ fn bench_column_building(
 }
 
 fn main() -> Result<(), Error> {
+    #[cfg(all(feature = "gpu", target_os = "macos"))]
+    unimplemented!("Running on macos is not recommended and may have bad consequences -- experiment at your own risk.");
     env_logger::init();
 
     let kib = 1024 * 1024 * 4; // 4GiB
