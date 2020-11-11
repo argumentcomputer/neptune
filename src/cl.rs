@@ -19,7 +19,7 @@ struct cl_amd_device_topology {
 }
 
 lazy_static! {
-    pub static ref FUTHARK_CONTEXT_MAP: RwLock<HashMap<u32, Arc<Mutex<FutharkContext>>>> =
+    pub static ref FUTHARK_CONTEXT_MAP: RwLock<HashMap<String, Arc<Mutex<FutharkContext>>>> =
         RwLock::new(HashMap::new());
 }
 
@@ -33,7 +33,6 @@ pub enum ClError {
     PlatformNameNotAvailable,
     CannotCreateContext,
     CannotCreateQueue,
-    GetBusIdError,
     GetDeviceError,
 }
 pub type ClResult<T> = std::result::Result<T, ClError>;
@@ -55,7 +54,6 @@ impl fmt::Display for ClError {
             }
             ClError::CannotCreateContext => write!(f, "Cannot create cl_context."),
             ClError::CannotCreateQueue => write!(f, "Cannot create cl_command_queue."),
-            ClError::GetBusIdError => write!(f, "Cannot get BusId"),
             ClError::GetDeviceError => write!(f, "Cannot get Device"),
         }
     }
@@ -110,19 +108,26 @@ fn create_futhark_context(device: bindings::cl_device_id) -> ClResult<FutharkCon
 pub fn futhark_context(selector: GPUSelector) -> ClResult<Arc<Mutex<FutharkContext>>> {
     info!("getting context for ~{:?}", selector);
     let mut map = FUTHARK_CONTEXT_MAP.write().unwrap();
-    let bus_id = selector.get_bus_id().map_err(|_| ClError::GetBusIdError)?;
-    if !map.contains_key(&bus_id) {
-        let device = Device::by_bus_id(bus_id).map_err(|_| ClError::GetDeviceError)?;
-        let cl_device_id = unsafe {
-            std::mem::transmute::<cl_device_id, bindings::cl_device_id>(device.cl_device_id())
-        };
-        let context = create_futhark_context(cl_device_id)?;
-        map.insert(bus_id, Arc::new(Mutex::new(context)));
+
+    let key = selector.get_key();
+    info!("device key: {}", key);
+    if !map.contains_key(&key) {
+        if let Some(device) = selector.get_device() {
+            info!("device: {:?}", device);
+            let cl_device_id = unsafe {
+                std::mem::transmute::<cl_device_id, bindings::cl_device_id>(device.cl_device_id())
+            };
+            let context = create_futhark_context(cl_device_id)?;
+            map.insert(key.clone(), Arc::new(Mutex::new(context)));
+        } else {
+            unimplemented!();
+        }
     }
-    Ok(Arc::clone(&map[&bus_id]))
+    Ok(Arc::clone(&map[&key]))
 }
 
 pub fn default_futhark_context() -> ClResult<Arc<Mutex<FutharkContext>>> {
+    info!("getting default futhark context");
     let bus_id = std::env::var("NEPTUNE_DEFAULT_GPU")
         .ok()
         .and_then(|v| match v.parse::<u32>() {
@@ -132,7 +137,6 @@ pub fn default_futhark_context() -> ClResult<Arc<Mutex<FutharkContext>>> {
                 None
             }
         });
-
     match bus_id {
         Some(bus_id) => {
             info!(
