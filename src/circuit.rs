@@ -1,13 +1,14 @@
 use crate::hash_type::HashType;
 use crate::matrix::Matrix;
 use crate::mds::SparseMatrix;
-use crate::poseidon::{Arity, PoseidonConstants};
+use crate::poseidon::PoseidonConstants;
 use bellperson::gadgets::boolean::Boolean;
 use bellperson::gadgets::num;
 use bellperson::gadgets::num::AllocatedNum;
 use bellperson::{ConstraintSystem, LinearCombination, SynthesisError};
 use ff::Field;
 use ff::ScalarEngine as Engine;
+use generic_array::typenum;
 use std::marker::PhantomData;
 
 /// Similar to `num::Num`, we use `Elt` to accumulate both values and linear combinations, then eventually
@@ -104,7 +105,7 @@ impl<E: Engine> Elt<E> {
 pub struct PoseidonCircuit<'a, E, A>
 where
     E: Engine,
-    A: Arity<E::Fr>,
+    A: typenum::Unsigned,
 {
     constants_offset: usize,
     width: usize,
@@ -119,7 +120,7 @@ where
 impl<'a, E, A> PoseidonCircuit<'a, E, A>
 where
     E: Engine,
-    A: Arity<E::Fr>,
+    A: typenum::Unsigned,
 {
     /// Create a new Poseidon hasher for `preimage`.
     fn new(elements: Vec<Elt<E>>, constants: &'a PoseidonConstants<E, A>) -> Self {
@@ -345,7 +346,7 @@ pub fn poseidon_hash<CS, E, A>(
 where
     CS: ConstraintSystem<E>,
     E: Engine,
-    A: Arity<E::Fr>,
+    A: typenum::Unsigned,
 {
     let arity = A::to_usize();
     let tag_element = Elt::num_from_fr::<CS>(constants.domain_tag);
@@ -635,7 +636,7 @@ mod tests {
         expected_constraints: usize,
         constant_length: bool,
     ) where
-        A: Arity<<Bls12 as Engine>::Fr>,
+        A: typenum::Unsigned,
     {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
         let arity = A::to_usize();

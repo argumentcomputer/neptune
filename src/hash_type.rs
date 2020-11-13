@@ -10,11 +10,12 @@
 /// Because `neptune` also supports a first-class notion of `Strength`, we include a mechanism for composing
 /// `Strength` with `HashType` so that hashes with `Strength` other than `Standard` (currently only `Strengthened`)
 /// may still express the full range of hash function types.
-use crate::{scalar_from_u64, Arity, Strength};
+use crate::{scalar_from_u64, Strength};
 use ff::{Field, PrimeField, ScalarEngine};
+use generic_array::typenum;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum HashType<Fr: PrimeField, A: Arity<Fr>> {
+pub enum HashType<Fr: PrimeField, A: typenum::Unsigned> {
     MerkleTree,
     MerkleTreeSparse(u64),
     VariableLength,
@@ -23,7 +24,7 @@ pub enum HashType<Fr: PrimeField, A: Arity<Fr>> {
     Custom(CType<Fr, A>),
 }
 
-impl<Fr: PrimeField, A: Arity<Fr>> HashType<Fr, A> {
+impl<Fr: PrimeField, A: typenum::Unsigned> HashType<Fr, A> {
     pub fn domain_tag(&self, strength: &Strength) -> Fr {
         let pow2 = |n| pow2::<Fr, A>(n);
         let x_pow2 = |coeff, n| x_pow2::<Fr, A>(coeff, n);
@@ -35,7 +36,7 @@ impl<Fr: PrimeField, A: Arity<Fr>> HashType<Fr, A> {
 
         match self {
             // 2^arity - 1
-            HashType::MerkleTree => with_strength(A::tag()),
+            HashType::MerkleTree => with_strength(scalar_from_u64::<Fr>((1 << A::to_usize()) - 1)),
             // bitmask
             HashType::MerkleTreeSparse(bitmask) => with_strength(scalar_from_u64(*bitmask)),
             // 2^64
@@ -82,12 +83,12 @@ impl<Fr: PrimeField, A: Arity<Fr>> HashType<Fr, A> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum CType<Fr: PrimeField, A: Arity<Fr>> {
+pub enum CType<Fr: PrimeField, A: typenum::Unsigned> {
     Arbitrary(u64),
     _Phantom((Fr, A)),
 }
 
-impl<Fr: PrimeField, A: Arity<Fr>> CType<Fr, A> {
+impl<Fr: PrimeField, A: typenum::Unsigned> CType<Fr, A> {
     fn identifier(&self) -> u64 {
         match self {
             CType::Arbitrary(id) => *id,
@@ -101,13 +102,13 @@ impl<Fr: PrimeField, A: Arity<Fr>> CType<Fr, A> {
 }
 
 /// pow2(n) = 2^n
-fn pow2<Fr: PrimeField, A: Arity<Fr>>(n: i32) -> Fr {
+fn pow2<Fr: PrimeField, A: typenum::Unsigned>(n: i32) -> Fr {
     let two: Fr = scalar_from_u64(2);
     two.pow([n as u64, 0, 0, 0])
 }
 
 /// x_pow2(x, n) = x * 2^n
-fn x_pow2<Fr: PrimeField, A: Arity<Fr>>(coeff: u64, n: i32) -> Fr {
+fn x_pow2<Fr: PrimeField, A: typenum::Unsigned>(coeff: u64, n: i32) -> Fr {
     let mut tmp: Fr = pow2::<Fr, A>(n);
     tmp.mul_assign(&scalar_from_u64(coeff));
     tmp

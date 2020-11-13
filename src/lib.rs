@@ -3,7 +3,7 @@
 #[macro_use]
 extern crate lazy_static;
 
-pub use crate::poseidon::{Arity, Poseidon};
+pub use crate::poseidon::Poseidon;
 use crate::round_constants::generate_constants;
 pub use bellperson::bls::Fr as Scalar;
 use bellperson::bls::FrRepr;
@@ -58,18 +58,20 @@ pub(crate) const DEFAULT_STRENGTH: Strength = Strength::Standard;
 
 pub trait BatchHasher<A>
 where
-    A: Arity<Scalar>,
+    A: generic_array::typenum::Unsigned,
 {
     // type State;
 
-    fn hash(&mut self, preimages: &[GenericArray<Scalar, A>]) -> Result<Vec<Scalar>, Error>;
+    fn hash<'a>(
+        &mut self,
+        preimages: impl Iterator<Item = &'a [Scalar]>,
+    ) -> Result<Vec<Scalar>, Error>;
 
-    fn hash_into_slice(
+    fn hash_into_slice<'a>(
         &mut self,
         target_slice: &mut [Scalar],
-        preimages: &[GenericArray<Scalar, A>],
+        preimages: impl Iterator<Item = &'a [Scalar]>,
     ) -> Result<(), Error> {
-        assert_eq!(target_slice.len(), preimages.len());
         // FIXME: Account for max batch size.
 
         Ok(target_slice.copy_from_slice(self.hash(preimages)?.as_slice()))

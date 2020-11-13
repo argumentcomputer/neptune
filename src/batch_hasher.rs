@@ -6,9 +6,9 @@ use std::sync::{Arc, Mutex};
 use crate::cl;
 use crate::error::Error;
 use crate::poseidon::SimplePoseidonBatchHasher;
-use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
+use crate::{BatchHasher, Strength, DEFAULT_STRENGTH};
 use bellperson::bls::Fr;
-use generic_array::GenericArray;
+use generic_array::{typenum, GenericArray};
 use rust_gpu_tools::opencl::GPUSelector;
 
 #[cfg(feature = "gpu")]
@@ -40,7 +40,7 @@ use crate::gpu::GPUBatchHasher;
 
 pub enum Batcher<A>
 where
-    A: Arity<Fr>,
+    A: typenum::Unsigned,
 {
     GPU(GPUBatchHasher<A>),
     CPU(SimplePoseidonBatchHasher<A>),
@@ -48,7 +48,7 @@ where
 
 impl<A> Batcher<A>
 where
-    A: Arity<Fr>,
+    A: typenum::Unsigned,
 {
     pub(crate) fn t(&self) -> BatcherType {
         match self {
@@ -106,9 +106,9 @@ where
 
 impl<A> BatchHasher<A> for Batcher<A>
 where
-    A: Arity<Fr>,
+    A: typenum::Unsigned,
 {
-    fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
+    fn hash<'a>(&mut self, preimages: impl Iterator<Item = &'a [Fr]>) -> Result<Vec<Fr>, Error> {
         match self {
             Batcher::GPU(batcher) => batcher.hash(preimages),
             Batcher::CPU(batcher) => batcher.hash(preimages),
@@ -129,9 +129,9 @@ pub struct NoGPUBatchHasher<A>(PhantomData<A>);
 
 impl<A> BatchHasher<A> for NoGPUBatchHasher<A>
 where
-    A: Arity<Fr>,
+    A: typenum::Unsigned,
 {
-    fn hash(&mut self, _preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
+    fn hash<'a>(&mut self, _preimages: impl Iterator<Item = &'a [Fr]>) -> Result<Vec<Fr>, Error> {
         unimplemented!();
     }
 
@@ -143,7 +143,7 @@ where
 #[cfg(feature = "gpu")]
 impl<A> NoGPUBatchHasher<A>
 where
-    A: Arity<Fr>,
+    A: typenum::Unsigned,
 {
     fn futhark_context(&self) -> Arc<Mutex<FutharkContext>> {
         unimplemented!()

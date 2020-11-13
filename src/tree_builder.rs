@@ -1,16 +1,17 @@
 use crate::batch_hasher::{Batcher, BatcherType};
 use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
-use crate::{Arity, BatchHasher};
+use crate::BatchHasher;
 use bellperson::bls::{Bls12, Fr};
 use ff::Field;
-use generic_array::GenericArray;
+use generic_array::{typenum, GenericArray};
 #[cfg(all(feature = "gpu", not(target_os = "macos")))]
 use rust_gpu_tools::opencl::GPUSelector;
+use smallvec::SmallVec;
 
 pub trait TreeBuilderTrait<TreeArity>
 where
-    TreeArity: Arity<Fr>,
+    TreeArity: typenum::Unsigned,
 {
     fn add_leaves(&mut self, leaves: &[Fr]) -> Result<(), Error>;
     fn add_final_leaves(&mut self, leaves: &[Fr]) -> Result<(Vec<Fr>, Vec<Fr>), Error>;
@@ -20,7 +21,7 @@ where
 
 pub struct TreeBuilder<TreeArity>
 where
-    TreeArity: Arity<Fr>,
+    TreeArity: typenum::Unsigned,
 {
     pub leaf_count: usize,
     data: Vec<Fr>,
@@ -33,7 +34,7 @@ where
 
 impl<TreeArity> TreeBuilderTrait<TreeArity> for TreeBuilder<TreeArity>
 where
-    TreeArity: Arity<Fr>,
+    TreeArity: typenum::Unsigned,
 {
     fn add_leaves(&mut self, leaves: &[Fr]) -> Result<(), Error> {
         let start = self.fill_index;
@@ -65,27 +66,9 @@ where
     }
 }
 
-fn as_generic_arrays<'a, A: Arity<Fr>>(vec: &'a [Fr]) -> &'a [GenericArray<Fr, A>] {
-    // It is a programmer error to call `as_generic_arrays` on a vector whose underlying data cannot be divided
-    // into an even number of `GenericArray<Fr, Arity>`.
-    assert_eq!(
-        0,
-        (vec.len() * std::mem::size_of::<Fr>()) % std::mem::size_of::<GenericArray<Fr, A>>()
-    );
-
-    // This block does not affect the underlying `Fr`s. It just groups them into `GenericArray`s of length `Arity`.
-    // We know by the assertion above that `vec` can be evenly divided into these units.
-    unsafe {
-        std::slice::from_raw_parts(
-            vec.as_ptr() as *const () as *const GenericArray<Fr, A>,
-            vec.len() / A::to_usize(),
-        )
-    }
-}
-
 impl<TreeArity> TreeBuilder<TreeArity>
 where
-    TreeArity: Arity<Fr>,
+    TreeArity: typenum::Unsigned,
 {
     pub fn new(
         t: Option<BatcherType>,
@@ -140,20 +123,19 @@ where
 
                     let mut total_hashed = 0;
                     let mut batch_start = row_start;
+
                     while total_hashed < new_row_size {
                         let batch_end = usize::min(batch_start + (max_batch_size * arity), row_end);
                         let batch_size = (batch_end - batch_start) / arity;
-                        let preimages =
-                            as_generic_arrays::<TreeArity>(&tree_data[batch_start..batch_end]);
-                        let hashed = batcher.hash(&preimages)?;
+                        let (current, new) = tree_data.split_at_mut(new_row_start + total_hashed);
 
-                        #[allow(clippy::drop_ref)]
-                        drop(preimages); // make sure we don't reference tree_data anymore
-                        tree_data[new_row_start + total_hashed
-                            ..new_row_start + total_hashed + hashed.len()]
-                            .copy_from_slice(&hashed);
+                        let hashed = batcher
+                            .hash(current[batch_start..batch_end].chunks(TreeArity::to_usize()))?;
+                        new[..hashed.len()].copy_from_slice(&hashed);
                         total_hashed += batch_size;
                         batch_start = batch_end;
+                        drop(current);
+                        drop(new);
                     }
 
                     row_start = new_row_start;

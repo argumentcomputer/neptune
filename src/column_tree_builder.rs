@@ -2,22 +2,22 @@ use crate::batch_hasher::{Batcher, BatcherType};
 use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
 use crate::tree_builder::{TreeBuilder, TreeBuilderTrait};
-use crate::{Arity, BatchHasher};
+use crate::BatchHasher;
 use bellperson::bls::{Bls12, Fr};
 use ff::Field;
-use generic_array::GenericArray;
+use generic_array::{typenum, GenericArray};
 #[cfg(all(feature = "gpu", not(target_os = "macos")))]
 use rust_gpu_tools::opencl::GPUSelector;
 
 pub trait ColumnTreeBuilderTrait<ColumnArity, TreeArity>
 where
-    ColumnArity: Arity<Fr>,
-    TreeArity: Arity<Fr>,
+    ColumnArity: typenum::Unsigned,
+    TreeArity: typenum::Unsigned,
 {
-    fn add_columns(&mut self, columns: &[GenericArray<Fr, ColumnArity>]) -> Result<(), Error>;
-    fn add_final_columns(
+    fn add_columns<'a>(&mut self, columns: impl Iterator<Item = &'a [Fr]>) -> Result<(), Error>;
+    fn add_final_columns<'a>(
         &mut self,
-        columns: &[GenericArray<Fr, ColumnArity>],
+        columns: impl Iterator<Item = &'a [Fr]>,
     ) -> Result<(Vec<Fr>, Vec<Fr>), Error>;
 
     fn reset(&mut self);
@@ -25,8 +25,8 @@ where
 
 pub struct ColumnTreeBuilder<ColumnArity, TreeArity>
 where
-    ColumnArity: Arity<Fr>,
-    TreeArity: Arity<Fr>,
+    ColumnArity: typenum::Unsigned,
+    TreeArity: typenum::Unsigned,
 {
     pub leaf_count: usize,
     data: Vec<Fr>,
@@ -40,12 +40,12 @@ where
 impl<ColumnArity, TreeArity> ColumnTreeBuilderTrait<ColumnArity, TreeArity>
     for ColumnTreeBuilder<ColumnArity, TreeArity>
 where
-    ColumnArity: Arity<Fr>,
-    TreeArity: Arity<Fr>,
+    ColumnArity: typenum::Unsigned,
+    TreeArity: typenum::Unsigned,
 {
-    fn add_columns(&mut self, columns: &[GenericArray<Fr, ColumnArity>]) -> Result<(), Error> {
+    fn add_columns<'a>(&mut self, columns: impl Iterator<Item = &'a [Fr]>) -> Result<(), Error> {
         let start = self.fill_index;
-        let column_count = columns.len();
+        let column_count = columns.size_hint().1.unwrap();
         let end = start + column_count;
 
         if end > self.leaf_count {
@@ -56,7 +56,7 @@ where
             Some(ref mut batcher) => {
                 batcher.hash_into_slice(&mut self.data[start..start + column_count], columns)?;
             }
-            None => columns.iter().enumerate().for_each(|(i, column)| {
+            None => columns.enumerate().for_each(|(i, column)| {
                 self.data[start + i] =
                     Poseidon::new_with_preimage(&column, &self.column_constants).hash();
             }),
@@ -67,9 +67,9 @@ where
         Ok(())
     }
 
-    fn add_final_columns(
+    fn add_final_columns<'a>(
         &mut self,
-        columns: &[GenericArray<Fr, ColumnArity>],
+        columns: impl Iterator<Item = &'a [Fr]>,
     ) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
         self.add_columns(columns)?;
 
@@ -84,28 +84,11 @@ where
         self.data.iter_mut().for_each(|place| *place = Fr::zero());
     }
 }
-fn as_generic_arrays<'a, A: Arity<Fr>>(vec: &'a [Fr]) -> &'a [GenericArray<Fr, A>] {
-    // It is a programmer error to call `as_generic_arrays` on a vector whose underlying data cannot be divided
-    // into an even number of `GenericArray<Fr, Arity>`.
-    assert_eq!(
-        0,
-        (vec.len() * std::mem::size_of::<Fr>()) % std::mem::size_of::<GenericArray<Fr, A>>()
-    );
-
-    // This block does not affect the underlying `Fr`s. It just groups them into `GenericArray`s of length `Arity`.
-    // We know by the assertion above that `vec` can be evenly divided into these units.
-    unsafe {
-        std::slice::from_raw_parts(
-            vec.as_ptr() as *const () as *const GenericArray<Fr, A>,
-            vec.len() / A::to_usize(),
-        )
-    }
-}
 
 impl<ColumnArity, TreeArity> ColumnTreeBuilder<ColumnArity, TreeArity>
 where
-    ColumnArity: Arity<Fr>,
-    TreeArity: Arity<Fr>,
+    ColumnArity: typenum::Unsigned,
+    TreeArity: typenum::Unsigned,
 {
     pub fn new(
         t: Option<BatcherType>,
@@ -151,10 +134,7 @@ where
 
     // Compute root of tree composed of all identical columns. For use in checking correctness of GPU column tree-building
     // without the cost of generating a full column tree.
-    pub fn compute_uniform_tree_root(
-        &mut self,
-        column: GenericArray<Fr, ColumnArity>,
-    ) -> Result<Fr, Error> {
+    pub fn compute_uniform_tree_root(&mut self, column: &[Fr]) -> Result<Fr, Error> {
         // All the leaves will be the same.
         let element = Poseidon::new_with_preimage(&column, &self.column_constants).hash();
 
@@ -214,18 +194,20 @@ mod tests {
 
         let mut total_columns = 0;
         while total_columns + effective_batch_size < leaves {
-            let columns: Vec<GenericArray<Fr, U11>> =
-                (0..effective_batch_size).map(|_| constant_column).collect();
+            let columns: Vec<&[Fr]> = (0..effective_batch_size)
+                .map(|_| constant_column.as_slice())
+                .collect();
 
-            let _ = builder.add_columns(columns.as_slice()).unwrap();
-            total_columns += columns.len();
+            let _ = builder.add_columns(columns.into_iter()).unwrap();
+            total_columns += effective_batch_size;
         }
 
-        let final_columns: Vec<_> = (0..leaves - total_columns)
-            .map(|_| GenericArray::<Fr, U11>::generate(|_| constant_element))
-            .collect();
+        let x = GenericArray::<Fr, U11>::generate(|_| constant_element);
+        let final_columns: Vec<_> = (0..leaves - total_columns).map(|_| x.as_slice()).collect();
 
-        let (base, res) = builder.add_final_columns(final_columns.as_slice()).unwrap();
+        let (base, res) = builder
+            .add_final_columns(final_columns.into_iter())
+            .unwrap();
 
         let column_hash =
             Poseidon::new_with_preimage(&constant_column, &builder.column_constants).hash();
@@ -233,7 +215,7 @@ mod tests {
 
         let computed_root = res[res.len() - 1];
 
-        let expected_root = builder.compute_uniform_tree_root(final_columns[0]).unwrap();
+        let expected_root = builder.compute_uniform_tree_root(&x).unwrap();
         let expected_size = builder.tree_builder.tree_size(0);
 
         assert_eq!(leaves, base.len());

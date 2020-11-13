@@ -1,9 +1,10 @@
 //! This module contains the 'correct' and 'dynamic' versions of Poseidon hashing.
 //! These are tested (in `poseidon::test`) to be equivalent to the 'static optimized' version
 //! used for actual hashing by the neptune library.
-use crate::poseidon::{Arity, Poseidon};
+use crate::poseidon::Poseidon;
 use crate::{matrix, quintic_s_box};
 use ff::{Field, ScalarEngine};
+use generic_array::typenum;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Correct
@@ -14,7 +15,7 @@ use ff::{Field, ScalarEngine};
 pub fn hash_correct<'a, E, A>(p: &mut Poseidon<'a, E, A>) -> E::Fr
 where
     E: ScalarEngine,
-    A: Arity<E::Fr>,
+    A: typenum::Unsigned,
 {
     // This counter is incremented when a round constants is read. Therefore, the round constants never repeat.
     // The first full round should use the initial constants.
@@ -40,7 +41,7 @@ where
 pub fn full_round<'a, E, A>(p: &mut Poseidon<'a, E, A>)
 where
     E: ScalarEngine,
-    A: Arity<E::Fr>,
+    A: typenum::Unsigned,
 {
     // Apply the quintic S-Box to all elements, after adding the round key.
     // Round keys are added in the S-box to match circuits (where the addition is free)
@@ -71,7 +72,7 @@ where
 pub fn partial_round<'a, E, A>(p: &mut Poseidon<'a, E, A>)
 where
     E: ScalarEngine,
-    A: Arity<E::Fr>,
+    A: typenum::Unsigned,
 {
     // Every element of the hash buffer is incremented by the round constants
     add_round_constants(p);
@@ -94,7 +95,7 @@ where
 pub fn hash_optimized_dynamic<'a, E, A>(p: &mut Poseidon<'a, E, A>) -> E::Fr
 where
     E: ScalarEngine,
-    A: Arity<E::Fr>,
+    A: typenum::Unsigned,
 {
     // The first full round should use the initial constants.
     full_round_dynamic(p, true, true);
@@ -122,7 +123,7 @@ pub fn full_round_dynamic<'a, E, A>(
     absorb_next_round_keys: bool,
 ) where
     E: ScalarEngine,
-    A: Arity<E::Fr>,
+    A: typenum::Unsigned,
 {
     // NOTE: decrease in performance is expected when using this pathway.
     // We seek to preserve correctness while transforming the algorithm to an eventually more performant one.
@@ -211,7 +212,7 @@ pub fn full_round_dynamic<'a, E, A>(
 pub fn partial_round_dynamic<'a, E, A>(p: &mut Poseidon<'a, E, A>)
 where
     E: ScalarEngine,
-    A: Arity<E::Fr>,
+    A: typenum::Unsigned,
 {
     // Apply the quintic S-Box to the first element
     quintic_s_box::<E>(&mut p.elements[0], None, None);
@@ -225,7 +226,7 @@ where
 fn add_round_constants<'a, E, A>(p: &mut Poseidon<'a, E, A>)
 where
     E: ScalarEngine,
-    A: Arity<E::Fr>,
+    A: typenum::Unsigned,
 {
     for (element, round_constant) in p
         .elements
