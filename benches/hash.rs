@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256, Sha512};
 
 fn bench_hash<A>(c: &mut Criterion)
 where
-    A: Arity<Fr>,
+    A: typenum::Unsigned,
 {
     let scalars: Vec<Scalar> = std::iter::repeat(())
         .take(1000)

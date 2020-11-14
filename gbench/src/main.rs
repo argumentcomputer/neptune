@@ -53,23 +53,21 @@ fn bench_column_building(
     let mut total_columns = 0;
     while total_columns + effective_batch_size < leaves {
         print!(".");
-        let columns: Vec<GenericArray<Fr, U11>> =
-            (0..effective_batch_size).map(|_| constant_column).collect();
+        let columns = (0..effective_batch_size).map(|_| constant_column.as_slice());
 
-        let _ = builder.add_columns(columns.as_slice()).unwrap();
-        total_columns += columns.len();
+        let _ = builder.add_columns(columns).unwrap();
+        total_columns += effective_batch_size;
     }
     println!();
 
-    let final_columns: Vec<_> = (0..leaves - total_columns)
-        .map(|_| GenericArray::<Fr, U11>::generate(|_| constant_element))
-        .collect();
+    let x = GenericArray::<Fr, U11>::generate(|_| constant_element);
+    let final_columns = (0..leaves - total_columns).map(|_| x.as_slice());
 
     info!(
         "{}: adding final column batch and building tree",
         log_prefix
     );
-    let (_, res) = builder.add_final_columns(final_columns.as_slice()).unwrap();
+    let (_, res) = builder.add_final_columns(final_columns).unwrap();
     info!("{}: end commitment", log_prefix);
     let elapsed = start.elapsed();
     info!("{}: commitment time: {:?}", log_prefix, elapsed);
@@ -79,7 +77,7 @@ fn bench_column_building(
 
     let computed_root = res[res.len() - 1];
 
-    let expected_root = builder.compute_uniform_tree_root(final_columns[0]).unwrap();
+    let expected_root = builder.compute_uniform_tree_root(&x).unwrap();
     let expected_size = builder.tree_size();
 
     assert_eq!(

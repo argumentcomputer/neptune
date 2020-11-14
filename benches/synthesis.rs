@@ -1,4 +1,4 @@
-use crate::poseidon::{Arity, PoseidonConstants};
+use crate::poseidon::PoseidonConstants;
 use bellperson::bls::{Bls12, Fr};
 use bellperson::gadgets::num::AllocatedNum;
 use bellperson::util_cs::bench_cs::BenchCS;
@@ -11,12 +11,12 @@ use neptune::*;
 use rand::thread_rng;
 use std::marker::PhantomData;
 
-struct BenchCircuit<A: Arity<Fr>> {
+struct BenchCircuit<A: typenum::Unsigned> {
     n: usize,
     _a: PhantomData<A>,
 }
 
-impl<A: Arity<Fr>> Circuit<Bls12> for BenchCircuit<A> {
+impl<A: typenum::Unsigned> Circuit<Bls12> for BenchCircuit<A> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: &mut CS,
@@ -45,7 +45,7 @@ impl<A: Arity<Fr>> Circuit<Bls12> for BenchCircuit<A> {
 
 fn bench_synthesis<A>(c: &mut Criterion)
 where
-    A: Arity<Fr>,
+    A: typenum::Unsigned,
 {
     let mut group = c.benchmark_group(format!("synthesis-{}", A::to_usize()));
 

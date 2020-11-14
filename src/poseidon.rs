@@ -13,6 +13,8 @@ use std::marker::PhantomData;
 use typenum::marker_traits::Unsigned;
 use typenum::*;
 
+type Elements<E> = SmallVec<[<E as ScalarEngine>::Fr; 16]>;
+
 /// The `Poseidon` structure will accept a number of inputs equal to the arity.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Poseidon<'a, E, A = U2>
@@ -23,7 +25,7 @@ where
     pub(crate) constants_offset: usize,
     pub(crate) current_round: usize, // Used in static optimization only for now.
     /// the elements to permute
-    pub elements: SmallVec<[E::Fr; 16]>,
+    pub elements: Elements<E>,
     pos: usize,
     pub(crate) constants: &'a PoseidonConstants<E, A>,
     _e: PhantomData<E>,
@@ -424,8 +426,7 @@ where
     }
 
     pub(crate) fn product_mds_with_matrix(&mut self, matrix: &Matrix<E::Fr>) {
-        let mut result: SmallVec<[E::Fr; 32]> =
-            smallvec::smallvec![E::Fr::zero(); self.constants.width()];
+        let mut result: Elements<E> = smallvec::smallvec![E::Fr::zero(); self.constants.width()];
 
         for (j, val) in result.iter_mut().enumerate() {
             for (i, row) in matrix.iter().enumerate() {
@@ -440,8 +441,7 @@ where
 
     // Sparse matrix in this context means one of the form, M''.
     fn product_mds_with_sparse_matrix(&mut self, sparse_matrix: &SparseMatrix<E>) {
-        let mut result: SmallVec<[E::Fr; 32]> =
-            smallvec::smallvec![E::Fr::zero(); self.constants.width()];
+        let mut result: Elements<E> = smallvec::smallvec![E::Fr::zero(); self.constants.width()];
 
         // First column is dense.
         for (i, val) in sparse_matrix.w_hat.iter().enumerate() {
