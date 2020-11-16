@@ -4,7 +4,6 @@ use crate::poseidon::{Poseidon, PoseidonConstants};
 use crate::BatchHasher;
 use bellperson::bls::{Bls12, Fr};
 use ff::Field;
-use generic_array::{typenum, GenericArray};
 #[cfg(all(feature = "gpu", not(target_os = "macos")))]
 use rust_gpu_tools::opencl::GPUSelector;
 use smallvec::SmallVec;
@@ -129,12 +128,11 @@ where
                         let batch_size = (batch_end - batch_start) / arity;
                         let (current, new) = tree_data.split_at_mut(new_row_start + total_hashed);
 
-                        let hashed = batcher.hash(&current[batch_start..batch_end])?;
+                        dbg!(arity);
+                        let hashed = batcher.hash(&current[dbg!(batch_start..batch_end)])?;
                         new[..hashed.len()].copy_from_slice(&hashed);
                         total_hashed += batch_size;
                         batch_start = batch_end;
-                        drop(current);
-                        drop(new);
                     }
 
                     row_start = new_row_start;
@@ -234,7 +232,7 @@ mod tests {
     use super::*;
     use bellperson::bls::Fr;
     use ff::Field;
-    use generic_array::typenum::U8;
+    use typenum::U8;
 
     #[test]
     fn test_tree_builder() {
@@ -275,15 +273,15 @@ mod tests {
                     .map(|_| constant_element)
                     .collect();
 
-                let _ = builder.add_leaves(leaves.as_slice()).unwrap();
+                let _ = builder.add_leaves(&leaves).unwrap();
                 total_leaves += leaves.len();
             }
 
-            let final_leaves: Vec<_> = (0..leaves - total_leaves)
+            let final_leaves: Vec<Fr> = (0..leaves - total_leaves)
                 .map(|_| constant_element)
                 .collect();
 
-            let (base, res) = builder.add_final_leaves(final_leaves.as_slice()).unwrap();
+            let (base, res) = builder.add_final_leaves(&final_leaves).unwrap();
 
             let computed_root = res[res.len() - 1];
 

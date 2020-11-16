@@ -8,7 +8,6 @@ use crate::error::Error;
 use crate::poseidon::SimplePoseidonBatchHasher;
 use crate::{BatchHasher, Strength, DEFAULT_STRENGTH};
 use bellperson::bls::Fr;
-use generic_array::{typenum, GenericArray};
 use rust_gpu_tools::opencl::GPUSelector;
 
 #[cfg(feature = "gpu")]

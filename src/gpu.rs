@@ -5,7 +5,6 @@ use crate::poseidon::PoseidonConstants;
 use crate::{BatchHasher, Strength, DEFAULT_STRENGTH};
 use bellperson::bls::{Bls12, Fr, FrRepr};
 use ff::{PrimeField, PrimeFieldDecodingError};
-use generic_array::{typenum, ArrayLength, GenericArray};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
@@ -73,7 +72,7 @@ impl BatcherState {
     where
         A: typenum::Unsigned,
     {
-        if preimages.len() % A::to_usize() == 0 {
+        if preimages.len() % A::to_usize() != 0 {
             return Err(Error::InvalidPreimages);
         }
         match self {
@@ -183,11 +182,11 @@ where
 {
     /// Hash a batch of `A`-sized preimages.
     fn hash(&mut self, preimages: &[Fr]) -> Result<Vec<Fr>, Error> {
-        if preimages.len() % A::to_usize() == 0 {
+        if preimages.len() % A::to_usize() != 0 {
             return Err(Error::InvalidPreimages);
         }
         let mut ctx = self.ctx.lock().unwrap();
-        let (res, state) = self.state.hash(&mut ctx, preimages)?;
+        let (res, state) = self.state.hash::<A>(&mut ctx, preimages)?;
         self.state = state;
         Ok(res)
     }
@@ -346,19 +345,16 @@ fn unpack_fr_array_from_monts<'a>(monts: &'a [u64]) -> Result<&'a [Fr], Error> {
     Ok(frs)
 }
 
-fn as_mont_u64s<'a>(vec: impl Iterator<Item = &'a [Fr]>) -> &'a [u64] {
-    let fr_size = 4; // Number of limbs in Fr.
+fn as_mont_u64s<'a>(vec: &'a [Fr]) -> &'a [u64] {
+    const FR_SIZE: usize = 4; // Number of limbs in Fr.
     assert_eq!(
-        fr_size * std::mem::size_of::<u64>(),
+        FR_SIZE * std::mem::size_of::<u64>(),
         std::mem::size_of::<Fr>(),
         "fr size changed"
     );
 
     unsafe {
-        std::slice::from_raw_parts(
-            vec.as_ptr() as *const () as *const u64,
-            vec.len() * fr_size * U::to_usize(),
-        )
+        std::slice::from_raw_parts(vec.as_ptr() as *const () as *const u64, vec.len() * FR_SIZE)
     }
 }
 
@@ -375,20 +371,8 @@ fn frs_as_mont_u64s<'a>(vec: &'a [Fr]) -> &'a [u64] {
     }
 }
 
-fn as_u64s<U: ArrayLength<Fr>>(vec: &[GenericArray<Fr, U>]) -> Vec<u64> {
-    if vec.len() == 0 {
-        return Vec::new();
-    }
-    let fr_size = std::mem::size_of::<Fr>();
-    let mut safely = Vec::with_capacity(vec.len() * U::to_usize() * fr_size);
-    for i in 0..vec.len() {
-        for j in 0..U::to_usize() {
-            for k in 0..4 {
-                safely.push(vec[i][j].into_repr().0[k]);
-            }
-        }
-    }
-    safely
+fn as_u64s(vec: &[Fr]) -> Vec<u64> {
+    frs_as_mont_u64s(vec).to_vec()
 }
 
 fn init_hash2(ctx: &mut FutharkContext, strength: Strength) -> Result<BatcherState, Error> {
@@ -486,15 +470,12 @@ fn init_hash11(ctx: &mut FutharkContext, strength: Strength) -> Result<BatcherSt
     }
 }
 
-fn mbatch_hash2<A>(
+fn mbatch_hash2(
     ctx: &mut FutharkContext,
     state: &mut P2State,
-    preimages: &[GenericArray<Fr, A>],
-) -> Result<(Vec<Fr>, P2State), Error>
-where
-    A: typenum::Unsigned,
-{
-    assert_eq!(2, A::to_usize());
+    preimages: &[Fr],
+) -> Result<(Vec<Fr>, P2State), Error> {
+    debug_assert_eq!(preimages.len() % 2, 0);
     let flat_preimages = as_mont_u64s(preimages);
     let input = Array_u64_1d::from_vec(*ctx, &flat_preimages, &[flat_preimages.len() as i64, 1])
         .map_err(|_| Error::Other("could not convert".to_string()))?;
@@ -509,15 +490,12 @@ where
     Ok((frs.to_vec(), state))
 }
 
-fn mbatch_hash8<A>(
+fn mbatch_hash8(
     ctx: &mut FutharkContext,
     state: &P8State,
-    preimages: &[GenericArray<Fr, A>],
-) -> Result<(Vec<Fr>, P8State), Error>
-where
-    A: typenum::Unsigned,
-{
-    assert_eq!(8, A::to_usize());
+    preimages: &[Fr],
+) -> Result<(Vec<Fr>, P8State), Error> {
+    debug_assert_eq!(preimages.len() % 8, 0);
     let flat_preimages = as_mont_u64s(preimages);
     let input = Array_u64_1d::from_vec(*ctx, &flat_preimages, &[flat_preimages.len() as i64, 1])
         .map_err(|_| Error::Other("could not convert".to_string()))?;
@@ -532,15 +510,12 @@ where
     Ok((frs.to_vec(), state))
 }
 
-fn mbatch_hash11<A>(
+fn mbatch_hash11(
     ctx: &mut FutharkContext,
     state: &P11State,
-    preimages: &[GenericArray<Fr, A>],
-) -> Result<(Vec<Fr>, P11State), Error>
-where
-    A: typenum::Unsigned,
-{
-    assert_eq!(11, A::to_usize());
+    preimages: &[Fr],
+) -> Result<(Vec<Fr>, P11State), Error> {
+    debug_assert_eq!(preimages.len() % 11, 0);
     let flat_preimages = as_mont_u64s(preimages);
     let input = Array_u64_1d::from_vec(*ctx, &flat_preimages, &[flat_preimages.len() as i64, 1])
         .map_err(|_| Error::Other("could not convert".to_string()))?;
@@ -555,15 +530,12 @@ where
     Ok((frs.to_vec(), state))
 }
 
-fn mbatch_hash2s<A>(
+fn mbatch_hash2s(
     ctx: &mut FutharkContext,
     state: &mut S2State,
-    preimages: &[GenericArray<Fr, A>],
-) -> Result<(Vec<Fr>, S2State), Error>
-where
-    A: typenum::Unsigned,
-{
-    assert_eq!(2, A::to_usize());
+    preimages: &[Fr],
+) -> Result<(Vec<Fr>, S2State), Error> {
+    debug_assert_eq!(preimages.len() % 2, 0);
     let flat_preimages = as_mont_u64s(preimages);
     let input = Array_u64_1d::from_vec(*ctx, &flat_preimages, &[flat_preimages.len() as i64, 1])
         .map_err(|_| Error::Other("could not convert".to_string()))?;
@@ -578,15 +550,13 @@ where
     Ok((frs.to_vec(), state))
 }
 
-fn mbatch_hash8s<A>(
+fn mbatch_hash8s(
     ctx: &mut FutharkContext,
     state: &S8State,
-    preimages: &[GenericArray<Fr, A>],
-) -> Result<(Vec<Fr>, S8State), Error>
-where
-    A: typenum::Unsigned,
-{
-    assert_eq!(8, A::to_usize());
+    preimages: &[Fr],
+) -> Result<(Vec<Fr>, S8State), Error> {
+    debug_assert_eq!(preimages.len() % 8, 0);
+
     let flat_preimages = as_mont_u64s(preimages);
     let input = Array_u64_1d::from_vec(*ctx, &flat_preimages, &[flat_preimages.len() as i64, 1])
         .map_err(|_| Error::Other("could not convert".to_string()))?;
@@ -601,15 +571,13 @@ where
     Ok((frs.to_vec(), state))
 }
 
-fn mbatch_hash11s<A>(
+fn mbatch_hash11s(
     ctx: &mut FutharkContext,
     state: &S11State,
-    preimages: &[GenericArray<Fr, A>],
-) -> Result<(Vec<Fr>, S11State), Error>
-where
-    A: typenum::Unsigned,
-{
-    assert_eq!(11, A::to_usize());
+    preimages: &[Fr],
+) -> Result<(Vec<Fr>, S11State), Error> {
+    debug_assert_eq!(preimages.len() % 11, 0);
+
     let flat_preimages = as_mont_u64s(preimages);
     let input = Array_u64_1d::from_vec(*ctx, &flat_preimages, &[flat_preimages.len() as i64, 1])
         .map_err(|_| Error::Other("could not convert".to_string()))?;
@@ -624,8 +592,8 @@ where
     Ok((frs.to_vec(), state))
 }
 
-fn u64_vec<'a, U: ArrayLength<Fr>>(vec: &'a [GenericArray<Fr, U>]) -> Vec<u64> {
-    vec![0; vec.len() * U::to_usize() * std::mem::size_of::<Fr>()]
+fn u64_vec<'a>(vec: &'a [Fr]) -> Vec<u64> {
+    vec![0; vec.len() * std::mem::size_of::<Fr>()]
 }
 
 #[cfg(test)]
@@ -640,7 +608,6 @@ mod tests {
     use crate::poseidon::{Poseidon, SimplePoseidonBatchHasher};
     use crate::BatchHasher;
     use ff::{Field, ScalarEngine};
-    use generic_array::sequence::GenericSequence;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
@@ -668,11 +635,11 @@ mod tests {
                 .unwrap();
 
         let preimages = (0..batch_size)
-            .map(|_| GenericArray::<Fr, U2>::generate(|_| Fr::random(&mut rng)))
+            .map(|_| vec![Fr::random(&mut rng); 2])
+            .flatten()
             .collect::<Vec<_>>();
 
-        let (hashes, _) =
-            mbatch_hash2(&mut ctx.lock().unwrap(), &mut state, preimages.as_slice()).unwrap();
+        let (hashes, _) = mbatch_hash2(&mut ctx.lock().unwrap(), &mut state, &preimages).unwrap();
         let gpu_hashes = gpu_hasher.hash(&preimages).unwrap();
         let expected_hashes: Vec<_> = simple_hasher.hash(&preimages).unwrap();
 
@@ -704,11 +671,11 @@ mod tests {
                 .unwrap();
 
         let preimages = (0..batch_size)
-            .map(|_| GenericArray::<Fr, U2>::generate(|_| Fr::random(&mut rng)))
+            .map(|_| vec![Fr::random(&mut rng); 2])
+            .flatten()
             .collect::<Vec<_>>();
 
-        let (hashes, _) =
-            mbatch_hash2s(&mut ctx.lock().unwrap(), &mut state, preimages.as_slice()).unwrap();
+        let (hashes, _) = mbatch_hash2s(&mut ctx.lock().unwrap(), &mut state, &preimages).unwrap();
         let gpu_hashes = gpu_hasher.hash(&preimages).unwrap();
         let expected_hashes: Vec<_> = simple_hasher.hash(&preimages).unwrap();
 
@@ -740,11 +707,11 @@ mod tests {
                 .unwrap();
 
         let preimages = (0..batch_size)
-            .map(|_| GenericArray::<Fr, U8>::generate(|_| Fr::random(&mut rng)))
+            .map(|_| vec![Fr::random(&mut rng); 8])
+            .flatten()
             .collect::<Vec<_>>();
 
-        let (hashes, _) =
-            mbatch_hash8(&mut ctx.lock().unwrap(), &mut state, preimages.as_slice()).unwrap();
+        let (hashes, _) = mbatch_hash8(&mut ctx.lock().unwrap(), &mut state, &preimages).unwrap();
         let gpu_hashes = gpu_hasher.hash(&preimages).unwrap();
         let expected_hashes: Vec<_> = simple_hasher.hash(&preimages).unwrap();
 
@@ -776,11 +743,11 @@ mod tests {
                 .unwrap();
 
         let preimages = (0..batch_size)
-            .map(|_| GenericArray::<Fr, U8>::generate(|_| Fr::random(&mut rng)))
+            .map(|_| vec![Fr::random(&mut rng); 8])
+            .flatten()
             .collect::<Vec<_>>();
 
-        let (hashes, _) =
-            mbatch_hash8s(&mut ctx.lock().unwrap(), &mut state, preimages.as_slice()).unwrap();
+        let (hashes, _) = mbatch_hash8s(&mut ctx.lock().unwrap(), &mut state, &preimages).unwrap();
         let gpu_hashes = gpu_hasher.hash(&preimages).unwrap();
         let expected_hashes: Vec<_> = simple_hasher.hash(&preimages).unwrap();
 
@@ -812,11 +779,11 @@ mod tests {
                 .unwrap();
 
         let preimages = (0..batch_size)
-            .map(|_| GenericArray::<Fr, U11>::generate(|_| Fr::random(&mut rng)))
+            .map(|_| vec![Fr::random(&mut rng); 11])
+            .flatten()
             .collect::<Vec<_>>();
 
-        let (hashes, _) =
-            mbatch_hash11(&mut ctx.lock().unwrap(), &mut state, preimages.as_slice()).unwrap();
+        let (hashes, _) = mbatch_hash11(&mut ctx.lock().unwrap(), &mut state, &preimages).unwrap();
         let gpu_hashes = gpu_hasher.hash(&preimages).unwrap();
         let expected_hashes: Vec<_> = simple_hasher.hash(&preimages).unwrap();
 
@@ -848,11 +815,11 @@ mod tests {
                 .unwrap();
 
         let preimages = (0..batch_size)
-            .map(|_| GenericArray::<Fr, U11>::generate(|_| Fr::random(&mut rng)))
+            .map(|_| vec![Fr::random(&mut rng); 11])
+            .flatten()
             .collect::<Vec<_>>();
 
-        let (hashes, _) =
-            mbatch_hash11s(&mut ctx.lock().unwrap(), &mut state, preimages.as_slice()).unwrap();
+        let (hashes, _) = mbatch_hash11s(&mut ctx.lock().unwrap(), &mut state, &preimages).unwrap();
         let gpu_hashes = gpu_hasher.hash(&preimages).unwrap();
         let expected_hashes: Vec<_> = simple_hasher.hash(&preimages).unwrap();
 
@@ -879,11 +846,11 @@ mod tests {
                 .unwrap();
 
         let preimages = (0..batch_size)
-            .map(|_| GenericArray::<Fr, U8>::generate(|_| Fr::random(&mut rng)))
+            .map(|_| vec![Fr::random(&mut rng); 8])
+            .flatten()
             .collect::<Vec<_>>();
 
-        let (hashes, _) =
-            mbatch_hash8(&mut ctx.lock().unwrap(), &mut state, preimages.as_slice()).unwrap();
+        let (hashes, _) = mbatch_hash8(&mut ctx.lock().unwrap(), &mut state, &preimages).unwrap();
         let gpu_hashes = gpu_hasher.hash(&preimages).unwrap();
         let expected_hashes: Vec<_> = simple_hasher.hash(&preimages).unwrap();
 

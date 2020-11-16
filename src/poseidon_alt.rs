@@ -4,7 +4,6 @@
 use crate::poseidon::Poseidon;
 use crate::{matrix, quintic_s_box};
 use ff::{Field, ScalarEngine};
-use generic_array::typenum;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Correct

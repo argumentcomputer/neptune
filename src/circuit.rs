@@ -8,7 +8,6 @@ use bellperson::gadgets::num::AllocatedNum;
 use bellperson::{ConstraintSystem, LinearCombination, SynthesisError};
 use ff::Field;
 use ff::ScalarEngine as Engine;
-use generic_array::typenum;
 use std::marker::PhantomData;
 
 /// Similar to `num::Num`, we use `Elt` to accumulate both values and linear combinations, then eventually
@@ -608,7 +607,6 @@ mod tests {
     use bellperson::bls::{Bls12, Fr};
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use bellperson::ConstraintSystem;
-    use generic_array::typenum;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 

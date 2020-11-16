@@ -12,7 +12,6 @@
 /// may still express the full range of hash function types.
 use crate::{scalar_from_u64, Strength};
 use ff::{Field, PrimeField, ScalarEngine};
-use generic_array::typenum;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum HashType<Fr: PrimeField, A: typenum::Unsigned> {
@@ -119,8 +118,8 @@ mod tests {
     use super::*;
     use crate::{scalar_from_u64s, Strength};
     use bellperson::bls::{Bls12, Fr, FrRepr};
-    use generic_array::typenum::{U15, U8};
     use std::collections::HashSet;
+    use typenum::{U15, U8};
 
     #[test]
     fn test_domain_tags() {

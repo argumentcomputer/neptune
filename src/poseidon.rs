@@ -7,7 +7,6 @@ use crate::{matrix, quintic_s_box, BatchHasher, Strength, DEFAULT_STRENGTH};
 use crate::{round_constants, round_numbers, scalar_from_u64, Error};
 use bellperson::bls::{Bls12, Fr};
 use ff::{Field, PrimeField, ScalarEngine};
-use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
 use smallvec::SmallVec;
 use std::marker::PhantomData;
 use typenum::marker_traits::Unsigned;
@@ -500,7 +499,7 @@ where
     A: typenum::Unsigned,
 {
     fn hash(&mut self, preimages: &[Fr]) -> Result<Vec<Fr>, Error> {
-        if preimages.len() % A::to_usize() == 0 {
+        if dbg!(preimages.len()) % dbg!(A::to_usize()) != 0 {
             return Err(Error::InvalidPreimages);
         }
         let mut p = Poseidon::new(&self.constants);
@@ -523,7 +522,6 @@ mod tests {
     use crate::*;
     use bellperson::bls::{Bls12, Fr};
     use ff::Field;
-    use generic_array::typenum;
 
     #[test]
     fn reset() {

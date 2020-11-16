@@ -1,7 +1,6 @@
 use bellperson::bls::{Bls12, Fr};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ff::PrimeField;
-use generic_array::typenum;
 use neptune::poseidon::{HashMode, PoseidonConstants};
 use neptune::*;
 use rand::rngs::OsRng;

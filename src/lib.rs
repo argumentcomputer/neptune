@@ -9,7 +9,6 @@ pub use bellperson::bls::Fr as Scalar;
 use bellperson::bls::FrRepr;
 pub use error::Error;
 use ff::{Field, PrimeField, ScalarEngine};
-use generic_array::GenericArray;
 
 /// Poseidon circuit
 pub mod circuit;
@@ -58,7 +57,7 @@ pub(crate) const DEFAULT_STRENGTH: Strength = Strength::Standard;
 
 pub trait BatchHasher<A>
 where
-    A: generic_array::typenum::Unsigned,
+    A: typenum::Unsigned,
 {
     // type State;
 

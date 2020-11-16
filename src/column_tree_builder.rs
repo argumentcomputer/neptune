@@ -5,7 +5,6 @@ use crate::tree_builder::{TreeBuilder, TreeBuilderTrait};
 use crate::BatchHasher;
 use bellperson::bls::{Bls12, Fr};
 use ff::Field;
-use generic_array::{typenum, GenericArray};
 #[cfg(all(feature = "gpu", not(target_os = "macos")))]
 use rust_gpu_tools::opencl::GPUSelector;
 
@@ -147,8 +146,7 @@ mod tests {
     use crate::BatchHasher;
     use bellperson::bls::Fr;
     use ff::Field;
-    use generic_array::sequence::GenericSequence;
-    use generic_array::typenum::{U11, U8};
+    use typenum::{U11, U8};
 
     #[test]
     fn test_column_tree_builder() {
@@ -179,7 +177,7 @@ mod tests {
 
         // Simplify computing the expected root.
         let constant_element = Fr::zero();
-        let constant_column = GenericArray::<Fr, U11>::generate(|_| constant_element);
+        let constant_column = vec![constant_element; 11];
 
         let max_batch_size = if let Some(batcher) = &builder.column_batcher {
             batcher.max_batch_size()
@@ -201,7 +199,7 @@ mod tests {
             total_columns += effective_batch_size;
         }
 
-        let x = GenericArray::<Fr, U11>::generate(|_| constant_element);
+        let x = vec![constant_element; 11];
         let final_columns: Vec<Fr> = (0..leaves - total_columns)
             .map(|_| x.as_slice())
             .flatten()

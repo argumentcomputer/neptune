@@ -5,7 +5,6 @@ use bellperson::util_cs::bench_cs::BenchCS;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ff::Field;
-use generic_array::typenum;
 use neptune::circuit::poseidon_hash;
 use neptune::*;
 use rand::thread_rng;
