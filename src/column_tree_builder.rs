@@ -14,11 +14,8 @@ where
     ColumnArity: typenum::Unsigned,
     TreeArity: typenum::Unsigned,
 {
-    fn add_columns<'a>(&mut self, columns: impl Iterator<Item = &'a [Fr]>) -> Result<(), Error>;
-    fn add_final_columns<'a>(
-        &mut self,
-        columns: impl Iterator<Item = &'a [Fr]>,
-    ) -> Result<(Vec<Fr>, Vec<Fr>), Error>;
+    fn add_columns(&mut self, columns: &[Fr]) -> Result<(), Error>;
+    fn add_final_columns(&mut self, columns: &[Fr]) -> Result<(Vec<Fr>, Vec<Fr>), Error>;
 
     fn reset(&mut self);
 }
@@ -43,9 +40,9 @@ where
     ColumnArity: typenum::Unsigned,
     TreeArity: typenum::Unsigned,
 {
-    fn add_columns<'a>(&mut self, columns: impl Iterator<Item = &'a [Fr]>) -> Result<(), Error> {
+    fn add_columns(&mut self, columns: &[Fr]) -> Result<(), Error> {
         let start = self.fill_index;
-        let column_count = columns.size_hint().1.unwrap();
+        let column_count = columns.len() / ColumnArity::to_usize();
         let end = start + column_count;
 
         if end > self.leaf_count {
@@ -56,10 +53,13 @@ where
             Some(ref mut batcher) => {
                 batcher.hash_into_slice(&mut self.data[start..start + column_count], columns)?;
             }
-            None => columns.enumerate().for_each(|(i, column)| {
-                self.data[start + i] =
-                    Poseidon::new_with_preimage(&column, &self.column_constants).hash();
-            }),
+            None => columns
+                .chunks(ColumnArity::to_usize())
+                .enumerate()
+                .for_each(|(i, column)| {
+                    self.data[start + i] =
+                        Poseidon::new_with_preimage(&column, &self.column_constants).hash();
+                }),
         };
 
         self.fill_index += column_count;
@@ -67,10 +67,7 @@ where
         Ok(())
     }
 
-    fn add_final_columns<'a>(
-        &mut self,
-        columns: impl Iterator<Item = &'a [Fr]>,
-    ) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
+    fn add_final_columns(&mut self, columns: &[Fr]) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
         self.add_columns(columns)?;
 
         let (base, tree) = self.tree_builder.add_final_leaves(&self.data)?;
@@ -194,20 +191,24 @@ mod tests {
 
         let mut total_columns = 0;
         while total_columns + effective_batch_size < leaves {
-            let columns: Vec<&[Fr]> = (0..effective_batch_size)
+            let columns: Vec<Fr> = (0..effective_batch_size)
                 .map(|_| constant_column.as_slice())
+                .flatten()
+                .cloned()
                 .collect();
 
-            let _ = builder.add_columns(columns.into_iter()).unwrap();
+            let _ = builder.add_columns(&columns).unwrap();
             total_columns += effective_batch_size;
         }
 
         let x = GenericArray::<Fr, U11>::generate(|_| constant_element);
-        let final_columns: Vec<_> = (0..leaves - total_columns).map(|_| x.as_slice()).collect();
+        let final_columns: Vec<Fr> = (0..leaves - total_columns)
+            .map(|_| x.as_slice())
+            .flatten()
+            .cloned()
+            .collect();
 
-        let (base, res) = builder
-            .add_final_columns(final_columns.into_iter())
-            .unwrap();
+        let (base, res) = builder.add_final_columns(&final_columns).unwrap();
 
         let column_hash =
             Poseidon::new_with_preimage(&constant_column, &builder.column_constants).hash();

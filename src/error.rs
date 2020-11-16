@@ -17,6 +17,7 @@ pub enum Error {
     TritonError(String),
     DecodingError,
     Other(String),
+    InvalidPreimages,
 }
 
 #[cfg(feature = "gpu")]
@@ -50,6 +51,7 @@ impl fmt::Display for Error {
             Error::TritonError(e) => write!(f, "Neptune-triton Error: {}", e),
             Error::DecodingError => write!(f, "PrimeFieldDecodingError"),
             Error::Other(s) => write!(f, "{}", s),
+            Error::InvalidPreimages => write!(f, "invalid number of preimage elements"),
         }
     }
 }

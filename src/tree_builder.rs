@@ -129,8 +129,7 @@ where
                         let batch_size = (batch_end - batch_start) / arity;
                         let (current, new) = tree_data.split_at_mut(new_row_start + total_hashed);
 
-                        let hashed = batcher
-                            .hash(current[batch_start..batch_end].chunks(TreeArity::to_usize()))?;
+                        let hashed = batcher.hash(&current[batch_start..batch_end])?;
                         new[..hashed.len()].copy_from_slice(&hashed);
                         total_hashed += batch_size;
                         batch_start = batch_end;

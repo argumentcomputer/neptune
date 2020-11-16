@@ -108,7 +108,7 @@ impl<A> BatchHasher<A> for Batcher<A>
 where
     A: typenum::Unsigned,
 {
-    fn hash<'a>(&mut self, preimages: impl Iterator<Item = &'a [Fr]>) -> Result<Vec<Fr>, Error> {
+    fn hash(&mut self, preimages: &[Fr]) -> Result<Vec<Fr>, Error> {
         match self {
             Batcher::GPU(batcher) => batcher.hash(preimages),
             Batcher::CPU(batcher) => batcher.hash(preimages),
@@ -131,7 +131,7 @@ impl<A> BatchHasher<A> for NoGPUBatchHasher<A>
 where
     A: typenum::Unsigned,
 {
-    fn hash<'a>(&mut self, _preimages: impl Iterator<Item = &'a [Fr]>) -> Result<Vec<Fr>, Error> {
+    fn hash(&mut self, _preimages: &[Fr]) -> Result<Vec<Fr>, Error> {
         unimplemented!();
     }
 

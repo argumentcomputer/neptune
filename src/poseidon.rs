@@ -499,10 +499,13 @@ impl<A> BatchHasher<A> for SimplePoseidonBatchHasher<A>
 where
     A: typenum::Unsigned,
 {
-    fn hash<'a>(&mut self, preimages: impl Iterator<Item = &'a [Fr]>) -> Result<Vec<Fr>, Error> {
+    fn hash(&mut self, preimages: &[Fr]) -> Result<Vec<Fr>, Error> {
+        if preimages.len() % A::to_usize() == 0 {
+            return Err(Error::InvalidPreimages);
+        }
         let mut p = Poseidon::new(&self.constants);
-        let mut result = Vec::with_capacity(preimages.size_hint().1.unwrap_or_default());
-        for preimage in preimages {
+        let mut result = Vec::with_capacity(preimages.len() / A::to_usize());
+        for preimage in preimages.chunks(A::to_usize()) {
             p.set_preimage(preimage);
             result.push(p.hash());
         }

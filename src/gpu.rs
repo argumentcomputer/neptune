@@ -2,7 +2,7 @@ use crate::cl;
 use crate::error::Error;
 use crate::hash_type::HashType;
 use crate::poseidon::PoseidonConstants;
-use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
+use crate::{BatchHasher, Strength, DEFAULT_STRENGTH};
 use bellperson::bls::{Bls12, Fr, FrRepr};
 use ff::{PrimeField, PrimeFieldDecodingError};
 use generic_array::{typenum, ArrayLength, GenericArray};
@@ -48,10 +48,10 @@ enum BatcherState {
 impl BatcherState {
     /// Create a new state for use in batch hashing preimages of `Arity` elements.
     /// State is an opaque pointer supplied to the corresponding GPU entry point when processing a batch.
-    fn new<A: Arity<Fr>>(ctx: Arc<Mutex<FutharkContext>>) -> Result<Self, Error> {
+    fn new<A: typenum::Unsigned>(ctx: Arc<Mutex<FutharkContext>>) -> Result<Self, Error> {
         Self::new_with_strength::<A>(ctx, DEFAULT_STRENGTH)
     }
-    fn new_with_strength<A: Arity<Fr>>(
+    fn new_with_strength<A: typenum::Unsigned>(
         ctx: Arc<Mutex<FutharkContext>>,
         strength: Strength,
     ) -> Result<Self, Error> {
@@ -65,14 +65,17 @@ impl BatcherState {
     }
 
     /// Hash a batch of N * `Arity` `Fr`s into N `Fr`s.
-    fn hash<A: ArrayLength<Fr>>(
+    fn hash<A>(
         &mut self,
         ctx: &mut FutharkContext,
-        preimages: &[GenericArray<Fr, A>],
+        preimages: &[Fr],
     ) -> Result<(Vec<Fr>, Self), Error>
     where
-        A: Arity<Fr>,
+        A: typenum::Unsigned,
     {
+        if preimages.len() % A::to_usize() == 0 {
+            return Err(Error::InvalidPreimages);
+        }
         match self {
             BatcherState::Arity2(state) => {
                 let (res, state) = mbatch_hash2(ctx, state, preimages)?;
@@ -114,7 +117,7 @@ pub struct GPUBatchHasher<A> {
 
 impl<A> GPUBatchHasher<A>
 where
-    A: Arity<Fr>,
+    A: typenum::Unsigned,
 {
     /// Create a new `GPUBatchHasher` and initialize it with state corresponding with its `A`.
     pub(crate) fn new(
@@ -176,10 +179,13 @@ impl<A> Drop for GPUBatchHasher<A> {
 
 impl<A> BatchHasher<A> for GPUBatchHasher<A>
 where
-    A: Arity<Fr>,
+    A: typenum::Unsigned,
 {
     /// Hash a batch of `A`-sized preimages.
-    fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
+    fn hash(&mut self, preimages: &[Fr]) -> Result<Vec<Fr>, Error> {
+        if preimages.len() % A::to_usize() == 0 {
+            return Err(Error::InvalidPreimages);
+        }
         let mut ctx = self.ctx.lock().unwrap();
         let (res, state) = self.state.hash(&mut ctx, preimages)?;
         self.state = state;
@@ -194,11 +200,11 @@ where
 #[derive(Debug)]
 struct GPUConstants<A>(PoseidonConstants<Bls12, A>)
 where
-    A: Arity<Fr>;
+    A: typenum::Unsigned;
 
 impl<A> GPUConstants<A>
 where
-    A: Arity<Fr>,
+    A: typenum::Unsigned,
 {
     fn arity_tag(&self, ctx: &FutharkContext) -> Result<Array_u64_1d, Error> {
         let arity_tag = self.0.domain_tag;
@@ -340,7 +346,7 @@ fn unpack_fr_array_from_monts<'a>(monts: &'a [u64]) -> Result<&'a [Fr], Error> {
     Ok(frs)
 }
 
-fn as_mont_u64s<'a, U: ArrayLength<Fr>>(vec: &'a [GenericArray<Fr, U>]) -> &'a [u64] {
+fn as_mont_u64s<'a>(vec: impl Iterator<Item = &'a [Fr]>) -> &'a [u64] {
     let fr_size = 4; // Number of limbs in Fr.
     assert_eq!(
         fr_size * std::mem::size_of::<u64>(),
@@ -486,7 +492,7 @@ fn mbatch_hash2<A>(
     preimages: &[GenericArray<Fr, A>],
 ) -> Result<(Vec<Fr>, P2State), Error>
 where
-    A: Arity<Fr>,
+    A: typenum::Unsigned,
 {
     assert_eq!(2, A::to_usize());
     let flat_preimages = as_mont_u64s(preimages);
@@ -509,7 +515,7 @@ fn mbatch_hash8<A>(
     preimages: &[GenericArray<Fr, A>],
 ) -> Result<(Vec<Fr>, P8State), Error>
 where
-    A: Arity<Fr>,
+    A: typenum::Unsigned,
 {
     assert_eq!(8, A::to_usize());
     let flat_preimages = as_mont_u64s(preimages);
@@ -532,7 +538,7 @@ fn mbatch_hash11<A>(
     preimages: &[GenericArray<Fr, A>],
 ) -> Result<(Vec<Fr>, P11State), Error>
 where
-    A: Arity<Fr>,
+    A: typenum::Unsigned,
 {
     assert_eq!(11, A::to_usize());
     let flat_preimages = as_mont_u64s(preimages);
@@ -555,7 +561,7 @@ fn mbatch_hash2s<A>(
     preimages: &[GenericArray<Fr, A>],
 ) -> Result<(Vec<Fr>, S2State), Error>
 where
-    A: Arity<Fr>,
+    A: typenum::Unsigned,
 {
     assert_eq!(2, A::to_usize());
     let flat_preimages = as_mont_u64s(preimages);
@@ -578,7 +584,7 @@ fn mbatch_hash8s<A>(
     preimages: &[GenericArray<Fr, A>],
 ) -> Result<(Vec<Fr>, S8State), Error>
 where
-    A: Arity<Fr>,
+    A: typenum::Unsigned,
 {
     assert_eq!(8, A::to_usize());
     let flat_preimages = as_mont_u64s(preimages);
@@ -601,7 +607,7 @@ fn mbatch_hash11s<A>(
     preimages: &[GenericArray<Fr, A>],
 ) -> Result<(Vec<Fr>, S11State), Error>
 where
-    A: Arity<Fr>,
+    A: typenum::Unsigned,
 {
     assert_eq!(11, A::to_usize());
     let flat_preimages = as_mont_u64s(preimages);

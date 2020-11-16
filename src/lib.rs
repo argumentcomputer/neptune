@@ -62,15 +62,12 @@ where
 {
     // type State;
 
-    fn hash<'a>(
-        &mut self,
-        preimages: impl Iterator<Item = &'a [Scalar]>,
-    ) -> Result<Vec<Scalar>, Error>;
+    fn hash(&mut self, preimages: &[Scalar]) -> Result<Vec<Scalar>, Error>;
 
-    fn hash_into_slice<'a>(
+    fn hash_into_slice(
         &mut self,
         target_slice: &mut [Scalar],
-        preimages: impl Iterator<Item = &'a [Scalar]>,
+        preimages: &[Scalar],
     ) -> Result<(), Error> {
         // FIXME: Account for max batch size.
 
