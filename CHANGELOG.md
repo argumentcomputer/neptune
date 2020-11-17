@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 2.4.0 - 2020-11-17
+
+- Customize batch-sizes of gbench through cli args. (https://github.com/filecoin-project/neptune/pull/50)
+- Remove [most] macos conditional code. (https://github.com/filecoin-project/neptune/pull/72)
+- Refactor, moving device selection to rust-gpu-tools. (https://github.com/filecoin-project/neptune/pull/70)
+- Only clear cache when no hashers are active for futhark context. (https://github.com/filecoin-project/neptune/pull/68)
+
 ## 2.2.0 - 2020-11-01
 
 - Update `bellperson` to `0.12.0`
