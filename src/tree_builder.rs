@@ -247,6 +247,7 @@ where
     }
 }
 
+#[cfg(all(feature = "gpu", not(target_os = "macos")))]
 #[cfg(test)]
 mod tests {
     use super::*;

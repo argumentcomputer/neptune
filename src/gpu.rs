@@ -623,6 +623,10 @@ fn u64_vec<'a, U: ArrayLength<Fr>>(vec: &'a [GenericArray<Fr, U>]) -> Vec<u64> {
 }
 
 #[cfg(test)]
+/// GPU performance is still inexplicably poor and behavior erratic on macos,
+/// So skip GPU tests by default since real code paths are now enabled.
+/// Users will probably not want to actually run with GPU on macos,
+/// But if experiments show it is viable, then it is possible.
 #[cfg(all(feature = "gpu", not(target_os = "macos")))]
 mod tests {
     use super::*;

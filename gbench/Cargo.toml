@@ -16,11 +16,11 @@ ff = { version = "0.2.1", package = "fff" }
 generic-array = "0.14.4"
 log = "0.4.8"
 neptune = { path = "../", default-features = false, features=["gpu"] }
-rust-gpu-tools = { version = "0.2.2" }
+rust-gpu-tools = { version = "0.3.0", optional = true }
 
 [features]
 default = ["pairing", "gpu"]
-gpu = ["neptune/gpu"]
+gpu = ["neptune/gpu", "rust-gpu-tools"]
 pairing = ["neptune/pairing", "bellperson/pairing"]
 blst = ["neptune/blst", "bellperson/blst"]
 
