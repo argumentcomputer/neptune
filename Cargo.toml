@@ -5,7 +5,7 @@ version = "2.4.0"
 authors = ["porcuquine <porcuquine@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/porcuquine/poseidon"
+repository = "https://github.com/filecoin-project/neptune"
 
 [dependencies]
 lazy_static = "1.4.0"
