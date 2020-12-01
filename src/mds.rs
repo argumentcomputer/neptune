@@ -244,7 +244,7 @@ mod tests {
             &matrix::mat_mul::<Bls12>(&m_inv, &m).unwrap()
         ));
 
-        // M' x M'' = I
+        // M' x M'' = M
         assert_eq!(
             m,
             matrix::mat_mul::<Bls12>(&m_prime, &m_double_prime).unwrap()
