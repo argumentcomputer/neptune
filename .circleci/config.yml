@@ -14,7 +14,7 @@ restore-workspace: &restore-workspace
 restore-cache: &restore-cache
   restore_cache:
     keys:
-      - cargo-v0-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - cargo-v1-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - repo-source-{{ .Branch }}-{{ .Revision }}
 
 commands:
@@ -35,12 +35,21 @@ commands:
           no_output_timeout: 5m
       - run:
           name: Test (pairing, GPU) (<< parameters.target >>)
-          command: TARGET=<< parameters.target >> cargo test --release --features gpu  -- --test-threads=1
+          command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features pairing,gpu -- --test-threads=1
           no_output_timeout: 30m
 
       - run:
           name: Test (blst, GPU) (<< parameters.target >>)
           command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features blst,gpu -- --test-threads=1
+          no_output_timeout: 30m
+      - run:
+          name: Test (pairing, opencl) (<< parameters.target >>)
+          command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features pairing,opencl -- --test-threads=1
+          no_output_timeout: 30m
+
+      - run:
+          name: Test (blst, opencl) (<< parameters.target >>)
+          command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features blst,opencl -- --test-threads=1
           no_output_timeout: 30m
 
 jobs:
@@ -63,12 +72,12 @@ jobs:
           command: cargo generate-lockfile
       - restore_cache:
           keys:
-            - cargo-v0-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v1-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run: cargo update
       - run: cargo fetch
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
-      - run: rustup install nightly
+      - run: rustup install nightly-2020-11-18
       - run: rustup component add rustfmt-preview
       - run: rustup component add clippy-preview
       - run: rustc --version
@@ -78,7 +87,7 @@ jobs:
           paths:
             - gpuci
       - save_cache:
-          key: cargo-v0-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+          key: cargo-v1-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
           paths:
             - "~/.cargo"
             - "~/.rustup"
@@ -175,10 +184,10 @@ jobs:
       - run: sudo apt install -y ocl-icd-opencl-dev
       - run:
           name: Run cargo release build (pairing, gpu)
-          command: cargo +nightly build -Zpackage-features --release -p gbench --no-default-features --features pairing,gpu
+          command: cargo +nightly-2020-11-18 build -Zpackage-features --release -p gbench --no-default-features --features pairing,gpu
       - run:
           name: Run cargo release build (blst, gpu)
-          command: cargo +nightly build -Zpackage-features --release -p gbench --no-default-features --features blst,gpu
+          command: cargo +nightly-2020-11-18 build -Zpackage-features --release -p gbench --no-default-features --features blst,gpu
 
   benches:
     executor: default

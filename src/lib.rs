@@ -11,6 +11,9 @@ pub use error::Error;
 use ff::{Field, PrimeField, ScalarEngine};
 use generic_array::GenericArray;
 
+#[cfg(all(feature = "gpu", feature = "opencl"))]
+compile_error!("gpu and opencl features are mutually exclusive");
+
 /// Poseidon circuit
 pub mod circuit;
 pub mod error;
@@ -27,22 +30,22 @@ mod round_constants;
 pub mod hash_type;
 
 /// Tree Builder
-#[cfg(feature = "gpu")]
+#[cfg(any(feature = "gpu", feature = "opencl"))]
 pub mod tree_builder;
 
 /// Column Tree Builder
-#[cfg(feature = "gpu")]
+#[cfg(any(feature = "gpu", feature = "opencl"))]
 pub mod column_tree_builder;
 
 #[cfg(feature = "gpu")]
-mod gpu;
-
-#[cfg(feature = "gpu")]
-pub mod cl;
+pub mod triton;
 
 /// Batch Hasher
-#[cfg(feature = "gpu")]
+#[cfg(any(feature = "gpu", feature = "opencl"))]
 pub mod batch_hasher;
+
+#[cfg(feature = "opencl")]
+pub mod proteus;
 
 pub(crate) const TEST_SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,

@@ -452,7 +452,6 @@ where
         ) {
             element.add_assign(round_constant);
         }
-
         self.constants_offset += self.elements.len();
     }
 

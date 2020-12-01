@@ -1,3 +1,4 @@
+use crate::error::{ClError, ClResult};
 use log::*;
 use rust_gpu_tools::opencl::{cl_device_id, Device, GPUSelector};
 use std::collections::HashMap;
@@ -8,55 +9,9 @@ use triton::bindings;
 use triton::FutharkContext;
 const MAX_LEN: usize = 128;
 
-#[repr(C)]
-#[derive(Debug, Clone, Default)]
-struct cl_amd_device_topology {
-    r#type: u32,
-    unused: [u8; 17],
-    bus: u8,
-    device: u8,
-    function: u8,
-}
-
 lazy_static! {
     pub static ref FUTHARK_CONTEXT_MAP: RwLock<HashMap<String, Arc<Mutex<FutharkContext>>>> =
         RwLock::new(HashMap::new());
-}
-
-#[derive(Debug, Clone)]
-pub enum ClError {
-    DeviceNotFound,
-    PlatformNotFound,
-    BusIdNotAvailable,
-    NvidiaBusIdNotAvailable,
-    AmdTopologyNotAvailable,
-    PlatformNameNotAvailable,
-    CannotCreateContext,
-    CannotCreateQueue,
-    GetDeviceError,
-}
-pub type ClResult<T> = std::result::Result<T, ClError>;
-
-impl fmt::Display for ClError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        match self {
-            ClError::DeviceNotFound => write!(f, "Device not found."),
-            ClError::PlatformNotFound => write!(f, "Platform not found."),
-            ClError::BusIdNotAvailable => write!(f, "Cannot extract bus-id for the given device."),
-            ClError::NvidiaBusIdNotAvailable => {
-                write!(f, "Cannot extract bus-id for the given Nvidia device.")
-            }
-            ClError::AmdTopologyNotAvailable => {
-                write!(f, "Cannot extract bus-id for the given AMD device.")
-            }
-            ClError::PlatformNameNotAvailable => {
-                write!(f, "Cannot extract platform name for the given platform.")
-            }
-            ClError::CannotCreateContext => write!(f, "Cannot create cl_context."),
-            ClError::CannotCreateQueue => write!(f, "Cannot create cl_command_queue."),
-            ClError::GetDeviceError => write!(f, "Cannot get Device"),
-        }
-    }
 }
 
 fn create_context(device: bindings::cl_device_id) -> ClResult<bindings::cl_context> {

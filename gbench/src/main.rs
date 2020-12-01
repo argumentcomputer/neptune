@@ -107,7 +107,7 @@ struct Opts {
 }
 
 fn main() -> Result<(), Error> {
-    #[cfg(all(feature = "gpu", target_os = "macos"))]
+    #[cfg(all(any(feature = "gpu", feature = "opencl"), target_os = "macos"))]
     unimplemented!("Running on macos is not recommended and may have bad consequences -- experiment at your own risk.");
     env_logger::init();
 
@@ -127,6 +127,13 @@ fn main() -> Result<(), Error> {
 
     // Comma separated list of GPU bus-ids
     let gpus = std::env::var("NEPTUNE_GBENCH_GPUS");
+
+    #[cfg(feature = "gpu")]
+    let default_type = BatcherType::GPU;
+
+    #[cfg(feature = "opencl")]
+    let default_type = BatcherType::OpenCL;
+
     let batcher_types = gpus
         .map(|v| {
             v.split(",")
@@ -134,7 +141,8 @@ fn main() -> Result<(), Error> {
                 .map(|bus_id| BatcherType::CustomGPU(GPUSelector::BusId(bus_id)))
                 .collect::<Vec<_>>()
         })
-        .unwrap_or(vec![BatcherType::GPU]);
+        .unwrap_or(vec![default_type]);
+
     let mut threads = Vec::new();
     for batcher_type in batcher_types {
         threads.push(thread::spawn(move || {
