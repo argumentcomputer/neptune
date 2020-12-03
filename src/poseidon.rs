@@ -485,6 +485,9 @@ where
         self.product_mds_with_matrix(&self.constants.mds_matrices.m);
     }
 
+    /// NOTE: This calculates a vector-matrix product (`elements * matrix`) rather than the
+    /// expected matrix-vector `(matrix * elements)`. This is a performance optimization which
+    /// exploits the fact that our MDS matrices are symmetric by construction.
     pub(crate) fn product_mds_with_matrix(&mut self, matrix: &Matrix<E::Fr>) {
         let mut result = GenericArray::<E::Fr, A::ConstantsSize>::generate(|_| E::Fr::zero());
 

@@ -2,7 +2,8 @@ use ff::{Field, ScalarEngine};
 
 use crate::matrix;
 use crate::matrix::{
-    apply_matrix, invert, is_identity, is_invertible, is_square, mat_mul, minor, Matrix, Scalar,
+    apply_matrix, invert, is_identity, is_invertible, is_square, mat_mul, minor, transpose, Matrix,
+    Scalar,
 };
 use crate::scalar_from_u64;
 
@@ -150,6 +151,8 @@ fn generate_mds<E: ScalarEngine>(t: usize) -> Matrix<Scalar<E>> {
     // To ensure correctness, we would check all sub-matrices for invertibility. Meanwhile, this is a simple sanity check.
     assert!(is_invertible::<E>(&matrix));
 
+    //  `poseidon::product_mds_with_matrix` relies on the constructed MDS matrix being symmetric, so ensure it is.
+    assert_eq!(matrix, transpose::<E>(&matrix));
     matrix
 }
 
@@ -313,7 +316,7 @@ mod tests {
         let m = generate_mds::<Bls12>(width);
         let m2 = m.clone();
 
-        let (pre_sparse, sparse) = factor_to_sparse_matrices::<Bls12>(m, n);
+        let (pre_sparse, mut sparse) = factor_to_sparse_matrices::<Bls12>(m, n);
         assert_eq!(n, sparse.len());
 
         let mut initial = Vec::with_capacity(width);
@@ -322,27 +325,28 @@ mod tests {
         }
 
         let mut round_keys = Vec::with_capacity(width);
-        for _ in 0..n {
+        for _ in 0..(n + 1) {
             round_keys.push(Fr::random(&mut rng));
         }
 
-        let expected = std::iter::repeat(m2).take(n).zip(&round_keys).fold(
+        let expected = std::iter::repeat(m2).take(n + 1).zip(&round_keys).fold(
             initial.clone(),
             |mut acc, (m, rk)| {
-                apply_matrix::<Bls12>(&m, &acc);
+                acc = apply_matrix::<Bls12>(&m, &acc);
                 quintic_s_box::<Bls12>(&mut acc[0], None, Some(&rk));
                 acc
             },
         );
 
-        let actual = sparse.iter().chain(&[pre_sparse]).zip(&round_keys).fold(
-            initial.clone(),
-            |mut acc, (m, rk)| {
-                apply_matrix::<Bls12>(&m, &acc);
+        sparse.insert(0, pre_sparse);
+        let actual = sparse
+            .iter()
+            .zip(&round_keys)
+            .fold(initial.clone(), |mut acc, (m, rk)| {
+                acc = apply_matrix::<Bls12>(&m, &acc);
                 quintic_s_box::<Bls12>(&mut acc[0], None, Some(&rk));
                 acc
-            },
-        );
+            });
         assert_eq!(expected, actual);
     }
 
