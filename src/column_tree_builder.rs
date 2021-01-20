@@ -120,12 +120,23 @@ where
 
         let tree_builder = match {
             match &column_batcher {
+                #[cfg(feature = "gpu")]
                 Some(b) => b.futhark_context(),
+                #[cfg(feature = "opencl")]
+                Some(b) => b.device(),
                 None => None,
             }
         } {
+            #[cfg(feature = "gpu")]
             Some(ctx) => TreeBuilder::<TreeArity>::new(
                 Some(BatcherType::FromFutharkContext(ctx)),
+                leaf_count,
+                max_tree_batch_size,
+                0,
+            )?,
+            #[cfg(feature = "opencl")]
+            Some(device) => TreeBuilder::<TreeArity>::new(
+                Some(BatcherType::FromDevice(device)),
                 leaf_count,
                 max_tree_batch_size,
                 0,
@@ -162,7 +173,7 @@ where
     }
 }
 
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
+#[cfg(all(any(feature = "gpu", feature = "opencl"), not(target_os = "macos")))]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -181,6 +192,9 @@ mod tests {
 
         #[cfg(feature = "gpu")]
         test_column_tree_builder_aux(Some(BatcherType::GPU), 512, 32, 512, 512);
+
+        #[cfg(feature = "opencl")]
+        test_column_tree_builder_aux(Some(BatcherType::OpenCL), 512, 32, 512, 512);
     }
 
     fn test_column_tree_builder_aux(

@@ -247,7 +247,7 @@ where
     }
 }
 
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
+#[cfg(all(any(feature = "gpu", feature = "opencl"), not(target_os = "macos")))]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -263,6 +263,9 @@ mod tests {
 
         #[cfg(all(feature = "gpu", not(target_os = "macos")))]
         test_tree_builder_aux(Some(BatcherType::GPU), 512, 32, 512, 512);
+
+        #[cfg(all(feature = "opencl", not(target_os = "macos")))]
+        test_tree_builder_aux(Some(BatcherType::OpenCL), 512, 32, 512, 512);
     }
 
     fn test_tree_builder_aux(

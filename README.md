@@ -19,7 +19,14 @@ proofs (in SNARKs).
 
 Neptune also supports batch hashing and tree building, which can be performed on a GPU. The underlying GPU
 implementation, [neptune-triton](https://github.com/filecoin-project/neptune-triton) is implemented in the [Futhark
-Programming Language](https://futhark-lang.org/).
+Programming Language](https://futhark-lang.org/). To use `neptune-triton` GPU batch hashing, compile `neptune` with the
+`gpu` feature.
+
+Neptune now implements GPU batch hashing in pure OpenCL. The initial implementation is a bit less than 2x faster than
+the Futhark implementation, so once stabilized this will likely be the preferred option. The pure OpenCL batch hashing
+is provided by the internal `proteus` module. To use `proteus`, compile `neptune` with the `opencl` feature.
+
+The `gpu` and `opencl` features are mutually exclusive.
 
 At the time of the 1.0.0 release, Neptune on RTX 2080Ti GPU can build 8-ary Merkle trees for 4GiB of input in 16 seconds.
 
@@ -35,7 +42,7 @@ The following are likely areas of future work:
 
 - [x] Support for multiple GPUs.
 - [x] Support domain separation tag.
-- [ ] Improve throughput (?) by using OpenCL directly.
+- [x] Improve throughput (?) by using OpenCL directly.
 
 ## History
 

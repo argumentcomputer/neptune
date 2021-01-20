@@ -1,6 +1,46 @@
 #[cfg(feature = "gpu")]
-use crate::cl;
+use crate::triton::cl;
 use std::{error, fmt};
+
+#[derive(Debug, Clone)]
+#[cfg(any(feature = "gpu", feature = "opencl"))]
+pub enum ClError {
+    DeviceNotFound,
+    PlatformNotFound,
+    BusIdNotAvailable,
+    NvidiaBusIdNotAvailable,
+    AmdTopologyNotAvailable,
+    PlatformNameNotAvailable,
+    CannotCreateContext,
+    CannotCreateQueue,
+    GetDeviceError,
+}
+
+#[cfg(any(feature = "gpu", feature = "opencl"))]
+pub type ClResult<T> = std::result::Result<T, ClError>;
+
+#[cfg(any(feature = "gpu", feature = "opencl"))]
+impl fmt::Display for ClError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match self {
+            ClError::DeviceNotFound => write!(f, "Device not found."),
+            ClError::PlatformNotFound => write!(f, "Platform not found."),
+            ClError::BusIdNotAvailable => write!(f, "Cannot extract bus-id for the given device."),
+            ClError::NvidiaBusIdNotAvailable => {
+                write!(f, "Cannot extract bus-id for the given Nvidia device.")
+            }
+            ClError::AmdTopologyNotAvailable => {
+                write!(f, "Cannot extract bus-id for the given AMD device.")
+            }
+            ClError::PlatformNameNotAvailable => {
+                write!(f, "Cannot extract platform name for the given platform.")
+            }
+            ClError::CannotCreateContext => write!(f, "Cannot create cl_context."),
+            ClError::CannotCreateQueue => write!(f, "Cannot create cl_command_queue."),
+            ClError::GetDeviceError => write!(f, "Cannot get Device"),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 /// Possible error states for the hashing.
@@ -11,8 +51,8 @@ pub enum Error {
     IndexOutOfBounds,
     /// The provided leaf was not found in the tree
     GPUError(String),
-    #[cfg(feature = "gpu")]
-    ClError(cl::ClError),
+    #[cfg(any(feature = "gpu", feature = "opencl"))]
+    ClError(ClError),
     #[cfg(feature = "gpu")]
     TritonError(String),
     DecodingError,
@@ -20,8 +60,8 @@ pub enum Error {
 }
 
 #[cfg(feature = "gpu")]
-impl From<cl::ClError> for Error {
-    fn from(e: cl::ClError) -> Self {
+impl From<ClError> for Error {
+    fn from(e: ClError) -> Self {
         Self::ClError(e)
     }
 }
@@ -44,7 +84,7 @@ impl fmt::Display for Error {
             ),
             Error::IndexOutOfBounds => write!(f, "The referenced index is outs of bounds."),
             Error::GPUError(s) => write!(f, "GPU Error: {}", s),
-            #[cfg(feature = "gpu")]
+            #[cfg(any(feature = "gpu", feature = "opencl"))]
             Error::ClError(e) => write!(f, "OpenCL Error: {}", e),
             #[cfg(feature = "gpu")]
             Error::TritonError(e) => write!(f, "Neptune-triton Error: {}", e),

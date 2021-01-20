@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://book.async.rs/overview/stability-guarantees.html).
 
 ## Unreleased
+- Pure OpenCL implementation of batch hashing. (https://github.com/filecoin-project/neptune/pull/78)
 
 ## 2.4.0 - 2020-11-17
 

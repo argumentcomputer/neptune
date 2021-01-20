@@ -1,4 +1,4 @@
-use crate::cl;
+use super::cl;
 use crate::error::Error;
 use crate::hash_type::HashType;
 use crate::poseidon::PoseidonConstants;
@@ -630,8 +630,8 @@ fn u64_vec<'a, U: ArrayLength<Fr>>(vec: &'a [GenericArray<Fr, U>]) -> Vec<u64> {
 #[cfg(all(feature = "gpu", not(target_os = "macos")))]
 mod tests {
     use super::*;
-    use crate::gpu::BatcherState;
     use crate::poseidon::{Poseidon, SimplePoseidonBatchHasher};
+    use crate::triton::gpu::BatcherState;
     use crate::BatchHasher;
     use ff::{Field, ScalarEngine};
     use generic_array::sequence::GenericSequence;
@@ -667,6 +667,7 @@ mod tests {
 
         let (hashes, _) =
             mbatch_hash2(&mut ctx.lock().unwrap(), &mut state, preimages.as_slice()).unwrap();
+
         let gpu_hashes = gpu_hasher.hash(&preimages).unwrap();
         let expected_hashes: Vec<_> = simple_hasher.hash(&preimages).unwrap();
 
