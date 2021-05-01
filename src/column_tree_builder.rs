@@ -37,7 +37,7 @@ where
     column_constants: PoseidonConstants<Bls12, ColumnArity>,
     pub column_batcher: Option<Batcher<ColumnArity>>,
     tree_builder: TreeBuilder<TreeArity>,
-    are_leaves_included: bool,
+    has_tree_building_begun: bool,
 }
 
 impl<ColumnArity, TreeArity> ColumnTreeBuilderTrait<ColumnArity, TreeArity>
@@ -50,6 +50,10 @@ where
         let start = self.fill_index;
         let column_count = columns.len();
         let end = start + column_count;
+
+        if self.has_tree_building_begun {
+            return Err(Error::StillBuildingTree);
+        }
 
         if end > self.leaf_count {
             return Err(Error::Other("too many columns".to_string()));
@@ -76,9 +80,9 @@ where
     ) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
         self.add_columns(columns)?;
 
-        self.check_number_of_columns()?;
-
-        let (base, tree) = self.tree_builder.add_final_leaves(&self.data)?;
+        let (base, tree) = self
+            .tree_builder
+            .add_final_leaves(&self.data[..self.fill_index])?;
         self.reset();
 
         Ok((base, tree))
@@ -89,12 +93,11 @@ where
     }
 
     fn build_next(&mut self) -> Result<Option<(Vec<Fr>, Vec<Fr>)>, Error> {
-        if !self.are_leaves_included {
-            self.tree_builder.add_leaves(&self.data)?;
-            self.are_leaves_included = true;
-            self.check_number_of_columns()?;
+        if !self.has_tree_building_begun {
+            self.tree_builder
+                .add_leaves(&self.data[..self.fill_index])?;
+            self.has_tree_building_begun = true;
         }
-
         let res = self.tree_builder.build_next();
         match res {
             Ok(Some(_)) | Err(_) => self.reset(),
@@ -106,7 +109,8 @@ where
     fn reset(&mut self) {
         self.fill_index = 0;
         self.data.iter_mut().for_each(|place| *place = Fr::zero());
-        self.are_leaves_included = false;
+
+        self.has_tree_building_begun = false;
     }
 }
 fn as_generic_arrays<'a, A: Arity<Fr>>(vec: &'a [Fr]) -> &'a [GenericArray<Fr, A>] {
@@ -177,15 +181,13 @@ where
             column_constants: PoseidonConstants::<Bls12, ColumnArity>::new(),
             column_batcher,
             tree_builder,
-            are_leaves_included,
+            has_tree_building_begun: false,
         };
 
         Ok(builder)
     }
 
     pub fn build_tree(&mut self) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
-        self.check_number_of_columns()?;
-
         self.tree_builder.add_leaves(&self.data)?;
         let res = self.tree_builder.build_tree(0);
         self.reset();
