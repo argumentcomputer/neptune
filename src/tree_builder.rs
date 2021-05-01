@@ -39,6 +39,10 @@ where
     TreeArity: Arity<Fr>,
 {
     fn add_leaves(&mut self, leaves: &[Fr]) -> Result<(), Error> {
+        if !self.tree_data.is_empty() {
+            return Err(Error::StillBuildingTree);
+        }
+
         let start = self.fill_index;
         let batch_leaf_count = leaves.len();
         let end = start + batch_leaf_count;
@@ -65,7 +69,7 @@ where
     // give the option to build the tree without blocking the callers' thread
     // should be called multiple times until either Some(tree) or an error is returned
     fn build_next(&mut self) -> Result<Option<(Vec<Fr>, Vec<Fr>)>, Error> {
-        self.build_next_batch(self.rows_to_discard)
+        self.build_next_row(self.rows_to_discard)
     }
 
     fn reset(&mut self) {
@@ -194,7 +198,7 @@ where
 
     // this function should be called multiple times
     // until all batches are processed
-    fn build_next_batch(
+    fn build_next_row(
         &mut self,
         rows_to_discard: usize,
     ) -> Result<Option<(Vec<Fr>, Vec<Fr>)>, Error> {
@@ -458,14 +462,7 @@ mod tests {
                 .iter()
                 .for_each(|l| builder.add_leaves(l).unwrap());
 
-            builder.add_leaves(final_leaves.as_slice()).unwrap();
-
-            let (base, res) = loop {
-                let res = builder.build_next().unwrap();
-                if res.is_some() {
-                    break res.unwrap();
-                }
-            };
+            let (base, res) = builder.add_final_leaves(final_leaves.as_slice()).unwrap();
 
             let computed_root = res[res.len() - 1];
 

@@ -88,7 +88,7 @@ pub fn default_futhark_context() -> ClResult<Arc<Mutex<FutharkContext>>> {
     match pci_id {
         Some(pci_id) => {
             info!(
-                "Using device with bus-id {} for creating the FutharkContext...",
+                "Using device with pci-id {} for creating the FutharkContext...",
                 pci_id
             );
             match Device::by_pci_id(pci_id) {
