@@ -30,6 +30,10 @@ The `gpu` and `opencl` features are mutually exclusive.
 
 At the time of the 1.0.0 release, Neptune on RTX 2080Ti GPU can build 8-ary Merkle trees for 4GiB of input in 16 seconds.
 
+## Implementation Specification
+
+Filecoin's Poseidon specification is published in the Filecoin specification document [here](https://spec.filecoin.io/#section-algorithms.crypto.poseidon). Additionally, a PDF version is mirrored in this repo [here](poseidon_spec.pdf).
+
 ## Environment variables
 
  - `NEPTUNE_DEFAULT_GPU=<bus-id>` allows you to select the default GPU that tree-builder is going to run on given its bus-id.
