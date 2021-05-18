@@ -7,8 +7,7 @@ use bellperson::bls::{Bls12, Fr, FrRepr};
 use ff::{Field, PrimeField, PrimeFieldDecodingError};
 use generic_array::{typenum, ArrayLength, GenericArray};
 use log::info;
-use rust_gpu_tools::opencl::{cl_device_id, Device, GPUSelector};
-use rust_gpu_tools::{call_kernel, opencl};
+use rust_gpu_tools::opencl::{self, cl_device_id, Device, GPUSelector};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use typenum::{U11, U2, U8};
@@ -255,14 +254,13 @@ where
             .create_buffer::<Fr>(num_hashes)
             .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
-        call_kernel!(
-            kernel,
-            &self.constants_buffer,
-            &preimages_buffer,
-            &result_buffer,
-            preimages.len() as i32
-        )
-        .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+        kernel
+            .arg(&self.constants_buffer)
+            .arg(&preimages_buffer)
+            .arg(&result_buffer)
+            .arg(preimages.len() as i32)
+            .run()
+            .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
         let mut frs = vec![<Fr as Field>::zero(); num_hashes];
         result_buffer
