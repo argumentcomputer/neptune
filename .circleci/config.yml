@@ -78,8 +78,6 @@ jobs:
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
       - run: rustup install nightly-2020-11-18
-      - run: rustup component add rustfmt-preview
-      - run: rustup component add clippy-preview
       - run: rustc --version
       - run: rm -rf .git
       - persist_to_workspace:
@@ -144,10 +142,10 @@ jobs:
       - run: sudo apt install -y ocl-icd-opencl-dev
       - run:
           name: Run cargo clippy (pairing)
-          command: cargo clippy --no-default-features --features pairing,gpu
+          command: cargo clippy --all-targets --no-default-features --features pairing,gpu -- -D warnings
       - run:
           name: Run cargo clippy (blst)
-          command: cargo clippy --no-default-features --features blst,gpu
+          command: cargo clippy --all-targets --no-default-features --features blst,gpu -- -D warnings
 
   build:
     executor: default
