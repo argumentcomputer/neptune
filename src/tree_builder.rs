@@ -14,6 +14,7 @@ where
     fn add_final_leaves(&mut self, leaves: &[Fr]) -> Result<(Vec<Fr>, Vec<Fr>), Error>;
     fn finish_adding_leaves(&mut self);
     fn build_next(&mut self) -> Result<Option<(Vec<Fr>, Vec<Fr>)>, Error>;
+    fn build_tree(&mut self, rows_to_discard: usize) -> Result<(Vec<Fr>, Vec<Fr>), Error>;
 
     fn reset(&mut self);
 }
@@ -72,68 +73,8 @@ where
         self.build_next_row(self.rows_to_discard)
     }
 
-    fn reset(&mut self) {
-        self.fill_index = 0;
-        self.data.iter_mut().for_each(|place| *place = Fr::zero());
-        self.tree_data.clear();
-        self.row_start = 0;
-        self.row_end = self.leaf_count;
-    }
-}
-
-fn as_generic_arrays<'a, A: Arity<Fr>>(vec: &'a [Fr]) -> &'a [GenericArray<Fr, A>] {
-    // It is a programmer error to call `as_generic_arrays` on a vector whose underlying data cannot be divided
-    // into an even number of `GenericArray<Fr, Arity>`.
-    assert_eq!(
-        0,
-        (vec.len() * std::mem::size_of::<Fr>()) % std::mem::size_of::<GenericArray<Fr, A>>()
-    );
-
-    // This block does not affect the underlying `Fr`s. It just groups them into `GenericArray`s of length `Arity`.
-    // We know by the assertion above that `vec` can be evenly divided into these units.
-    unsafe {
-        std::slice::from_raw_parts(
-            vec.as_ptr() as *const () as *const GenericArray<Fr, A>,
-            vec.len() / A::to_usize(),
-        )
-    }
-}
-
-impl<TreeArity> TreeBuilder<TreeArity>
-where
-    TreeArity: Arity<Fr>,
-{
-    pub fn new(
-        tree_batcher: Option<Batcher<TreeArity>>,
-        leaf_count: usize,
-        rows_to_discard: usize,
-    ) -> Result<Self, Error> {
-        let row_start = 0;
-        let row_end = leaf_count;
-
-        let builder = Self {
-            leaf_count,
-            data: vec![Fr::zero(); leaf_count],
-            fill_index: 0,
-            tree_constants: PoseidonConstants::<Bls12, TreeArity>::new(),
-            tree_batcher,
-            rows_to_discard,
-            row_start,
-            row_end,
-            tree_data: vec![],
-        };
-        // Cannot discard the base row or the root.
-        assert!(rows_to_discard < builder.tree_height());
-
-        // This will panic if leaf_count is not compatible with tree arity.
-        // That is the desired behavior so such a programmer error is caught at development time.
-        let _ = builder.tree_size(rows_to_discard);
-
-        Ok(builder)
-    }
-
     // this method will block the callers thread until the tree is built
-    pub fn build_tree(&mut self, rows_to_discard: usize) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
+    fn build_tree(&mut self, rows_to_discard: usize) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
         let final_tree_size = self.tree_size(rows_to_discard);
         let intermediate_tree_size = self.tree_size(0) + self.leaf_count;
         let arity = TreeArity::to_usize();
@@ -194,6 +135,66 @@ where
         let tree_to_keep = tree_data[tree_data.len() - final_tree_size..].to_vec();
         self.reset();
         Ok((base_row, tree_to_keep))
+    }
+
+    fn reset(&mut self) {
+        self.fill_index = 0;
+        self.data.iter_mut().for_each(|place| *place = Fr::zero());
+        self.tree_data.clear();
+        self.row_start = 0;
+        self.row_end = self.leaf_count;
+    }
+}
+
+fn as_generic_arrays<'a, A: Arity<Fr>>(vec: &'a [Fr]) -> &'a [GenericArray<Fr, A>] {
+    // It is a programmer error to call `as_generic_arrays` on a vector whose underlying data cannot be divided
+    // into an even number of `GenericArray<Fr, Arity>`.
+    assert_eq!(
+        0,
+        (vec.len() * std::mem::size_of::<Fr>()) % std::mem::size_of::<GenericArray<Fr, A>>()
+    );
+
+    // This block does not affect the underlying `Fr`s. It just groups them into `GenericArray`s of length `Arity`.
+    // We know by the assertion above that `vec` can be evenly divided into these units.
+    unsafe {
+        std::slice::from_raw_parts(
+            vec.as_ptr() as *const () as *const GenericArray<Fr, A>,
+            vec.len() / A::to_usize(),
+        )
+    }
+}
+
+impl<TreeArity> TreeBuilder<TreeArity>
+where
+    TreeArity: Arity<Fr>,
+{
+    pub fn new(
+        tree_batcher: Option<Batcher<TreeArity>>,
+        leaf_count: usize,
+        rows_to_discard: usize,
+    ) -> Result<Self, Error> {
+        let row_start = 0;
+        let row_end = leaf_count;
+
+        let builder = Self {
+            leaf_count,
+            data: vec![Fr::zero(); leaf_count],
+            fill_index: 0,
+            tree_constants: PoseidonConstants::<Bls12, TreeArity>::new(),
+            tree_batcher,
+            rows_to_discard,
+            row_start,
+            row_end,
+            tree_data: vec![],
+        };
+        // Cannot discard the base row or the root.
+        assert!(rows_to_discard < builder.tree_height());
+
+        // This will panic if leaf_count is not compatible with tree arity.
+        // That is the desired behavior so such a programmer error is caught at development time.
+        let _ = builder.tree_size(rows_to_discard);
+
+        Ok(builder)
     }
 
     // this function should be called multiple times
