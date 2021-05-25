@@ -16,6 +16,7 @@ where
     fn add_final_leaves(&mut self, leaves: &[Fr]) -> Result<(Vec<Fr>, Vec<Fr>), Error>;
     fn finish_adding_leaves(&mut self);
     fn build_next(&mut self) -> Result<Option<(Vec<Fr>, Vec<Fr>)>, Error>;
+    fn build_tree(&mut self, rows_to_discard: usize) -> Result<(Vec<Fr>, Vec<Fr>), Error>;
 
     fn reset(&mut self);
 }
@@ -72,6 +73,70 @@ where
     // should be called multiple times until either Some(tree) or an error is returned
     fn build_next(&mut self) -> Result<Option<(Vec<Fr>, Vec<Fr>)>, Error> {
         self.build_next_row(self.rows_to_discard)
+    }
+
+    // this method will block the callers thread until the tree is built
+    fn build_tree(&mut self, rows_to_discard: usize) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
+        let final_tree_size = self.tree_size(rows_to_discard);
+        let intermediate_tree_size = self.tree_size(0) + self.leaf_count;
+        let arity = TreeArity::to_usize();
+
+        let mut tree_data = vec![Fr::zero(); intermediate_tree_size];
+
+        tree_data[0..self.leaf_count].copy_from_slice(&self.data);
+
+        let (mut start, mut end) = (0, arity);
+
+        self.check_number_of_leaves()?;
+
+        match &mut self.tree_batcher {
+            Some(batcher) => {
+                let max_batch_size = batcher.max_batch_size();
+
+                let (mut row_start, mut row_end) = (0, self.leaf_count);
+                while row_end < intermediate_tree_size {
+                    let row_size = row_end - row_start;
+                    assert_eq!(0, row_size % arity);
+                    let new_row_size = row_size / arity;
+                    let (new_row_start, new_row_end) = (row_end, row_end + new_row_size);
+
+                    let mut total_hashed = 0;
+                    let mut batch_start = row_start;
+                    while total_hashed < new_row_size {
+                        let batch_end = usize::min(batch_start + (max_batch_size * arity), row_end);
+                        let batch_size = (batch_end - batch_start) / arity;
+                        let preimages =
+                            as_generic_arrays::<TreeArity>(&tree_data[batch_start..batch_end]);
+                        let hashed = batcher.hash(&preimages)?;
+
+                        #[allow(clippy::drop_ref)]
+                        drop(preimages); // make sure we don't reference tree_data anymore
+                        tree_data[new_row_start + total_hashed
+                            ..new_row_start + total_hashed + hashed.len()]
+                            .copy_from_slice(&hashed);
+                        total_hashed += batch_size;
+                        batch_start = batch_end;
+                    }
+
+                    row_start = new_row_start;
+                    row_end = new_row_end;
+                }
+            }
+            None => {
+                for i in self.leaf_count..intermediate_tree_size {
+                    tree_data[i] =
+                        Poseidon::new_with_preimage(&tree_data[start..end], &self.tree_constants)
+                            .hash();
+                    start += arity;
+                    end += arity;
+                }
+            }
+        }
+
+        let base_row = tree_data[..self.leaf_count].to_vec();
+        let tree_to_keep = tree_data[tree_data.len() - final_tree_size..].to_vec();
+        self.reset();
+        Ok((base_row, tree_to_keep))
     }
 
     fn reset(&mut self) {
@@ -137,70 +202,6 @@ where
         let _ = builder.tree_size(rows_to_discard);
 
         Ok(builder)
-    }
-
-    // this method will block the callers thread until the tree is built
-    pub fn build_tree(&mut self, rows_to_discard: usize) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
-        let final_tree_size = self.tree_size(rows_to_discard);
-        let intermediate_tree_size = self.tree_size(0) + self.leaf_count;
-        let arity = TreeArity::to_usize();
-
-        let mut tree_data = vec![Fr::zero(); intermediate_tree_size];
-
-        tree_data[0..self.leaf_count].copy_from_slice(&self.data);
-
-        let (mut start, mut end) = (0, arity);
-
-        self.check_number_of_leaves()?;
-
-        match &mut self.tree_batcher {
-            Some(batcher) => {
-                let max_batch_size = batcher.max_batch_size();
-
-                let (mut row_start, mut row_end) = (0, self.leaf_count);
-                while row_end < intermediate_tree_size {
-                    let row_size = row_end - row_start;
-                    assert_eq!(0, row_size % arity);
-                    let new_row_size = row_size / arity;
-                    let (new_row_start, new_row_end) = (row_end, row_end + new_row_size);
-
-                    let mut total_hashed = 0;
-                    let mut batch_start = row_start;
-                    while total_hashed < new_row_size {
-                        let batch_end = usize::min(batch_start + (max_batch_size * arity), row_end);
-                        let batch_size = (batch_end - batch_start) / arity;
-                        let preimages =
-                            as_generic_arrays::<TreeArity>(&tree_data[batch_start..batch_end]);
-                        let hashed = batcher.hash(&preimages)?;
-
-                        #[allow(clippy::drop_ref)]
-                        drop(preimages); // make sure we don't reference tree_data anymore
-                        tree_data[new_row_start + total_hashed
-                            ..new_row_start + total_hashed + hashed.len()]
-                            .copy_from_slice(&hashed);
-                        total_hashed += batch_size;
-                        batch_start = batch_end;
-                    }
-
-                    row_start = new_row_start;
-                    row_end = new_row_end;
-                }
-            }
-            None => {
-                for i in self.leaf_count..intermediate_tree_size {
-                    tree_data[i] =
-                        Poseidon::new_with_preimage(&tree_data[start..end], &self.tree_constants)
-                            .hash();
-                    start += arity;
-                    end += arity;
-                }
-            }
-        }
-
-        let base_row = tree_data[..self.leaf_count].to_vec();
-        let tree_to_keep = tree_data[tree_data.len() - final_tree_size..].to_vec();
-        self.reset();
-        Ok((base_row, tree_to_keep))
     }
 
     // this function should be called multiple times

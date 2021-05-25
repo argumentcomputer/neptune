@@ -21,7 +21,7 @@ where
     ) -> Result<(Vec<Fr>, Vec<Fr>), Error>;
     fn finish_adding_columns(&mut self);
     fn build_next(&mut self) -> Result<Option<(Vec<Fr>, Vec<Fr>)>, Error>;
-
+    fn build_tree(&mut self) -> Result<(Vec<Fr>, Vec<Fr>), Error>;
     fn reset(&mut self);
 }
 
@@ -106,6 +106,14 @@ where
         res
     }
 
+    fn build_tree(&mut self) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
+        self.tree_builder.add_leaves(&self.data)?;
+        let res = self.tree_builder.build_tree(0);
+        self.reset();
+
+        res
+    }
+
     fn reset(&mut self) {
         self.fill_index = 0;
         self.data.iter_mut().for_each(|place| *place = Fr::zero());
@@ -185,14 +193,6 @@ where
         };
 
         Ok(builder)
-    }
-
-    pub fn build_tree(&mut self) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
-        self.tree_builder.add_leaves(&self.data)?;
-        let res = self.tree_builder.build_tree(0);
-        self.reset();
-
-        res
     }
 
     pub fn tree_size(&self) -> usize {
