@@ -9,7 +9,7 @@ repository = "https://github.com/filecoin-project/neptune"
 
 [dependencies]
 lazy_static = "1.4.0"
-bellperson = { git = "https://github.com/Zondax/bellperson.git", branch = "rebase", version = "0.14", default-features = false }
+bellperson = { git = "https://github.com/Zondax/bellperson.git", branch = "scheduler", version = "0.14", default-features = false }
 blake2s_simd = "0.5"
 blstrs = { version = "0.3.0", optional = true }
 byteorder = "1"
@@ -30,8 +30,8 @@ rand_xorshift = "0.2.0"
 serde_json = "1.0.53"
 
 [build-dependencies]
+bellperson = { git = "https://github.com/Zondax/bellperson.git", branch = "scheduler", version = "0.14", default-features = false }
 ff = { version = "0.3.1", package = "fff" }
-bellperson = { git = "https://github.com/Zondax/bellperson.git", branch = "rebase", version = "0.14", default-features = false }
 
 [[bench]]
 name = "hash"
