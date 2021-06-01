@@ -7,8 +7,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
-## 2.8 - 2021-6-1
-- Use bellperson 0.14 and associated dependency upgrades.
+## 3.0.0 - 2021-6-1
+- Breaking update of `bellperson` to `0.14` and associated dependency upgrades.
 
 ## 2.7 - 2021-3-9
 - Use bellperson 0.13.
