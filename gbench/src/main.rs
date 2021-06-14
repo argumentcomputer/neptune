@@ -8,7 +8,7 @@ use neptune::batch_hasher::BatcherType;
 use neptune::column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait};
 use neptune::error::Error;
 use neptune::BatchHasher;
-use rust_gpu_tools::opencl::GPUSelector;
+use rust_gpu_tools::opencl::Device;
 use std::result::Result;
 use std::thread;
 use std::time::Instant;
@@ -138,7 +138,11 @@ fn main() -> Result<(), Error> {
         .map(|v| {
             v.split(",")
                 .map(|s| s.parse::<u32>().expect("Invalid Bus-Id number!"))
-                .map(|bus_id| BatcherType::CustomGPU(GPUSelector::BusId(bus_id)))
+                .map(|bus_id| {
+                    let device = Device::by_bus_id(bus_id)
+                        .expect(&format!("No device with Bus-ID {} found!", bus_id));
+                    BatcherType::FromDevice(device.clone())
+                })
                 .collect::<Vec<_>>()
         })
         .unwrap_or(vec![default_type]);
