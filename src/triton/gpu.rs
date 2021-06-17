@@ -658,8 +658,7 @@ mod tests {
         )
         .unwrap();
         let mut simple_hasher =
-            SimplePoseidonBatchHasher::<U2>::new_with_strength(Strength::Standard, batch_size)
-                .unwrap();
+            SimplePoseidonBatchHasher::<U2>::new_with_strength(Strength::Standard, batch_size);
 
         let preimages = (0..batch_size)
             .map(|_| GenericArray::<Fr, U2>::generate(|_| Fr::random(&mut rng)))
@@ -695,8 +694,7 @@ mod tests {
         )
         .unwrap();
         let mut simple_hasher =
-            SimplePoseidonBatchHasher::<U2>::new_with_strength(Strength::Strengthened, batch_size)
-                .unwrap();
+            SimplePoseidonBatchHasher::<U2>::new_with_strength(Strength::Strengthened, batch_size);
 
         let preimages = (0..batch_size)
             .map(|_| GenericArray::<Fr, U2>::generate(|_| Fr::random(&mut rng)))
@@ -731,8 +729,7 @@ mod tests {
         )
         .unwrap();
         let mut simple_hasher =
-            SimplePoseidonBatchHasher::<U8>::new_with_strength(Strength::Standard, batch_size)
-                .unwrap();
+            SimplePoseidonBatchHasher::<U8>::new_with_strength(Strength::Standard, batch_size);
 
         let preimages = (0..batch_size)
             .map(|_| GenericArray::<Fr, U8>::generate(|_| Fr::random(&mut rng)))
@@ -767,8 +764,7 @@ mod tests {
         )
         .unwrap();
         let mut simple_hasher =
-            SimplePoseidonBatchHasher::<U8>::new_with_strength(Strength::Strengthened, batch_size)
-                .unwrap();
+            SimplePoseidonBatchHasher::<U8>::new_with_strength(Strength::Strengthened, batch_size);
 
         let preimages = (0..batch_size)
             .map(|_| GenericArray::<Fr, U8>::generate(|_| Fr::random(&mut rng)))
@@ -803,8 +799,7 @@ mod tests {
         )
         .unwrap();
         let mut simple_hasher =
-            SimplePoseidonBatchHasher::<U11>::new_with_strength(Strength::Standard, batch_size)
-                .unwrap();
+            SimplePoseidonBatchHasher::<U11>::new_with_strength(Strength::Standard, batch_size);
 
         let preimages = (0..batch_size)
             .map(|_| GenericArray::<Fr, U11>::generate(|_| Fr::random(&mut rng)))
@@ -839,8 +834,7 @@ mod tests {
         )
         .unwrap();
         let mut simple_hasher =
-            SimplePoseidonBatchHasher::<U11>::new_with_strength(Strength::Strengthened, batch_size)
-                .unwrap();
+            SimplePoseidonBatchHasher::<U11>::new_with_strength(Strength::Strengthened, batch_size);
 
         let preimages = (0..batch_size)
             .map(|_| GenericArray::<Fr, U11>::generate(|_| Fr::random(&mut rng)))
@@ -870,8 +864,7 @@ mod tests {
         let mut gpu_hasher =
             GPUBatchHasher::<U8>::new_with_strength(dev, Strength::Standard, batch_size).unwrap();
         let mut simple_hasher =
-            SimplePoseidonBatchHasher::<U8>::new_with_strength(Strength::Standard, batch_size)
-                .unwrap();
+            SimplePoseidonBatchHasher::<U8>::new_with_strength(Strength::Standard, batch_size);
 
         let preimages = (0..batch_size)
             .map(|_| GenericArray::<Fr, U8>::generate(|_| Fr::random(&mut rng)))
