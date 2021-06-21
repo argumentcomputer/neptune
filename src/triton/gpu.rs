@@ -373,12 +373,9 @@ fn as_u64s<U: ArrayLength<Fr>>(vec: &[GenericArray<Fr, U>]) -> Vec<u64> {
     }
     let fr_size = std::mem::size_of::<Fr>();
     let mut safely = Vec::with_capacity(vec.len() * U::to_usize() * fr_size);
-    #[allow(clippy::needless_range_loop)]
-    for i in 0..vec.len() {
-        for j in 0..U::to_usize() {
-            for k in 0..4 {
-                safely.push(vec[i][j].into_repr().0[k]);
-            }
+    for row in vec {
+        for column in row {
+            safely.extend_from_slice(&column.into_repr().0)
         }
     }
     safely

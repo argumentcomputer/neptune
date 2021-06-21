@@ -122,24 +122,21 @@ impl Grain {
     }
 
     fn get_next_bytes(&mut self, result: &mut [u8]) {
-        let full_bytes = self.field_size as usize / 8;
         let remainder_bits = self.field_size as usize % 8;
 
         // Prime fields will always have remainder bits,
         // but other field types could be supported in the future.
-        #[allow(clippy::needless_range_loop)]
         if remainder_bits > 0 {
             // If there is an unfull byte, it should be the first.
-            result[0] = self.next_byte(remainder_bits);
-
             // Subsequent bytes are packed into result in the order generated.
-            for i in 1..=full_bytes {
-                result[i] = self.next_byte(8);
-            }
+            result[0] = self.next_byte(remainder_bits);
         } else {
-            for i in 0..full_bytes {
-                result[i] = self.next_byte(8);
-            }
+            result[0] = self.next_byte(8);
+        }
+
+        // First byte is already set
+        for item in result.iter_mut().skip(1) {
+            *item = self.next_byte(8)
         }
     }
 }

@@ -19,14 +19,13 @@ fn columns<T>(matrix: &Matrix<T>) -> usize {
     if matrix.is_empty() {
         0
     } else {
-        let length = matrix[0].len();
-        #[allow(clippy::needless_range_loop)]
-        for i in 1..rows(matrix) {
-            if matrix[i].len() != length {
+        let column_length = matrix[0].len();
+        for row in matrix {
+            if row.len() != column_length {
                 panic!("not a matrix");
             }
         }
-        length
+        column_length
     }
 }
 
@@ -71,15 +70,14 @@ pub fn mat_mul<E: ScalarEngine>(
 
     let b_t = transpose::<E>(b);
 
-    let mut res = Vec::with_capacity(rows(a));
-    #[allow(clippy::needless_range_loop)]
-    for i in 0..rows(a) {
-        let mut row = Vec::with_capacity(columns(b));
-        for j in 0..columns(b) {
-            row.push(vec_mul::<E>(&a[i], &b_t[j]));
-        }
-        res.push(row);
-    }
+    let res = a
+        .iter()
+        .map(|input_row| {
+            b_t.iter()
+                .map(|transposed_column| vec_mul::<E>(&input_row, &transposed_column))
+                .collect()
+        })
+        .collect();
 
     Some(res)
 }
@@ -162,10 +160,10 @@ pub fn apply_matrix<E: ScalarEngine>(m: &Matrix<Scalar<E>>, v: &[Scalar<E>]) -> 
     result
 }
 
+#[allow(clippy::needless_range_loop)]
 pub fn transpose<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> Matrix<Scalar<E>> {
     let size = rows(matrix);
     let mut new = Vec::with_capacity(size);
-    #[allow(clippy::needless_range_loop)]
     for j in 0..size {
         let mut row = Vec::with_capacity(size);
         for i in 0..size {
@@ -176,9 +174,9 @@ pub fn transpose<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> Matrix<Scalar<E
     new
 }
 
+#[allow(clippy::needless_range_loop)]
 pub fn make_identity<E: ScalarEngine>(size: usize) -> Matrix<Scalar<E>> {
     let mut result = vec![vec![Scalar::<E>::zero(); size]; size];
-    #[allow(clippy::needless_range_loop)]
     for i in 0..size {
         result[i][i] = Scalar::<E>::one();
     }
@@ -212,21 +210,19 @@ pub fn minor<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>, i: usize, j: usize) ->
     assert!(is_square(matrix));
     let size = rows(matrix);
     assert!(size > 0);
-    let new_size = size - 1;
-    let mut new: Matrix<Scalar<E>> = Vec::with_capacity(new_size);
-
-    #[allow(clippy::needless_range_loop)]
-    for ii in 0..size {
-        if ii != i {
-            let mut row = Vec::with_capacity(new_size);
-            for jj in 0..size {
-                if jj != j {
-                    row.push(matrix[ii][jj]);
-                }
+    let new = matrix
+        .iter()
+        .enumerate()
+        .filter_map(|(ii, row)| {
+            if ii == i {
+                None
+            } else {
+                let mut new_row = row.clone();
+                new_row.remove(j);
+                Some(new_row)
             }
-            new.push(row);
-        }
-    }
+        })
+        .collect();
     assert!(is_square(&new));
     new
 }
