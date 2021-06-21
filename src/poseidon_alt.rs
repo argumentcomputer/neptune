@@ -51,7 +51,7 @@ where
         .round_constants
         .iter()
         .skip(p.constants_offset)
-        .map(|x| Some(x));
+        .map(Some);
 
     p.elements
         .iter_mut()
@@ -158,7 +158,7 @@ pub fn full_round_dynamic<'a, E, A>(
                     },
             )
             .take(p.elements.len())
-            .map(|x| *x)
+            .copied()
             .collect::<Vec<_>>();
 
         // Compute the constants which should be added *before* the next `product_mds`.

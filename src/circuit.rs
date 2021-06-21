@@ -57,7 +57,7 @@ impl<E: Engine> Elt<E> {
 
                 if enforce {
                     cs.enforce(
-                        || format!("enforce num allocation preserves lc"),
+                        || "enforce num allocation preserves lc".to_string(),
                         |_| num.lc(E::Fr::one()),
                         |lc| lc + CS::one(),
                         |lc| lc + v.get_variable(),
@@ -260,6 +260,7 @@ where
 
     /// Set the provided elements with the result of the product between the elements and the appropriate
     /// MDS matrix.
+    #[allow(clippy::collapsible_if)]
     fn product_mds<CS: ConstraintSystem<E>>(&mut self) -> Result<(), SynthesisError> {
         let full_half = self.constants.half_full_rounds;
         let sparse_offset = full_half - 1;
@@ -282,6 +283,7 @@ where
         Ok(())
     }
 
+    #[allow(clippy::ptr_arg)]
     fn product_mds_with_matrix<CS: ConstraintSystem<E>>(
         &mut self,
         matrix: &Matrix<E::Fr>,
@@ -353,20 +355,16 @@ where
     elements.push(tag_element);
     elements.extend(preimage.into_iter().map(Elt::Allocated));
 
-    match constants.hash_type {
-        HashType::ConstantLength(length) => {
-            assert!(length <= arity, "illegal length: constants are malformed");
-            // Add zero-padding.
-            for i in 0..(arity - length) {
-                let allocated =
-                    AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
-                        Ok(E::Fr::zero())
-                    })?;
-                let elt = Elt::Allocated(allocated);
-                elements.push(elt);
-            }
+    if let HashType::ConstantLength(length) = constants.hash_type {
+        assert!(length <= arity, "illegal length: constants are malformed");
+        // Add zero-padding.
+        for i in 0..(arity - length) {
+            let allocated = AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
+                Ok(E::Fr::zero())
+            })?;
+            let elt = Elt::Allocated(allocated);
+            elements.push(elt);
         }
-        _ => (),
     }
 
     let mut p = PoseidonCircuit::new(elements, constants);
@@ -472,6 +470,7 @@ where
 }
 
 /// Calculates (a * (pre_add + b)) + post_add — and enforces that constraint.
+#[allow(clippy::collapsible_if)]
 pub fn mul_sum<CS: ConstraintSystem<E>, E: Engine>(
     mut cs: CS,
     a: &AllocatedNum<E>,

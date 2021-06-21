@@ -1,3 +1,6 @@
+// Allow `&Matrix` in function signatures.
+#![allow(clippy::ptr_arg)]
+
 use ff::{Field, ScalarEngine};
 
 use crate::matrix;
@@ -17,12 +20,12 @@ pub struct MDSMatrices<E: ScalarEngine> {
     pub m_double_prime: Matrix<Scalar<E>>,
 }
 
-pub fn create_mds_matrices<'a, E: ScalarEngine>(t: usize) -> MDSMatrices<E> {
+pub fn create_mds_matrices<E: ScalarEngine>(t: usize) -> MDSMatrices<E> {
     let m = generate_mds::<E>(t);
     derive_mds_matrices(m)
 }
 
-pub fn derive_mds_matrices<'a, E: ScalarEngine>(m: Matrix<Scalar<E>>) -> MDSMatrices<E> {
+pub fn derive_mds_matrices<E: ScalarEngine>(m: Matrix<Scalar<E>>) -> MDSMatrices<E> {
     let m_inv = invert::<E>(&m).unwrap(); // m is MDS so invertible.
     let m_hat = minor::<E>(&m, 0, 0);
     let m_hat_inv = invert::<E>(&m_hat).unwrap(); // If this returns None, then `mds_matrix` was not correctly generated.
@@ -136,6 +139,7 @@ fn generate_mds<E: ScalarEngine>(t: usize) -> Matrix<Scalar<E>> {
         ys.push(y);
     }
 
+    #[allow(clippy::needless_range_loop)]
     for i in 0..t {
         let mut row: Vec<E::Fr> = Vec::with_capacity(t);
         for j in 0..t {
@@ -200,6 +204,7 @@ fn make_double_prime<E: ScalarEngine>(
         .collect()
 }
 
+#[allow(clippy::needless_range_loop)]
 fn make_v_w<E: ScalarEngine>(m: &Matrix<Scalar<E>>) -> (Vec<Scalar<E>>, Vec<Scalar<E>>) {
     let v = m[0][1..].to_vec();
     let mut w = Vec::new();

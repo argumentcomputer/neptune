@@ -1,3 +1,6 @@
+// Allow `&Matrix` in function signatures.
+#![allow(clippy::ptr_arg)]
+
 use ff::{Field, ScalarEngine};
 
 /// Matrix functions here are, at least for now, quick and dirty — intended only to support precomputation of poseidon optimization.
@@ -13,16 +16,17 @@ pub fn rows<T>(matrix: &Matrix<T>) -> usize {
 /// Panics if `matrix` is not actually a matrix. So only use any of these functions on well-formed data.
 /// Only use during constant calculation on matrices known to have been constructed correctly.
 fn columns<T>(matrix: &Matrix<T>) -> usize {
-    if matrix.len() > 0 {
+    if matrix.is_empty() {
+        0
+    } else {
         let length = matrix[0].len();
+        #[allow(clippy::needless_range_loop)]
         for i in 1..rows(matrix) {
             if matrix[i].len() != length {
                 panic!("not a matrix");
             }
         }
         length
-    } else {
-        0
     }
 }
 
@@ -38,7 +42,7 @@ fn scalar_mul<E: ScalarEngine>(scalar: Scalar<E>, matrix: &Matrix<Scalar<E>>) ->
         .map(|row| {
             row.iter()
                 .map(|val| {
-                    let mut prod = scalar.clone();
+                    let mut prod = scalar;
                     prod.mul_assign(val);
                     prod
                 })
@@ -50,7 +54,7 @@ fn scalar_mul<E: ScalarEngine>(scalar: Scalar<E>, matrix: &Matrix<Scalar<E>>) ->
 fn scalar_vec_mul<E: ScalarEngine>(scalar: Scalar<E>, vec: &[Scalar<E>]) -> Vec<Scalar<E>> {
     vec.iter()
         .map(|val| {
-            let mut prod = scalar.clone();
+            let mut prod = scalar;
             prod.mul_assign(val);
             prod
         })
@@ -68,6 +72,7 @@ pub fn mat_mul<E: ScalarEngine>(
     let b_t = transpose::<E>(b);
 
     let mut res = Vec::with_capacity(rows(a));
+    #[allow(clippy::needless_range_loop)]
     for i in 0..rows(a) {
         let mut row = Vec::with_capacity(columns(b));
         for j in 0..columns(b) {
@@ -83,7 +88,7 @@ fn vec_mul<E: ScalarEngine>(a: &[Scalar<E>], b: &[Scalar<E>]) -> Scalar<E> {
     a.iter()
         .zip(b)
         .fold(Scalar::<E>::zero(), |mut acc, (v1, v2)| {
-            let mut tmp = v1.clone();
+            let mut tmp = *v1;
             tmp.mul_assign(&v2);
             acc.add_assign(&tmp);
             acc
@@ -94,7 +99,7 @@ pub fn vec_add<E: ScalarEngine>(a: &[Scalar<E>], b: &[Scalar<E>]) -> Vec<Scalar<
     a.iter()
         .zip(b.iter())
         .map(|(a, b)| {
-            let mut res = a.clone();
+            let mut res = *a;
             res.add_assign(b);
             res
         })
@@ -105,7 +110,7 @@ pub fn vec_sub<E: ScalarEngine>(a: &[Scalar<E>], b: &[Scalar<E>]) -> Vec<Scalar<
     a.iter()
         .zip(b.iter())
         .map(|(a, b)| {
-            let mut res = a.clone();
+            let mut res = *a;
             res.sub_assign(b);
             res
         })
@@ -160,6 +165,7 @@ pub fn apply_matrix<E: ScalarEngine>(m: &Matrix<Scalar<E>>, v: &[Scalar<E>]) -> 
 pub fn transpose<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> Matrix<Scalar<E>> {
     let size = rows(matrix);
     let mut new = Vec::with_capacity(size);
+    #[allow(clippy::needless_range_loop)]
     for j in 0..size {
         let mut row = Vec::with_capacity(size);
         for i in 0..size {
@@ -172,6 +178,7 @@ pub fn transpose<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>) -> Matrix<Scalar<E
 
 pub fn make_identity<E: ScalarEngine>(size: usize) -> Matrix<Scalar<E>> {
     let mut result = vec![vec![Scalar::<E>::zero(); size]; size];
+    #[allow(clippy::needless_range_loop)]
     for i in 0..size {
         result[i][i] = Scalar::<E>::one();
     }
@@ -208,6 +215,7 @@ pub fn minor<E: ScalarEngine>(matrix: &Matrix<Scalar<E>>, i: usize, j: usize) ->
     let new_size = size - 1;
     let mut new: Matrix<Scalar<E>> = Vec::with_capacity(new_size);
 
+    #[allow(clippy::needless_range_loop)]
     for ii in 0..size {
         if ii != i {
             let mut row = Vec::with_capacity(new_size);
@@ -252,7 +260,7 @@ fn eliminate<E: ScalarEngine>(
             // Value is already eliminated.
             result.push(row.to_vec());
         } else {
-            let mut factor = val.clone();
+            let mut factor = val;
             factor.mul_assign(&inv_pivot);
 
             let scaled_pivot = scalar_vec_mul::<E>(factor, &pivot);

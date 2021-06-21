@@ -54,7 +54,7 @@ pub fn generate_constants<E: ScalarEngine>(
                     // Smallest number of bytes which will hold one field element.
                     let mut bytes = vec![0u8; element_bytes as usize];
                     grain.get_next_bytes(&mut bytes);
-                    if let Ok(f) = bytes_into_fr::<E>(&mut bytes) {
+                    if let Ok(f) = bytes_into_fr::<E>(&bytes) {
                         round_constants.push(f);
                         false
                     } else {
@@ -67,7 +67,7 @@ pub fn generate_constants<E: ScalarEngine>(
             panic!("Only prime fields are supported.");
         }
     }
-    return round_constants;
+    round_constants
 }
 
 fn append_bits<T: Into<u128>>(vec: &mut Vec<bool>, n: usize, from: T) {
@@ -127,6 +127,7 @@ impl Grain {
 
         // Prime fields will always have remainder bits,
         // but other field types could be supported in the future.
+        #[allow(clippy::needless_range_loop)]
         if remainder_bits > 0 {
             // If there is an unfull byte, it should be the first.
             result[0] = self.next_byte(remainder_bits);

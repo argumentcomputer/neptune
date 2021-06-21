@@ -256,14 +256,14 @@ fn frs_2d_to_u64s(frs_2d: &[Vec<Fr>]) -> Vec<u64> {
 
 fn array_u64_1d_from_fr(ctx: &FutharkContext, fr: Fr) -> Result<Array_u64_1d, Error> {
     Array_u64_1d::from_vec(*ctx, &fr.into_repr().0, &[4, 1])
-        .map_err(|e| Error::Other(format!("error converting Fr: {:?}", e).to_string()))
+        .map_err(|e| Error::Other(format!("error converting Fr: {:?}", e)))
 }
 
 fn array_u64_1d_from_frs(ctx: &FutharkContext, frs: &[Fr]) -> Result<Array_u64_1d, Error> {
     let u64s = frs_to_u64s(frs);
 
     Array_u64_1d::from_vec(*ctx, u64s.as_slice(), &[(frs.len() * 4) as i64, 1])
-        .map_err(|e| Error::Other(format!("error converting Fr: {:?}", e).to_string()))
+        .map_err(|e| Error::Other(format!("error converting Fr: {:?}", e)))
 }
 
 fn array_u64_2d_from_frs(ctx: &FutharkContext, frs: &[Fr]) -> Result<Array_u64_2d, Error> {
@@ -274,7 +274,7 @@ fn array_u64_2d_from_frs(ctx: &FutharkContext, frs: &[Fr]) -> Result<Array_u64_2
     let dim = [d1, d2];
 
     Array_u64_2d::from_vec(*ctx, u64s.as_slice(), &dim)
-        .map_err(|e| Error::Other(format!("error converting Frs: {:?}", e).to_string()))
+        .map_err(|e| Error::Other(format!("error converting Frs: {:?}", e)))
 }
 
 fn array_u64_3d_from_frs_2d(
@@ -298,7 +298,7 @@ fn array_u64_3d_from_frs_2d(
     let dim = [d3, d2, d1];
 
     Array_u64_3d::from_vec(*ctx, u64s.as_slice(), &dim)
-        .map_err(|e| Error::Other(format!("error converting Frs 2d: {:?}", e).to_string()))
+        .map_err(|e| Error::Other(format!("error converting Frs 2d: {:?}", e)))
 }
 
 pub fn u64s_into_fr(limbs: &[u64]) -> Result<Fr, PrimeFieldDecodingError> {
@@ -306,9 +306,7 @@ pub fn u64s_into_fr(limbs: &[u64]) -> Result<Fr, PrimeFieldDecodingError> {
     let mut limb_arr = [0; 4];
     limb_arr.copy_from_slice(&limbs[..]);
     let repr = FrRepr(limb_arr);
-    let fr = Fr::from_repr(repr);
-
-    fr
+    Fr::from_repr(repr)
 }
 
 fn unpack_fr_array(vec_shape: (Vec<u64>, &[i64])) -> Result<Vec<Fr>, Error> {
@@ -321,7 +319,7 @@ fn unpack_fr_array(vec_shape: (Vec<u64>, &[i64])) -> Result<Vec<Fr>, Error> {
         .map_err(|_| Error::DecodingError)
 }
 
-fn unpack_fr_array_from_monts<'a>(monts: &'a [u64]) -> Result<&'a [Fr], Error> {
+fn unpack_fr_array_from_monts(monts: &[u64]) -> Result<&[Fr], Error> {
     let fr_size = 4;
     let fr_count = monts.len() / fr_size;
     assert_eq!(
@@ -356,7 +354,7 @@ fn as_mont_u64s<'a, U: ArrayLength<Fr>>(vec: &'a [GenericArray<Fr, U>]) -> &'a [
     }
 }
 
-fn frs_as_mont_u64s<'a>(vec: &'a [Fr]) -> &'a [u64] {
+fn frs_as_mont_u64s(vec: &[Fr]) -> &[u64] {
     let fr_size = 4; // Number of limbs in Fr.
     assert_eq!(
         fr_size * std::mem::size_of::<u64>(),
@@ -370,11 +368,12 @@ fn frs_as_mont_u64s<'a>(vec: &'a [Fr]) -> &'a [u64] {
 }
 
 fn as_u64s<U: ArrayLength<Fr>>(vec: &[GenericArray<Fr, U>]) -> Vec<u64> {
-    if vec.len() == 0 {
+    if vec.is_empty() {
         return Vec::new();
     }
     let fr_size = std::mem::size_of::<Fr>();
     let mut safely = Vec::with_capacity(vec.len() * U::to_usize() * fr_size);
+    #[allow(clippy::needless_range_loop)]
     for i in 0..vec.len() {
         for j in 0..U::to_usize() {
             for k in 0..4 {

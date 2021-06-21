@@ -235,6 +235,16 @@ where
     }
 }
 
+impl<E, A> Default for PoseidonConstants<E, A>
+where
+    E: ScalarEngine,
+    A: Arity<E::Fr>,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a, E, A> Poseidon<'a, E, A>
 where
     E: ScalarEngine,
@@ -415,7 +425,10 @@ where
             .for_each(|(l, post)| {
                 // Be explicit that no round key is added after last round of S-boxes.
                 let post_key = if last_round {
-                    panic!("Trying to skip last full round, but there is a key here! ({})");
+                    panic!(
+                        "Trying to skip last full round, but there is a key here! ({})",
+                        post
+                    );
                 } else {
                     Some(post)
                 };
@@ -457,6 +470,7 @@ where
 
     /// Set the provided elements with the result of the product between the elements and the appropriate
     /// MDS matrix.
+    #[allow(clippy::collapsible_if)]
     fn round_product_mds(&mut self) {
         let full_half = self.constants.half_full_rounds;
         let sparse_offset = full_half - 1;
@@ -487,6 +501,7 @@ where
     /// NOTE: This calculates a vector-matrix product (`elements * matrix`) rather than the
     /// expected matrix-vector `(matrix * elements)`. This is a performance optimization which
     /// exploits the fact that our MDS matrices are symmetric by construction.
+    #[allow(clippy::ptr_arg)]
     pub(crate) fn product_mds_with_matrix(&mut self, matrix: &Matrix<E::Fr>) {
         let mut result = GenericArray::<E::Fr, A::ConstantsSize>::generate(|_| E::Fr::zero());
 
