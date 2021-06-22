@@ -1,6 +1,6 @@
 use crate::error::{ClError, ClResult};
 use log::*;
-use rust_gpu_tools::opencl::{cl_device_id, Device, GPUSelector};
+use rust_gpu_tools::opencl::{cl_device_id, Device};
 use std::collections::HashMap;
 use std::fmt;
 use std::ptr;
@@ -10,7 +10,7 @@ use triton::FutharkContext;
 const MAX_LEN: usize = 128;
 
 lazy_static! {
-    pub static ref FUTHARK_CONTEXT_MAP: RwLock<HashMap<String, Arc<Mutex<FutharkContext>>>> =
+    static ref FUTHARK_CONTEXT_MAP: RwLock<HashMap<Device, Arc<Mutex<FutharkContext>>>> =
         RwLock::new(HashMap::new());
 }
 
@@ -60,22 +60,17 @@ fn create_futhark_context(device: bindings::cl_device_id) -> ClResult<FutharkCon
     }
 }
 
-pub fn futhark_context(selector: GPUSelector) -> ClResult<Arc<Mutex<FutharkContext>>> {
-    info!("getting context for ~{:?}", selector);
+pub fn futhark_context(device: &Device) -> ClResult<Arc<Mutex<FutharkContext>>> {
+    info!("getting context for ~{:?}", device.name());
     let mut map = FUTHARK_CONTEXT_MAP.write().unwrap();
 
-    let key = selector.get_key();
-    if !map.contains_key(&key) {
-        if let Some(device) = selector.get_device() {
-            info!("device: {:?}", device);
-            let cl_device_id = device.cl_device_id() as bindings::cl_device_id;
-            let context = create_futhark_context(cl_device_id)?;
-            map.insert(key.clone(), Arc::new(Mutex::new(context)));
-        } else {
-            return Err(ClError::BusIdNotAvailable);
-        }
+    if !map.contains_key(&device) {
+        info!("device: {:?}", device);
+        let cl_device_id = device.cl_device_id() as bindings::cl_device_id;
+        let context = create_futhark_context(cl_device_id)?;
+        map.insert(device.clone(), Arc::new(Mutex::new(context)));
     }
-    Ok(Arc::clone(&map[&key]))
+    Ok(Arc::clone(&map[&device]))
 }
 
 pub fn default_futhark_context() -> ClResult<Arc<Mutex<FutharkContext>>> {
@@ -95,15 +90,23 @@ pub fn default_futhark_context() -> ClResult<Arc<Mutex<FutharkContext>>> {
                 "Using device with bus-id {} for creating the FutharkContext...",
                 bus_id
             );
-            futhark_context(GPUSelector::BusId(bus_id))
+            match Device::by_bus_id(bus_id) {
+                Ok(device) => futhark_context(device),
+                Err(_) => {
+                    error!(
+                       "A device with the given bus-id doesn't exist! Defaulting to the first device..."
+                   );
+                    let all = Device::all();
+                    let device = all.first().ok_or(ClError::DeviceNotFound)?;
+                    futhark_context(device)
+                }
+            }
         }
-        .or_else(|_| {
-            error!(
-                "A device with the given bus-id doesn't exist! Defaulting to the first device..."
-            );
-            futhark_context(GPUSelector::Index(0))
-        }),
-        None => futhark_context(GPUSelector::Index(0)),
+        None => {
+            let all = Device::all();
+            let device = all.first().ok_or(ClError::DeviceNotFound)?;
+            futhark_context(device)
+        }
     }
 }
 

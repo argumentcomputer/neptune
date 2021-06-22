@@ -6,8 +6,6 @@ use crate::{Arity, BatchHasher};
 use bellperson::bls::{Bls12, Fr};
 use ff::Field;
 use generic_array::GenericArray;
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
-use rust_gpu_tools::opencl::GPUSelector;
 
 pub trait ColumnTreeBuilderTrait<ColumnArity, TreeArity>
 where
@@ -118,31 +116,7 @@ where
             None => None,
         };
 
-        let tree_builder = match {
-            match &column_batcher {
-                #[cfg(feature = "gpu")]
-                Some(b) => b.futhark_context(),
-                #[cfg(feature = "opencl")]
-                Some(b) => b.device(),
-                None => None,
-            }
-        } {
-            #[cfg(feature = "gpu")]
-            Some(ctx) => TreeBuilder::<TreeArity>::new(
-                Some(BatcherType::FromFutharkContext(ctx)),
-                leaf_count,
-                max_tree_batch_size,
-                0,
-            )?,
-            #[cfg(feature = "opencl")]
-            Some(device) => TreeBuilder::<TreeArity>::new(
-                Some(BatcherType::FromDevice(device)),
-                leaf_count,
-                max_tree_batch_size,
-                0,
-            )?,
-            None => TreeBuilder::<TreeArity>::new(t, leaf_count, max_tree_batch_size, 0)?,
-        };
+        let tree_builder = TreeBuilder::<TreeArity>::new(t, leaf_count, max_tree_batch_size, 0)?;
 
         let builder = Self {
             leaf_count,

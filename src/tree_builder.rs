@@ -5,8 +5,6 @@ use crate::{Arity, BatchHasher};
 use bellperson::bls::{Bls12, Fr};
 use ff::Field;
 use generic_array::GenericArray;
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
-use rust_gpu_tools::opencl::GPUSelector;
 
 pub trait TreeBuilderTrait<TreeArity>
 where
