@@ -285,8 +285,7 @@ mod test {
         let mut cl_hasher =
             CLBatchHasher::<U2>::new_with_strength(device, Strength::Standard, batch_size).unwrap();
         let mut simple_hasher =
-            SimplePoseidonBatchHasher::<U2>::new_with_strength(Strength::Standard, batch_size)
-                .unwrap();
+            SimplePoseidonBatchHasher::<U2>::new_with_strength(Strength::Standard, batch_size);
 
         let preimages = (0..batch_size)
             .map(|_| GenericArray::<Fr, U2>::generate(|_| Fr::random(&mut rng)))
