@@ -7,24 +7,21 @@ use crate::error::{ClError, Error};
 use crate::poseidon::SimplePoseidonBatchHasher;
 #[cfg(feature = "opencl")]
 use crate::proteus::gpu::ClBatchHasher;
-#[cfg(feature = "gpu")]
-use crate::triton::cl;
+#[cfg(feature = "futhark")]
+use crate::triton::{cl, gpu::GpuBatchHasher};
 use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
 use bellperson::bls::Fr;
 use generic_array::GenericArray;
 
-#[cfg(feature = "gpu")]
+#[cfg(feature = "futhark")]
 use triton::FutharkContext;
-
-#[cfg(feature = "gpu")]
-use crate::triton::gpu::GpuBatchHasher;
 
 pub enum Batcher<A>
 where
     A: Arity<Fr>,
 {
     Cpu(SimplePoseidonBatchHasher<A>),
-    #[cfg(feature = "gpu")]
+    #[cfg(feature = "futhark")]
     OpenCl(GpuBatchHasher<A>),
     #[cfg(feature = "opencl")]
     OpenCl(ClBatchHasher<A>),
@@ -48,7 +45,7 @@ where
     }
 
     /// Create a new GPU batcher for an arbitrarily picked device.
-    #[cfg(feature = "gpu")]
+    #[cfg(feature = "futhark")]
     pub fn pick_gpu(max_batch_size: usize) -> Result<Self, Error> {
         let futhark_context = cl::default_futhark_context()?;
         Ok(Self::OpenCl(GpuBatchHasher::<A>::new_with_strength(
@@ -66,7 +63,7 @@ where
         Self::new(device, max_batch_size)
     }
 
-    #[cfg(feature = "gpu")]
+    #[cfg(feature = "futhark")]
     /// Create a new GPU batcher for a certain device.
     pub fn new(device: &opencl::Device, max_batch_size: usize) -> Result<Self, Error> {
         Self::with_strength(device, DEFAULT_STRENGTH, max_batch_size)
@@ -78,7 +75,7 @@ where
         Self::with_strength(device, DEFAULT_STRENGTH, max_batch_size)
     }
 
-    #[cfg(feature = "gpu")]
+    #[cfg(feature = "futhark")]
     /// Create a new GPU batcher for a certain device with a specified strength.
     pub fn with_strength(
         device: &opencl::Device,
@@ -115,7 +112,7 @@ where
     fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
         match self {
             Batcher::Cpu(batcher) => batcher.hash(preimages),
-            #[cfg(any(feature = "gpu", feature = "opencl"))]
+            #[cfg(any(feature = "futhark", feature = "opencl"))]
             Batcher::OpenCl(batcher) => batcher.hash(preimages),
         }
     }
@@ -123,7 +120,7 @@ where
     fn max_batch_size(&self) -> usize {
         match self {
             Batcher::Cpu(batcher) => batcher.max_batch_size(),
-            #[cfg(any(feature = "gpu", feature = "opencl"))]
+            #[cfg(any(feature = "futhark", feature = "opencl"))]
             Batcher::OpenCl(batcher) => batcher.max_batch_size(),
         }
     }

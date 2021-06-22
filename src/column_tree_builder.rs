@@ -141,7 +141,7 @@ where
     }
 }
 
-#[cfg(all(any(feature = "gpu", feature = "opencl"), not(target_os = "macos")))]
+#[cfg(all(any(feature = "futhark", feature = "opencl"), not(target_os = "macos")))]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -163,7 +163,6 @@ mod tests {
             32,
         );
 
-        #[cfg(any(feature = "gpu", feature = "opencl"))]
         test_column_tree_builder_aux(
             Some(Batcher::pick_gpu(512).unwrap()),
             Some(Batcher::pick_gpu(512).unwrap()),

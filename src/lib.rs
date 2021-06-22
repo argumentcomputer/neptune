@@ -12,8 +12,8 @@ pub use error::Error;
 use ff::{Field, PrimeField, ScalarEngine};
 use generic_array::GenericArray;
 
-#[cfg(all(feature = "gpu", feature = "opencl"))]
-compile_error!("gpu and opencl features are mutually exclusive");
+#[cfg(all(feature = "futhark", feature = "opencl"))]
+compile_error!("futhark and opencl features are mutually exclusive");
 
 /// Poseidon circuit
 pub mod circuit;
@@ -32,18 +32,18 @@ mod round_numbers;
 pub mod hash_type;
 
 /// Tree Builder
-#[cfg(any(feature = "gpu", feature = "opencl"))]
+#[cfg(any(feature = "futhark", feature = "opencl"))]
 pub mod tree_builder;
 
 /// Column Tree Builder
-#[cfg(any(feature = "gpu", feature = "opencl"))]
+#[cfg(any(feature = "futhark", feature = "opencl"))]
 pub mod column_tree_builder;
 
-#[cfg(feature = "gpu")]
+#[cfg(feature = "futhark")]
 pub mod triton;
 
 /// Batch Hasher
-#[cfg(any(feature = "gpu", feature = "opencl"))]
+#[cfg(any(feature = "futhark", feature = "opencl"))]
 pub mod batch_hasher;
 
 #[cfg(feature = "opencl")]

@@ -623,7 +623,7 @@ fn u64_vec<U: ArrayLength<Fr>>(vec: &[GenericArray<Fr, U>]) -> Vec<u64> {
 /// So skip GPU tests by default since real code paths are now enabled.
 /// Users will probably not want to actually run with GPU on macos,
 /// But if experiments show it is viable, then it is possible.
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
+#[cfg(all(feature = "futhark", not(target_os = "macos")))]
 mod tests {
     use super::*;
     use crate::poseidon::{Poseidon, SimplePoseidonBatchHasher};
