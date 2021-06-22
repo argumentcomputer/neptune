@@ -470,7 +470,7 @@ where
 
     /// Set the provided elements with the result of the product between the elements and the appropriate
     /// MDS matrix.
-    #[allow(clippy::collapsible_if)]
+    #[allow(clippy::collapsible_else_if)]
     fn round_product_mds(&mut self) {
         let full_half = self.constants.half_full_rounds;
         let sparse_offset = full_half - 1;

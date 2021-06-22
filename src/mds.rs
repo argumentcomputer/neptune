@@ -10,6 +10,7 @@ use crate::matrix::{
 };
 use crate::scalar_from_u64;
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Clone, Debug, PartialEq)]
 pub struct MDSMatrices<E: ScalarEngine> {
     pub m: Matrix<Scalar<E>>,

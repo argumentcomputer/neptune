@@ -7,6 +7,7 @@ use bellperson::bls::{Bls12, Fr, FrRepr};
 use ff::{PrimeField, PrimeFieldDecodingError};
 use generic_array::{typenum, ArrayLength, GenericArray};
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
 use std::sync::{Arc, Mutex};
@@ -103,6 +104,7 @@ impl BatcherState {
 }
 
 /// `GPUBatchHasher` implements `BatchHasher` and performs the batched hashing on GPU.
+#[allow(clippy::upper_case_acronyms)]
 pub struct GPUBatchHasher<A> {
     ctx: Arc<Mutex<FutharkContext>>,
     state: BatcherState,
@@ -191,6 +193,7 @@ where
     }
 }
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug)]
 struct GPUConstants<A>(PoseidonConstants<Bls12, A>)
 where
@@ -303,8 +306,7 @@ fn array_u64_3d_from_frs_2d(
 
 pub fn u64s_into_fr(limbs: &[u64]) -> Result<Fr, PrimeFieldDecodingError> {
     assert_eq!(limbs.len(), 4);
-    let mut limb_arr = [0; 4];
-    limb_arr.copy_from_slice(&limbs[..]);
+    let limb_arr = limbs.try_into().expect("Correct length was asserted.");
     let repr = FrRepr(limb_arr);
     Fr::from_repr(repr)
 }
@@ -338,7 +340,7 @@ fn unpack_fr_array_from_monts(monts: &[u64]) -> Result<&[Fr], Error> {
     Ok(frs)
 }
 
-fn as_mont_u64s<'a, U: ArrayLength<Fr>>(vec: &'a [GenericArray<Fr, U>]) -> &'a [u64] {
+fn as_mont_u64s<U: ArrayLength<Fr>>(vec: &[GenericArray<Fr, U>]) -> &[u64] {
     let fr_size = 4; // Number of limbs in Fr.
     assert_eq!(
         fr_size * std::mem::size_of::<u64>(),
@@ -614,7 +616,7 @@ where
     Ok((frs.to_vec(), state))
 }
 
-fn u64_vec<'a, U: ArrayLength<Fr>>(vec: &'a [GenericArray<Fr, U>]) -> Vec<u64> {
+fn u64_vec<U: ArrayLength<Fr>>(vec: &[GenericArray<Fr, U>]) -> Vec<u64> {
     vec![0; vec.len() * U::to_usize() * std::mem::size_of::<Fr>()]
 }
 

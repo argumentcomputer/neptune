@@ -42,6 +42,7 @@ impl fmt::Display for ClError {
     }
 }
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone)]
 /// Possible error states for the hashing.
 pub enum Error {

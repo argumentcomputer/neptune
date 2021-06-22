@@ -12,11 +12,13 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use typenum::{U11, U2, U8};
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug)]
 struct GPUConstants<A>(PoseidonConstants<Bls12, A>)
 where
     A: Arity<Fr>;
 
+#[allow(clippy::upper_case_acronyms)]
 pub struct CLBatchHasher<A>
 where
     A: Arity<Fr>,
@@ -51,6 +53,7 @@ impl<A> GPUConstants<A>
 where
     A: Arity<Fr>,
 {
+    #[allow(clippy::suspicious_operation_groupings)]
     fn derived_constants(&self) -> DerivedConstants {
         let c = &self.0;
         let arity = c.arity();

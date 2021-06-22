@@ -62,9 +62,7 @@ where
     #[cfg(feature = "opencl")]
     pub fn pick_gpu(max_batch_size: usize) -> Result<Self, Error> {
         let all = opencl::Device::all();
-        let device = all
-            .first()
-            .ok_or_else(|| Error::ClError(ClError::DeviceNotFound))?;
+        let device = all.first().ok_or(Error::ClError(ClError::DeviceNotFound))?;
         Self::new(device, max_batch_size)
     }
 
