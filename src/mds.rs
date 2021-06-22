@@ -10,9 +10,8 @@ use crate::matrix::{
 };
 use crate::scalar_from_u64;
 
-#[allow(clippy::upper_case_acronyms)]
 #[derive(Clone, Debug, PartialEq)]
-pub struct MDSMatrices<E: ScalarEngine> {
+pub struct MdsMatrices<E: ScalarEngine> {
     pub m: Matrix<Scalar<E>>,
     pub m_inv: Matrix<Scalar<E>>,
     pub m_hat: Matrix<Scalar<E>>,
@@ -21,19 +20,19 @@ pub struct MDSMatrices<E: ScalarEngine> {
     pub m_double_prime: Matrix<Scalar<E>>,
 }
 
-pub fn create_mds_matrices<E: ScalarEngine>(t: usize) -> MDSMatrices<E> {
+pub fn create_mds_matrices<E: ScalarEngine>(t: usize) -> MdsMatrices<E> {
     let m = generate_mds::<E>(t);
     derive_mds_matrices(m)
 }
 
-pub fn derive_mds_matrices<E: ScalarEngine>(m: Matrix<Scalar<E>>) -> MDSMatrices<E> {
+pub fn derive_mds_matrices<E: ScalarEngine>(m: Matrix<Scalar<E>>) -> MdsMatrices<E> {
     let m_inv = invert::<E>(&m).unwrap(); // m is MDS so invertible.
     let m_hat = minor::<E>(&m, 0, 0);
     let m_hat_inv = invert::<E>(&m_hat).unwrap(); // If this returns None, then `mds_matrix` was not correctly generated.
     let m_prime = make_prime::<E>(&m);
     let m_double_prime = make_double_prime::<E>(&m, &m_hat_inv);
 
-    MDSMatrices {
+    MdsMatrices {
         m,
         m_inv,
         m_hat,
@@ -221,7 +220,7 @@ mod tests {
     }
 
     fn test_mds_matrices_creation_aux(width: usize) {
-        let MDSMatrices {
+        let MdsMatrices {
             m,
             m_inv,
             m_hat,
@@ -256,7 +255,7 @@ mod tests {
     fn test_swapping_aux(width: usize) {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let MDSMatrices {
+        let MdsMatrices {
             m,
             m_inv: _,
             m_hat: _,

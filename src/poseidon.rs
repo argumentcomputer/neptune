@@ -1,6 +1,6 @@
 use crate::hash_type::HashType;
 use crate::matrix::Matrix;
-use crate::mds::{create_mds_matrices, factor_to_sparse_matrixes, MDSMatrices, SparseMatrix};
+use crate::mds::{create_mds_matrices, factor_to_sparse_matrixes, MdsMatrices, SparseMatrix};
 use crate::poseidon_alt::{hash_correct, hash_optimized_dynamic};
 use crate::preprocessing::compress_round_constants;
 use crate::{matrix, quintic_s_box, BatchHasher, Strength, DEFAULT_STRENGTH};
@@ -103,7 +103,7 @@ where
     E: ScalarEngine,
     A: Arity<E::Fr>,
 {
-    pub mds_matrices: MDSMatrices<E>,
+    pub mds_matrices: MdsMatrices<E>,
     pub round_constants: Vec<E::Fr>,
     pub compressed_round_constants: Vec<E::Fr>,
     pub pre_sparse_matrix: Matrix<E::Fr>,

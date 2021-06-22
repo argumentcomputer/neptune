@@ -1,5 +1,5 @@
 use crate::matrix::{apply_matrix, vec_add};
-use crate::mds::MDSMatrices;
+use crate::mds::MdsMatrices;
 use crate::quintic_s_box;
 use ff::{Field, ScalarEngine};
 
@@ -11,7 +11,7 @@ pub(crate) fn compress_round_constants<E: ScalarEngine>(
     full_rounds: usize,
     partial_rounds: usize,
     round_constants: &Vec<E::Fr>,
-    mds_matrices: &MDSMatrices<E>,
+    mds_matrices: &MdsMatrices<E>,
     partial_preprocessed: usize,
 ) -> Vec<E::Fr> {
     let mds_matrix = &mds_matrices.m;

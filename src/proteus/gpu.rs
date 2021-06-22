@@ -12,19 +12,17 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use typenum::{U11, U2, U8};
 
-#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug)]
-struct GPUConstants<A>(PoseidonConstants<Bls12, A>)
+struct GpuConstants<A>(PoseidonConstants<Bls12, A>)
 where
     A: Arity<Fr>;
 
-#[allow(clippy::upper_case_acronyms)]
-pub struct CLBatchHasher<A>
+pub struct ClBatchHasher<A>
 where
     A: Arity<Fr>,
 {
     device: opencl::Device,
-    constants: GPUConstants<A>,
+    constants: GpuConstants<A>,
     constants_buffer: opencl::Buffer<Fr>,
     max_batch_size: usize,
     program: opencl::Program,
@@ -49,7 +47,7 @@ pub struct DerivedConstants {
     pub v_rest_offset: usize,
 }
 
-impl<A> GPUConstants<A>
+impl<A> GpuConstants<A>
 where
     A: Arity<Fr>,
 {
@@ -102,7 +100,7 @@ where
     }
 }
 
-impl<A> GPUConstants<A>
+impl<A> GpuConstants<A>
 where
     A: Arity<Fr>,
 {
@@ -134,16 +132,16 @@ where
 
         let mut buffer = program
             .create_buffer::<Fr>(constants_elements)
-            .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+            .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
 
         let c = &self.0;
 
         buffer
             .write_from(domain_tag_offset, &[c.domain_tag])
-            .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+            .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
         buffer
             .write_from(round_keys_offset, &c.compressed_round_constants)
-            .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+            .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
         buffer
             .write_from(
                 mds_matrix_offset,
@@ -155,7 +153,7 @@ where
                     .collect::<Vec<_>>()
                     .as_slice(),
             )
-            .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+            .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
         buffer
             .write_from(
                 pre_sparse_matrix_offset,
@@ -166,7 +164,7 @@ where
                     .collect::<Vec<_>>()
                     .as_slice(),
             )
-            .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+            .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
         let mut sm_elts = Vec::new();
         for sm in c.sparse_matrixes.iter() {
             sm_elts.extend(sm.w_hat.iter());
@@ -174,13 +172,13 @@ where
         }
         buffer
             .write_from(sparse_matrixes_offset, &sm_elts)
-            .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+            .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
 
         Ok(buffer)
     }
 }
 
-impl<A> CLBatchHasher<A>
+impl<A> ClBatchHasher<A>
 where
     A: Arity<Fr>,
 {
@@ -194,10 +192,10 @@ where
         strength: Strength,
         max_batch_size: usize,
     ) -> Result<Self, Error> {
-        let constants = GPUConstants(PoseidonConstants::<Bls12, A>::new_with_strength(strength));
+        let constants = GpuConstants(PoseidonConstants::<Bls12, A>::new_with_strength(strength));
         let src = generate_program::<Fr>(true, constants.derived_constants());
         let program = opencl::Program::from_opencl(device.clone(), &src)
-            .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+            .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
         let constants_buffer = constants.to_buffer(&program)?;
         Ok(Self {
             device: device.clone(),
@@ -213,7 +211,7 @@ where
     }
 }
 const LOCAL_WORK_SIZE: usize = 256;
-impl<A> BatchHasher<A> for CLBatchHasher<A>
+impl<A> BatchHasher<A> for ClBatchHasher<A>
 where
     A: Arity<Fr>,
 {
@@ -237,15 +235,15 @@ where
         let mut preimages_buffer = self
             .program
             .create_buffer::<GenericArray<Fr, A>>(num_hashes)
-            .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+            .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
 
         preimages_buffer
             .write_from(0, preimages)
-            .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+            .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
         let result_buffer = self
             .program
             .create_buffer::<Fr>(num_hashes)
-            .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+            .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
 
         kernel
             .arg(&self.constants_buffer)
@@ -253,12 +251,12 @@ where
             .arg(&result_buffer)
             .arg(preimages.len() as i32)
             .run()
-            .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+            .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
 
         let mut frs = vec![<Fr as Field>::zero(); num_hashes];
         result_buffer
             .read_into(0, &mut frs)
-            .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+            .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
         Ok(frs.to_vec())
     }
 
@@ -286,7 +284,7 @@ mod test {
         let batch_size = 1025;
 
         let mut cl_hasher =
-            CLBatchHasher::<U2>::new_with_strength(device, Strength::Standard, batch_size).unwrap();
+            ClBatchHasher::<U2>::new_with_strength(device, Strength::Standard, batch_size).unwrap();
         let mut simple_hasher =
             SimplePoseidonBatchHasher::<U2>::new_with_strength(Strength::Standard, batch_size);
 
