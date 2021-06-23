@@ -50,7 +50,7 @@ pub enum Error {
     /// Attempt to reference an index element that is out of bounds
     IndexOutOfBounds,
     /// The provided leaf was not found in the tree
-    GPUError(String),
+    GpuError(String),
     #[cfg(any(feature = "gpu", feature = "opencl"))]
     ClError(ClError),
     #[cfg(feature = "gpu")]
@@ -83,7 +83,7 @@ impl fmt::Display for Error {
                 "The size of the buffer cannot be greater than the hash arity."
             ),
             Error::IndexOutOfBounds => write!(f, "The referenced index is outs of bounds."),
-            Error::GPUError(s) => write!(f, "GPU Error: {}", s),
+            Error::GpuError(s) => write!(f, "GPU Error: {}", s),
             #[cfg(any(feature = "gpu", feature = "opencl"))]
             Error::ClError(e) => write!(f, "OpenCL Error: {}", e),
             #[cfg(feature = "gpu")]

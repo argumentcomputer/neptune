@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use crate::error::{ClError, Error};
 use crate::poseidon::SimplePoseidonBatchHasher;
 #[cfg(feature = "opencl")]
-use crate::proteus::gpu::CLBatchHasher;
+use crate::proteus::gpu::ClBatchHasher;
 #[cfg(feature = "gpu")]
 use crate::triton::cl;
 use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
@@ -17,7 +17,7 @@ use generic_array::GenericArray;
 use triton::FutharkContext;
 
 #[cfg(feature = "gpu")]
-use crate::triton::gpu::GPUBatchHasher;
+use crate::triton::gpu::GpuBatchHasher;
 
 pub enum Batcher<A>
 where
@@ -25,9 +25,9 @@ where
 {
     Cpu(SimplePoseidonBatchHasher<A>),
     #[cfg(feature = "gpu")]
-    OpenCl(GPUBatchHasher<A>),
+    OpenCl(GpuBatchHasher<A>),
     #[cfg(feature = "opencl")]
-    OpenCl(CLBatchHasher<A>),
+    OpenCl(ClBatchHasher<A>),
 }
 
 impl<A> Batcher<A>
@@ -51,7 +51,7 @@ where
     #[cfg(feature = "gpu")]
     pub fn pick_gpu(max_batch_size: usize) -> Result<Self, Error> {
         let futhark_context = cl::default_futhark_context()?;
-        Ok(Self::OpenCl(GPUBatchHasher::<A>::new_with_strength(
+        Ok(Self::OpenCl(GpuBatchHasher::<A>::new_with_strength(
             futhark_context,
             DEFAULT_STRENGTH,
             max_batch_size,
@@ -62,9 +62,7 @@ where
     #[cfg(feature = "opencl")]
     pub fn pick_gpu(max_batch_size: usize) -> Result<Self, Error> {
         let all = opencl::Device::all();
-        let device = all
-            .first()
-            .ok_or_else(|| Error::ClError(ClError::DeviceNotFound))?;
+        let device = all.first().ok_or(Error::ClError(ClError::DeviceNotFound))?;
         Self::new(device, max_batch_size)
     }
 
@@ -88,7 +86,7 @@ where
         max_batch_size: usize,
     ) -> Result<Self, Error> {
         let futhark_context = cl::futhark_context(&device)?;
-        Ok(Self::OpenCl(GPUBatchHasher::<A>::new_with_strength(
+        Ok(Self::OpenCl(GpuBatchHasher::<A>::new_with_strength(
             futhark_context,
             strength,
             max_batch_size,
@@ -102,7 +100,7 @@ where
         strength: Strength,
         max_batch_size: usize,
     ) -> Result<Self, Error> {
-        Ok(Self::OpenCl(CLBatchHasher::<A>::new_with_strength(
+        Ok(Self::OpenCl(ClBatchHasher::<A>::new_with_strength(
             &device,
             strength,
             max_batch_size,

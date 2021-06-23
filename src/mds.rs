@@ -1,3 +1,6 @@
+// Allow `&Matrix` in function signatures.
+#![allow(clippy::ptr_arg)]
+
 use ff::{Field, ScalarEngine};
 
 use crate::matrix;
@@ -8,7 +11,7 @@ use crate::matrix::{
 use crate::scalar_from_u64;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct MDSMatrices<E: ScalarEngine> {
+pub struct MdsMatrices<E: ScalarEngine> {
     pub m: Matrix<Scalar<E>>,
     pub m_inv: Matrix<Scalar<E>>,
     pub m_hat: Matrix<Scalar<E>>,
@@ -17,19 +20,19 @@ pub struct MDSMatrices<E: ScalarEngine> {
     pub m_double_prime: Matrix<Scalar<E>>,
 }
 
-pub fn create_mds_matrices<'a, E: ScalarEngine>(t: usize) -> MDSMatrices<E> {
+pub fn create_mds_matrices<E: ScalarEngine>(t: usize) -> MdsMatrices<E> {
     let m = generate_mds::<E>(t);
     derive_mds_matrices(m)
 }
 
-pub fn derive_mds_matrices<'a, E: ScalarEngine>(m: Matrix<Scalar<E>>) -> MDSMatrices<E> {
+pub fn derive_mds_matrices<E: ScalarEngine>(m: Matrix<Scalar<E>>) -> MdsMatrices<E> {
     let m_inv = invert::<E>(&m).unwrap(); // m is MDS so invertible.
     let m_hat = minor::<E>(&m, 0, 0);
     let m_hat_inv = invert::<E>(&m_hat).unwrap(); // If this returns None, then `mds_matrix` was not correctly generated.
     let m_prime = make_prime::<E>(&m);
     let m_double_prime = make_double_prime::<E>(&m, &m_hat_inv);
 
-    MDSMatrices {
+    MdsMatrices {
         m,
         m_inv,
         m_hat,
@@ -118,10 +121,6 @@ pub fn factor_to_sparse_matrices<E: ScalarEngine>(
 
 fn generate_mds<E: ScalarEngine>(t: usize) -> Matrix<Scalar<E>> {
     // Source: https://github.com/dusk-network/dusk-poseidon-merkle/commit/776c37734ea2e71bb608ce4bc58fdb5f208112a7#diff-2eee9b20fb23edcc0bf84b14167cbfdc
-    let mut matrix: Vec<Vec<E::Fr>> = Vec::with_capacity(t);
-    let mut xs: Vec<E::Fr> = Vec::with_capacity(t);
-    let mut ys: Vec<E::Fr> = Vec::with_capacity(t);
-
     // Generate x and y values deterministically for the cauchy matrix
     // where x[i] != y[i] to allow the values to be inverted
     // and there are no duplicates in the x vector or y vector, so that the determinant is always non-zero
@@ -129,24 +128,22 @@ fn generate_mds<E: ScalarEngine>(t: usize) -> Matrix<Scalar<E>> {
     // [c d]
     // det(M) = (ad - bc) ; if a == b and c == d => det(M) =0
     // For an MDS matrix, every possible mxm submatrix, must have det(M) != 0
-    for i in 0..t {
-        let x = scalar_from_u64((i) as u64);
-        let y = scalar_from_u64((i + t) as u64);
-        xs.push(x);
-        ys.push(y);
-    }
+    let xs: Vec<E::Fr> = (0..t as u64).map(scalar_from_u64).collect();
+    let ys: Vec<E::Fr> = (t as u64..2 * t as u64).map(scalar_from_u64).collect();
 
-    for i in 0..t {
-        let mut row: Vec<E::Fr> = Vec::with_capacity(t);
-        for j in 0..t {
-            // Generate the entry at (i,j)
-            let mut tmp = xs[i];
-            tmp.add_assign(&ys[j]);
-            let entry = tmp.inverse().unwrap();
-            row.insert(j, entry);
-        }
-        matrix.push(row);
-    }
+    let matrix = xs
+        .iter()
+        .map(|xs_item| {
+            ys.iter()
+                .map(|ys_item| {
+                    // Generate the entry at (i,j)
+                    let mut tmp = *xs_item;
+                    tmp.add_assign(&ys_item);
+                    tmp.inverse().unwrap()
+                })
+                .collect()
+        })
+        .collect();
 
     // To ensure correctness, we would check all sub-matrices for invertibility. Meanwhile, this is a simple sanity check.
     assert!(is_invertible::<E>(&matrix));
@@ -202,11 +199,7 @@ fn make_double_prime<E: ScalarEngine>(
 
 fn make_v_w<E: ScalarEngine>(m: &Matrix<Scalar<E>>) -> (Vec<Scalar<E>>, Vec<Scalar<E>>) {
     let v = m[0][1..].to_vec();
-    let mut w = Vec::new();
-    for i in 1..m.len() {
-        w.push(m[i][0]);
-    }
-
+    let w = m.iter().skip(1).map(|column| column[0]).collect();
     (v, w)
 }
 
@@ -227,7 +220,7 @@ mod tests {
     }
 
     fn test_mds_matrices_creation_aux(width: usize) {
-        let MDSMatrices {
+        let MdsMatrices {
             m,
             m_inv,
             m_hat,
@@ -262,7 +255,7 @@ mod tests {
     fn test_swapping_aux(width: usize) {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let MDSMatrices {
+        let MdsMatrices {
             m,
             m_inv: _,
             m_hat: _,

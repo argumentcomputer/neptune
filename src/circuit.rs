@@ -22,19 +22,11 @@ enum Elt<E: Engine> {
 
 impl<E: Engine> Elt<E> {
     fn is_allocated(&self) -> bool {
-        if let Self::Allocated(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Self::Allocated(_))
     }
 
     fn is_num(&self) -> bool {
-        if let Self::Num(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Self::Num(_))
     }
 
     fn num_from_fr<CS: ConstraintSystem<E>>(fr: E::Fr) -> Self {
@@ -51,13 +43,12 @@ impl<E: Engine> Elt<E> {
             Self::Allocated(v) => Ok(v.clone()),
             Self::Num(num) => {
                 let v = AllocatedNum::alloc(cs.namespace(|| "allocate for Elt::Num"), || {
-                    num.get_value()
-                        .ok_or_else(|| SynthesisError::AssignmentMissing)
+                    num.get_value().ok_or(SynthesisError::AssignmentMissing)
                 })?;
 
                 if enforce {
                     cs.enforce(
-                        || format!("enforce num allocation preserves lc"),
+                        || "enforce num allocation preserves lc".to_string(),
                         |_| num.lc(E::Fr::one()),
                         |lc| lc + CS::one(),
                         |lc| lc + v.get_variable(),
@@ -260,6 +251,7 @@ where
 
     /// Set the provided elements with the result of the product between the elements and the appropriate
     /// MDS matrix.
+    #[allow(clippy::collapsible_else_if)]
     fn product_mds<CS: ConstraintSystem<E>>(&mut self) -> Result<(), SynthesisError> {
         let full_half = self.constants.half_full_rounds;
         let sparse_offset = full_half - 1;
@@ -282,6 +274,7 @@ where
         Ok(())
     }
 
+    #[allow(clippy::ptr_arg)]
     fn product_mds_with_matrix<CS: ConstraintSystem<E>>(
         &mut self,
         matrix: &Matrix<E::Fr>,
@@ -353,20 +346,16 @@ where
     elements.push(tag_element);
     elements.extend(preimage.into_iter().map(Elt::Allocated));
 
-    match constants.hash_type {
-        HashType::ConstantLength(length) => {
-            assert!(length <= arity, "illegal length: constants are malformed");
-            // Add zero-padding.
-            for i in 0..(arity - length) {
-                let allocated =
-                    AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
-                        Ok(E::Fr::zero())
-                    })?;
-                let elt = Elt::Allocated(allocated);
-                elements.push(elt);
-            }
+    if let HashType::ConstantLength(length) = constants.hash_type {
+        assert!(length <= arity, "illegal length: constants are malformed");
+        // Add zero-padding.
+        for i in 0..(arity - length) {
+            let allocated = AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
+                Ok(E::Fr::zero())
+            })?;
+            let elt = Elt::Allocated(allocated);
+            elements.push(elt);
         }
-        _ => (),
     }
 
     let mut p = PoseidonCircuit::new(elements, constants);
@@ -451,9 +440,7 @@ where
     CS: ConstraintSystem<E>,
 {
     let res = AllocatedNum::alloc(cs.namespace(|| "squared sum"), || {
-        let mut tmp = num
-            .get_value()
-            .ok_or_else(|| SynthesisError::AssignmentMissing)?;
+        let mut tmp = num.get_value().ok_or(SynthesisError::AssignmentMissing)?;
         tmp.add_assign(&to_add);
         tmp.square();
 
@@ -472,6 +459,7 @@ where
 }
 
 /// Calculates (a * (pre_add + b)) + post_add — and enforces that constraint.
+#[allow(clippy::collapsible_else_if)]
 pub fn mul_sum<CS: ConstraintSystem<E>, E: Engine>(
     mut cs: CS,
     a: &AllocatedNum<E>,
@@ -484,16 +472,11 @@ where
     CS: ConstraintSystem<E>,
 {
     let res = AllocatedNum::alloc(cs.namespace(|| "mul_sum"), || {
-        let mut tmp = b
-            .get_value()
-            .ok_or_else(|| SynthesisError::AssignmentMissing)?;
+        let mut tmp = b.get_value().ok_or(SynthesisError::AssignmentMissing)?;
         if let Some(x) = pre_add {
             tmp.add_assign(&x);
         }
-        tmp.mul_assign(
-            &a.get_value()
-                .ok_or_else(|| SynthesisError::AssignmentMissing)?,
-        );
+        tmp.mul_assign(&a.get_value().ok_or(SynthesisError::AssignmentMissing)?);
         if let Some(x) = post_add {
             tmp.add_assign(&x);
         }
@@ -554,14 +537,9 @@ where
     CS: ConstraintSystem<E>,
 {
     let res = AllocatedNum::alloc(cs.namespace(|| "mul_sum"), || {
-        let mut tmp = b
-            .get_value()
-            .ok_or_else(|| SynthesisError::AssignmentMissing)?;
+        let mut tmp = b.get_value().ok_or(SynthesisError::AssignmentMissing)?;
         tmp.add_assign(&to_add);
-        tmp.mul_assign(
-            &a.get_value()
-                .ok_or_else(|| SynthesisError::AssignmentMissing)?,
-        );
+        tmp.mul_assign(&a.get_value().ok_or(SynthesisError::AssignmentMissing)?);
 
         Ok(tmp)
     })?;

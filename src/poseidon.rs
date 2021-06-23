@@ -1,6 +1,6 @@
 use crate::hash_type::HashType;
 use crate::matrix::Matrix;
-use crate::mds::{create_mds_matrices, factor_to_sparse_matrixes, MDSMatrices, SparseMatrix};
+use crate::mds::{create_mds_matrices, factor_to_sparse_matrixes, MdsMatrices, SparseMatrix};
 use crate::poseidon_alt::{hash_correct, hash_optimized_dynamic};
 use crate::preprocessing::compress_round_constants;
 use crate::{matrix, quintic_s_box, BatchHasher, Strength, DEFAULT_STRENGTH};
@@ -103,7 +103,7 @@ where
     E: ScalarEngine,
     A: Arity<E::Fr>,
 {
-    pub mds_matrices: MDSMatrices<E>,
+    pub mds_matrices: MdsMatrices<E>,
     pub round_constants: Vec<E::Fr>,
     pub compressed_round_constants: Vec<E::Fr>,
     pub pre_sparse_matrix: Matrix<E::Fr>,
@@ -232,6 +232,16 @@ where
     #[inline]
     pub fn width(&self) -> usize {
         A::ConstantsSize::to_usize()
+    }
+}
+
+impl<E, A> Default for PoseidonConstants<E, A>
+where
+    E: ScalarEngine,
+    A: Arity<E::Fr>,
+{
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -415,7 +425,10 @@ where
             .for_each(|(l, post)| {
                 // Be explicit that no round key is added after last round of S-boxes.
                 let post_key = if last_round {
-                    panic!("Trying to skip last full round, but there is a key here! ({})");
+                    panic!(
+                        "Trying to skip last full round, but there is a key here! ({})",
+                        post
+                    );
                 } else {
                     Some(post)
                 };
@@ -457,6 +470,7 @@ where
 
     /// Set the provided elements with the result of the product between the elements and the appropriate
     /// MDS matrix.
+    #[allow(clippy::collapsible_else_if)]
     fn round_product_mds(&mut self) {
         let full_half = self.constants.half_full_rounds;
         let sparse_offset = full_half - 1;
@@ -487,6 +501,7 @@ where
     /// NOTE: This calculates a vector-matrix product (`elements * matrix`) rather than the
     /// expected matrix-vector `(matrix * elements)`. This is a performance optimization which
     /// exploits the fact that our MDS matrices are symmetric by construction.
+    #[allow(clippy::ptr_arg)]
     pub(crate) fn product_mds_with_matrix(&mut self, matrix: &Matrix<E::Fr>) {
         let mut result = GenericArray::<E::Fr, A::ConstantsSize>::generate(|_| E::Fr::zero());
 

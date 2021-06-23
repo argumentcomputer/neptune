@@ -11,7 +11,7 @@ use ff::{Field, ScalarEngine};
 /// This code path implements a naive and evidently correct poseidon hash.
 
 /// The returned element is the second poseidon element, the first is the arity tag.
-pub fn hash_correct<'a, E, A>(p: &mut Poseidon<'a, E, A>) -> E::Fr
+pub fn hash_correct<E, A>(p: &mut Poseidon<E, A>) -> E::Fr
 where
     E: ScalarEngine,
     A: Arity<E::Fr>,
@@ -37,7 +37,7 @@ where
     p.elements[1]
 }
 
-pub fn full_round<'a, E, A>(p: &mut Poseidon<'a, E, A>)
+pub fn full_round<E, A>(p: &mut Poseidon<E, A>)
 where
     E: ScalarEngine,
     A: Arity<E::Fr>,
@@ -51,7 +51,7 @@ where
         .round_constants
         .iter()
         .skip(p.constants_offset)
-        .map(|x| Some(x));
+        .map(Some);
 
     p.elements
         .iter_mut()
@@ -68,7 +68,7 @@ where
 }
 
 /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
-pub fn partial_round<'a, E, A>(p: &mut Poseidon<'a, E, A>)
+pub fn partial_round<E, A>(p: &mut Poseidon<E, A>)
 where
     E: ScalarEngine,
     A: Arity<E::Fr>,
@@ -91,7 +91,7 @@ where
 /// Comments reference notation also expanded in matrix.rs and help clarify the relationship between
 /// our optimizations and those described in the paper.
 
-pub fn hash_optimized_dynamic<'a, E, A>(p: &mut Poseidon<'a, E, A>) -> E::Fr
+pub fn hash_optimized_dynamic<E, A>(p: &mut Poseidon<E, A>) -> E::Fr
 where
     E: ScalarEngine,
     A: Arity<E::Fr>,
@@ -116,8 +116,8 @@ where
     p.elements[1]
 }
 
-pub fn full_round_dynamic<'a, E, A>(
-    p: &mut Poseidon<'a, E, A>,
+pub fn full_round_dynamic<E, A>(
+    p: &mut Poseidon<E, A>,
     add_current_round_keys: bool,
     absorb_next_round_keys: bool,
 ) where
@@ -158,7 +158,7 @@ pub fn full_round_dynamic<'a, E, A>(
                     },
             )
             .take(p.elements.len())
-            .map(|x| *x)
+            .copied()
             .collect::<Vec<_>>();
 
         // Compute the constants which should be added *before* the next `product_mds`.
@@ -208,7 +208,7 @@ pub fn full_round_dynamic<'a, E, A>(
     p.product_mds();
 }
 
-pub fn partial_round_dynamic<'a, E, A>(p: &mut Poseidon<'a, E, A>)
+pub fn partial_round_dynamic<E, A>(p: &mut Poseidon<E, A>)
 where
     E: ScalarEngine,
     A: Arity<E::Fr>,
@@ -222,7 +222,7 @@ where
 
 /// For every leaf, add the round constants with index defined by the constants offset, and increment the
 /// offset.
-fn add_round_constants<'a, E, A>(p: &mut Poseidon<'a, E, A>)
+fn add_round_constants<E, A>(p: &mut Poseidon<E, A>)
 where
     E: ScalarEngine,
     A: Arity<E::Fr>,

@@ -77,7 +77,8 @@ where
         assert_eq!(target_slice.len(), preimages.len());
         // FIXME: Account for max batch size.
 
-        Ok(target_slice.copy_from_slice(self.hash(preimages)?.as_slice()))
+        target_slice.copy_from_slice(self.hash(preimages)?.as_slice());
+        Ok(())
     }
 
     /// `max_batch_size` is advisory. Implenters of `BatchHasher` should ensure that up to the returned max hashes can
@@ -159,7 +160,7 @@ pub(crate) fn quintic_s_box<E: ScalarEngine>(
     if let Some(x) = pre_add {
         l.add_assign(x);
     }
-    let mut tmp = l.clone();
+    let mut tmp = *l;
     tmp.square(); // l^2
     tmp.square(); // l^4
     l.mul_assign(&tmp); // l^5

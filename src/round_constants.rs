@@ -54,7 +54,7 @@ pub fn generate_constants<E: ScalarEngine>(
                     // Smallest number of bytes which will hold one field element.
                     let mut bytes = vec![0u8; element_bytes as usize];
                     grain.get_next_bytes(&mut bytes);
-                    if let Ok(f) = bytes_into_fr::<E>(&mut bytes) {
+                    if let Ok(f) = bytes_into_fr::<E>(&bytes) {
                         round_constants.push(f);
                         false
                     } else {
@@ -67,7 +67,7 @@ pub fn generate_constants<E: ScalarEngine>(
             panic!("Only prime fields are supported.");
         }
     }
-    return round_constants;
+    round_constants
 }
 
 fn append_bits<T: Into<u128>>(vec: &mut Vec<bool>, n: usize, from: T) {
@@ -122,23 +122,21 @@ impl Grain {
     }
 
     fn get_next_bytes(&mut self, result: &mut [u8]) {
-        let full_bytes = self.field_size as usize / 8;
         let remainder_bits = self.field_size as usize % 8;
 
         // Prime fields will always have remainder bits,
         // but other field types could be supported in the future.
         if remainder_bits > 0 {
             // If there is an unfull byte, it should be the first.
-            result[0] = self.next_byte(remainder_bits);
-
             // Subsequent bytes are packed into result in the order generated.
-            for i in 1..=full_bytes {
-                result[i] = self.next_byte(8);
-            }
+            result[0] = self.next_byte(remainder_bits);
         } else {
-            for i in 0..full_bytes {
-                result[i] = self.next_byte(8);
-            }
+            result[0] = self.next_byte(8);
+        }
+
+        // First byte is already set
+        for item in result.iter_mut().skip(1) {
+            *item = self.next_byte(8)
         }
     }
 }
