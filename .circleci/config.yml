@@ -26,27 +26,27 @@ commands:
       - *restore-workspace
       - *restore-cache
       - run:
-          name: Test (pairing) (<< parameters.target >>)
+          name: Test default features (pairing) (<< parameters.target >>)
           command: TARGET=<< parameters.target >> cargo test --release
           no_output_timeout: 5m
       - run:
           name: Test (blst) (<< parameters.target >>)
           command: TARGET=<< parameters.target >> cargo test --no-default-features --features blst --release  -- --test-threads=1
           no_output_timeout: 5m
+
       - run:
           name: Test (pairing, GPU) (<< parameters.target >>)
           command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features pairing,gpu -- --test-threads=1
           no_output_timeout: 30m
-
       - run:
           name: Test (blst, GPU) (<< parameters.target >>)
           command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features blst,gpu -- --test-threads=1
           no_output_timeout: 30m
+
       - run:
           name: Test (pairing, opencl) (<< parameters.target >>)
           command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features pairing,opencl -- --test-threads=1
           no_output_timeout: 30m
-
       - run:
           name: Test (blst, opencl) (<< parameters.target >>)
           command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features blst,opencl -- --test-threads=1
@@ -77,7 +77,6 @@ jobs:
       - run: cargo fetch
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
-      - run: rustup install nightly-2020-11-18
       - run: rustc --version
       - run: rm -rf .git
       - persist_to_workspace:
@@ -141,68 +140,25 @@ jobs:
       - run: apt-cache search opencl
       - run: sudo apt install -y ocl-icd-opencl-dev
       - run:
-          name: Run cargo clippy (pairing)
-          command: cargo clippy --all-targets --no-default-features --features pairing,gpu -- -D warnings
+          # gbench doesn't support running without GPU support, hence don't run Clippy on the whole workspace
+          name: Run cargo clippy (pairing), without gbench
+          command: cargo clippy --all-targets --no-default-features --features pairing -- -D warnings
       - run:
-          name: Run cargo clippy (blst)
-          command: cargo clippy --all-targets --no-default-features --features blst,gpu -- -D warnings
-
-  build:
-    executor: default
-    steps:
-      - *restore-workspace
-      - *restore-cache
-      - run: echo 'export PATH="$HOME:~/.cargo/bin:$PATH"' >> $BASH_ENV
-      - run: source $BASH_ENV
-      - run: sudo apt-get update -y
-      - run: apt-cache search opencl
-      - run: sudo apt install -y ocl-icd-opencl-dev
+          # gbench doesn't support running without GPU support, hence don't run Clippy on the whole workspace
+          name: Run cargo clippy (blst), without gbench
+          command: cargo clippy --all-targets --no-default-features --features blst -- -D warnings
       - run:
-          name: Run cargo release build (pairing)
-          command: cargo build --release --no-default-features --features pairing
+          name: Run cargo clippy (pairing, gpu)
+          command: cargo clippy --workspace --all-targets --no-default-features --features pairing,gpu -- -D warnings
       - run:
-          name: Run cargo release build (blst)
-          command: cargo build --release --no-default-features --features blst
+          name: Run cargo clippy (blst, gpu)
+          command: cargo clippy --workspace --all-targets --no-default-features --features blst,gpu -- -D warnings
       - run:
-          name: Run cargo release build (pairing, gpu)
-          command: cargo build --release --no-default-features --features pairing,gpu
+          name: Run cargo clippy (pairing, opencl)
+          command: cargo clippy --workspace --all-targets --no-default-features --features pairing,opencl -- -D warnings
       - run:
-          name: Run cargo release build (blst, gpu)
-          command: cargo build --release --no-default-features --features blst,gpu
-
-  build_gbench:
-    executor: default
-    steps:
-      - *restore-workspace
-      - *restore-cache
-      - run: echo 'export PATH="$HOME:~/.cargo/bin:$PATH"' >> $BASH_ENV
-      - run: source $BASH_ENV
-      - run: sudo apt-get update -y
-      - run: apt-cache search opencl
-      - run: sudo apt install -y ocl-icd-opencl-dev
-      - run:
-          name: Run cargo release build (pairing, gpu)
-          command: cargo +nightly-2020-11-18 build -Zpackage-features --release -p gbench --no-default-features --features pairing,gpu
-      - run:
-          name: Run cargo release build (blst, gpu)
-          command: cargo +nightly-2020-11-18 build -Zpackage-features --release -p gbench --no-default-features --features blst,gpu
-
-  benches:
-    executor: default
-    steps:
-      - *restore-workspace
-      - *restore-cache
-      - run: echo 'export PATH="$HOME:~/.cargo/bin:$PATH"' >> $BASH_ENV
-      - run: source $BASH_ENV
-      - run: sudo apt-get update -y
-      - run: apt-cache search opencl
-      - run: sudo apt install -y ocl-icd-opencl-dev
-      - run:
-          name: Run cargo build --benches (pairing)
-          command: cargo build --benches --no-default-features --features pairing --release
-      - run:
-          name: Run cargo build --benches (blst)
-          command: cargo build --benches --no-default-features --features blst --release
+          name: Run cargo clippy (blst, opencl)
+          command: cargo clippy --workspace --all-targets --no-default-features --features blst,opencl -- -D warnings
 
 workflows:
   version: 2.1
@@ -220,14 +176,5 @@ workflows:
           requires:
             - cargo_fetch
       - test_darwin:
-          requires:
-            - cargo_fetch
-      - build:
-          requires:
-            - cargo_fetch
-      - build_gbench:
-          requires:
-            - cargo_fetch
-      - benches:
           requires:
             - cargo_fetch
