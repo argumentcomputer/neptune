@@ -665,15 +665,12 @@ mod tests {
         let mut p4 = Poseidon::<Bls12, A>::new(&constants);
 
         let test_arity = constants.arity();
-        let mut preimage = vec![Scalar::zero(); test_arity];
         for n in 0..test_arity {
             let scalar = scalar_from_u64::<Fr>(n as u64);
             p.input(scalar).unwrap();
             p2.input(scalar).unwrap();
             p3.input(scalar).unwrap();
             p4.input(scalar).unwrap();
-
-            preimage[n] = scalar;
         }
 
         let digest = p.hash();
@@ -798,11 +795,9 @@ mod tests {
         let constants = PoseidonConstants::<Bls12, U2>::new();
         let mut p = Poseidon::<Bls12, U2>::new(&constants);
         let test_arity = constants.arity();
-        let mut preimage = vec![Scalar::zero(); test_arity];
         for n in 0..test_arity {
             let scalar = scalar_from_u64::<Fr>(n as u64);
             p.input(scalar).unwrap();
-            preimage[n] = scalar;
         }
         let mut p2 = p.clone();
         let mut p3 = p.clone();

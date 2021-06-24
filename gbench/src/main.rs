@@ -5,10 +5,8 @@ use generic_array::typenum::{U11, U8};
 use generic_array::GenericArray;
 use log::info;
 use neptune::column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait};
-use neptune::error::Error;
 use neptune::{batch_hasher::Batcher, BatchHasher};
 use rust_gpu_tools::opencl::Device;
-use std::result::Result;
 use std::thread;
 use std::time::Instant;
 use structopt::StructOpt;
@@ -100,7 +98,7 @@ struct Opts {
     max_column_batch_size: usize,
 }
 
-fn main() -> Result<(), Error> {
+fn main() {
     #[cfg(all(any(feature = "gpu", feature = "opencl"), target_os = "macos"))]
     unimplemented!("Running on macos is not recommended and may have bad consequences -- experiment at your own risk.");
     env_logger::init();
@@ -123,20 +121,20 @@ fn main() -> Result<(), Error> {
     let gpus = std::env::var("NEPTUNE_GBENCH_GPUS");
 
     #[cfg(any(feature = "gpu", feature = "opencl"))]
-    let default_device = Device::all().first().unwrap().clone();
+    let default_device = *Device::all().first().unwrap();
 
     let devices = gpus
         .map(|v| {
-            v.split(",")
+            v.split(',')
                 .map(|s| s.parse::<u32>().expect("Invalid Bus-Id number!"))
                 .map(|bus_id| {
                     let device = Device::by_bus_id(bus_id)
-                        .expect(&format!("No device with Bus-ID {} found!", bus_id));
+                        .unwrap_or_else(|_| panic!("No device with Bus-ID {} found!", bus_id));
                     device
                 })
                 .collect::<Vec<_>>()
         })
-        .unwrap_or(vec![default_device]);
+        .unwrap_or_else(|_| vec![default_device]);
 
     let mut threads = Vec::new();
     for device in devices {
@@ -156,5 +154,4 @@ fn main() -> Result<(), Error> {
     info!("end");
     // Leave time to verify GPU memory usage goes to zero before exiting.
     std::thread::sleep(std::time::Duration::from_millis(15000));
-    Ok(())
 }
