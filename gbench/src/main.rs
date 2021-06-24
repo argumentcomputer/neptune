@@ -119,7 +119,7 @@ fn main() -> Result<(), Error> {
     info!("max column batch size: {}", max_column_batch_size);
     info!("max tree batch size: {}", max_tree_batch_size);
 
-    // Comma separated list of GPU bus-ids
+    // Comma separated list of GPU pci-ids
     let gpus = std::env::var("NEPTUNE_GBENCH_GPUS");
 
     #[cfg(any(feature = "gpu", feature = "opencl"))]
@@ -128,10 +128,10 @@ fn main() -> Result<(), Error> {
     let devices = gpus
         .map(|v| {
             v.split(",")
-                .map(|s| s.parse::<u32>().expect("Invalid Bus-Id number!"))
-                .map(|bus_id| {
-                    let device = Device::by_bus_id(bus_id)
-                        .expect(&format!("No device with Bus-ID {} found!", bus_id));
+                .map(|s| s.parse::<u32>().expect("Invalid Pci-Id number!"))
+                .map(|pci_id| {
+                    let device = Device::by_pci_id(pci_id)
+                        .expect(&format!("No device with Pci-ID {} found!", pci_id));
                     device
                 })
                 .collect::<Vec<_>>()
