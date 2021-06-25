@@ -119,13 +119,14 @@ mod tests {
         let lines: Vec<Line> = fs::read_to_string("parameters/round_numbers.txt")
             .expect("failed to read round numbers file: `parameters/round_numbers.txt`")
             .lines()
-            .skip_while(|line| line.starts_with("#"))
+            .skip_while(|line| line.starts_with('#'))
             .map(|line| {
                 let nums: Vec<usize> = line
-                    .split(" ")
+                    .split(' ')
                     .map(|s| {
-                        s.parse()
-                            .expect(&format!("failed to parse line as `usize`s: {}", line))
+                        s.parse().unwrap_or_else(|_| {
+                            panic!("failed to parse line as `usize`s: {}", line)
+                        })
                     })
                     .collect();
                 assert_eq!(nums.len(), 5, "line in does not contain 5 values: {}", line);
@@ -140,7 +141,7 @@ mod tests {
             .collect();
 
         assert!(
-            lines.len() > 0,
+            !lines.is_empty(),
             "no lines were parsed from `round_numbers.txt`",
         );
 

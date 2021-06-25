@@ -217,7 +217,7 @@ mod tests {
         let path = Path::new("parameters/round_constants-1-1-255-9-8-57-73EDA753299D7D483339D80809A1D80553BDA402FFFE5BFEFFFFFFFF00000001.txt");
         let input = File::open(path).unwrap();
         let buffered = BufReader::new(input);
-        let line = buffered.lines().skip(8).next().unwrap().unwrap();
+        let line = buffered.lines().nth(8).unwrap().unwrap();
         let replaced = line.replace("'", "\"");
         let parsed: Vec<Value> = serde_json::from_str(&replaced).unwrap();
 

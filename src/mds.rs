@@ -272,7 +272,7 @@ mod tests {
         let mut x = base.clone();
         x[0] = Fr::random(&mut rng);
 
-        let mut y = base.clone();
+        let mut y = base;
         y[0] = Fr::random(&mut rng);
 
         let qx = apply_matrix::<Bls12>(&m_prime, &x);
@@ -335,7 +335,7 @@ mod tests {
         let actual = sparse
             .iter()
             .zip(&round_keys)
-            .fold(initial.clone(), |mut acc, (m, rk)| {
+            .fold(initial, |mut acc, (m, rk)| {
                 acc = apply_matrix::<Bls12>(&m, &acc);
                 quintic_s_box::<Bls12>(&mut acc[0], None, Some(&rk));
                 acc

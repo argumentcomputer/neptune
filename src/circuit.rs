@@ -647,9 +647,7 @@ mod tests {
                 let s_box_constraints = 3 * s_boxes;
                 let mds_constraints =
                     (width * constants.full_rounds) + constants.partial_rounds - arity;
-                let total_constraints = arity_tag_constraints + s_box_constraints + mds_constraints;
-
-                total_constraints
+                arity_tag_constraints + s_box_constraints + mds_constraints
             };
             let mut i = 0;
 
