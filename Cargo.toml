@@ -48,7 +48,7 @@ codegen-units = 1
 
 [features]
 default = ["pairing"]
-gpu = ["triton", "rust-gpu-tools"]
+futhark = ["triton", "rust-gpu-tools"]
 opencl = ["rust-gpu-tools"]
 pairing = ["bellperson/pairing"]
 blst = ["bellperson/blst"]

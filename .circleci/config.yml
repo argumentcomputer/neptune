@@ -35,12 +35,12 @@ commands:
           no_output_timeout: 5m
 
       - run:
-          name: Test (pairing, GPU) (<< parameters.target >>)
-          command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features pairing,gpu -- --test-threads=1
+          name: Test (pairing, futhark) (<< parameters.target >>)
+          command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features pairing,futhark -- --test-threads=1
           no_output_timeout: 30m
       - run:
-          name: Test (blst, GPU) (<< parameters.target >>)
-          command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features blst,gpu -- --test-threads=1
+          name: Test (blst, futhark) (<< parameters.target >>)
+          command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features blst,futhark -- --test-threads=1
           no_output_timeout: 30m
 
       - run:
@@ -148,11 +148,11 @@ jobs:
           name: Run cargo clippy (blst), without gbench
           command: cargo clippy --all-targets --no-default-features --features blst -- -D warnings
       - run:
-          name: Run cargo clippy (pairing, gpu)
-          command: cargo clippy --workspace --all-targets --no-default-features --features pairing,gpu -- -D warnings
+          name: Run cargo clippy (pairing, futhark)
+          command: cargo clippy --workspace --all-targets --no-default-features --features pairing,futhark -- -D warnings
       - run:
-          name: Run cargo clippy (blst, gpu)
-          command: cargo clippy --workspace --all-targets --no-default-features --features blst,gpu -- -D warnings
+          name: Run cargo clippy (blst, futhark)
+          command: cargo clippy --workspace --all-targets --no-default-features --features blst,futhark -- -D warnings
       - run:
           name: Run cargo clippy (pairing, opencl)
           command: cargo clippy --workspace --all-targets --no-default-features --features pairing,opencl -- -D warnings

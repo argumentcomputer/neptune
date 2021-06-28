@@ -20,8 +20,8 @@ rust-gpu-tools = { version = "0.3.0", optional = true }
 structopt = { version = "0.3", default-features = false }
 
 [features]
-default = ["pairing", "gpu"]
-gpu = ["neptune/gpu", "rust-gpu-tools"]
+default = ["pairing", "futhark"]
+futhark = ["neptune/futhark", "rust-gpu-tools"]
 opencl = ["neptune/opencl", "rust-gpu-tools"]
 pairing = ["neptune/pairing", "bellperson/pairing"]
 blst = ["neptune/blst", "bellperson/blst"]

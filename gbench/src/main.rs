@@ -120,7 +120,6 @@ fn main() {
     // Comma separated list of GPU bus-ids
     let gpus = std::env::var("NEPTUNE_GBENCH_GPUS");
 
-    #[cfg(any(feature = "gpu", feature = "opencl"))]
     let default_device = *Device::all().first().unwrap();
 
     let devices = gpus
