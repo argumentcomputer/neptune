@@ -1,12 +1,10 @@
-use crate::batch_hasher::{Batcher, BatcherType};
+use crate::batch_hasher::Batcher;
 use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
 use crate::{Arity, BatchHasher};
 use bellperson::bls::{Bls12, Fr};
 use ff::Field;
 use generic_array::GenericArray;
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
-use rust_gpu_tools::opencl::GPUSelector;
 
 pub trait TreeBuilderTrait<TreeArity>
 where
@@ -171,9 +169,8 @@ where
     TreeArity: Arity<Fr>,
 {
     pub fn new(
-        t: Option<BatcherType>,
+        tree_batcher: Option<Batcher<TreeArity>>,
         leaf_count: usize,
-        max_tree_batch_size: usize,
         rows_to_discard: usize,
     ) -> Result<Self, Error> {
         let row_start = 0;
@@ -184,11 +181,7 @@ where
             data: vec![Fr::zero(); leaf_count],
             fill_index: 0,
             tree_constants: PoseidonConstants::<Bls12, TreeArity>::new(),
-            tree_batcher: if let Some(t) = &t {
-                Some(Batcher::<TreeArity>::new(t, max_tree_batch_size)?)
-            } else {
-                None
-            },
+            tree_batcher,
             rows_to_discard,
             row_start,
             row_end,
@@ -361,25 +354,22 @@ mod tests {
     use ff::Field;
     use generic_array::typenum::U8;
 
+    enum BatcherType {
+        None,
+        Cpu,
+        Gpu,
+    }
+
     #[test]
     fn test_tree_builder() {
         // 16KiB tree has 512 leaves.
-        test_tree_builder_aux(None, 512, 32, 512, 512);
-        test_tree_builder_aux(Some(BatcherType::CPU), 512, 32, 512, 512);
+        test_tree_builder_aux(BatcherType::None, 512, 32, 512);
+        test_tree_builder_aux(BatcherType::Cpu, 512, 32, 512);
+        test_tree_builder_aux(BatcherType::Gpu, 512, 32, 512);
 
-        test_tree_builder_missing_leaves(Some(BatcherType::CPU), 512, 32, 512, 512);
+        test_tree_builder_missing_leaves(BatcherType::Cpu, 512, 32, 512);
 
-        #[cfg(all(feature = "gpu", not(target_os = "macos")))]
-        test_tree_builder_aux(Some(BatcherType::GPU), 512, 32, 512, 512);
-
-        #[cfg(all(feature = "gpu", not(target_os = "macos")))]
-        test_tree_builder_build_next(Some(BatcherType::CPU), 512, 32, 512, 512);
-
-        #[cfg(all(feature = "opencl", not(target_os = "macos")))]
-        test_tree_builder_aux(Some(BatcherType::OpenCL), 512, 32, 512, 512);
-
-        #[cfg(all(feature = "opencl", not(target_os = "macos")))]
-        test_tree_builder_build_next(Some(BatcherType::CPU), 512, 32, 512, 512);
+        test_tree_builder_build_next(BatcherType::Cpu, 512, 32, 512);
     }
 
     fn create_leaves(
@@ -411,22 +401,21 @@ mod tests {
     }
 
     fn test_tree_builder_aux(
-        batcher_type: Option<BatcherType>,
+        batcher_type: BatcherType,
         leaves: usize,
         num_batches: usize,
         max_leaf_batch_size: usize,
-        max_tree_batch_size: usize,
     ) {
         let constant_element = Fr::zero();
 
         for rows_to_discard in 0..3 {
-            let mut builder = TreeBuilder::<U8>::new(
-                batcher_type.clone(),
-                leaves,
-                max_tree_batch_size,
-                rows_to_discard,
-            )
-            .unwrap();
+            let batcher = match batcher_type {
+                BatcherType::None => None,
+                BatcherType::Cpu => Some(Batcher::new_cpu(512)),
+                BatcherType::Gpu => Some(Batcher::pick_gpu(512).unwrap()),
+            };
+
+            let mut builder = TreeBuilder::<U8>::new(batcher, leaves, rows_to_discard).unwrap();
 
             let (vec_leaves, final_leaves) =
                 create_leaves(leaves, num_batches, max_leaf_batch_size);
@@ -451,20 +440,18 @@ mod tests {
     }
 
     fn test_tree_builder_build_next(
-        batcher_type: Option<BatcherType>,
+        batcher_type: BatcherType,
         leaves: usize,
         num_batches: usize,
         max_leaf_batch_size: usize,
-        max_tree_batch_size: usize,
     ) {
         for rows_to_discard in 0..3 {
-            let mut builder = TreeBuilder::<U8>::new(
-                batcher_type.clone(),
-                leaves,
-                max_tree_batch_size,
-                rows_to_discard,
-            )
-            .unwrap();
+            let batcher = match batcher_type {
+                BatcherType::None => None,
+                BatcherType::Cpu => Some(Batcher::new_cpu(512)),
+                BatcherType::Gpu => Some(Batcher::pick_gpu(512).unwrap()),
+            };
+            let mut builder = TreeBuilder::<U8>::new(batcher, leaves, rows_to_discard).unwrap();
 
             // Simplify computing the expected root.
             let constant_element = Fr::zero();
@@ -492,20 +479,18 @@ mod tests {
     }
 
     fn test_tree_builder_missing_leaves(
-        batcher_type: Option<BatcherType>,
+        batcher_type: BatcherType,
         leaves: usize,
         num_batches: usize,
         max_leaf_batch_size: usize,
-        max_tree_batch_size: usize,
     ) {
         for rows_to_discard in 0..3 {
-            let mut builder = TreeBuilder::<U8>::new(
-                batcher_type.clone(),
-                leaves,
-                max_tree_batch_size,
-                rows_to_discard,
-            )
-            .unwrap();
+            let batcher = match batcher_type {
+                BatcherType::None => None,
+                BatcherType::Cpu => Some(Batcher::new_cpu(512)),
+                BatcherType::Gpu => Some(Batcher::pick_gpu(512).unwrap()),
+            };
+            let mut builder = TreeBuilder::<U8>::new(batcher, leaves, rows_to_discard).unwrap();
 
             let (vec_leaves, final_leaves) =
                 create_leaves(leaves, num_batches, max_leaf_batch_size);

@@ -4,11 +4,10 @@ use generic_array::sequence::GenericSequence;
 use generic_array::typenum::{U11, U8};
 use generic_array::GenericArray;
 use log::info;
-use neptune::batch_hasher::BatcherType;
 use neptune::column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait};
 use neptune::error::Error;
-use neptune::BatchHasher;
-use rust_gpu_tools::opencl::GPUSelector;
+use neptune::{batch_hasher::Batcher, BatchHasher};
+use rust_gpu_tools::opencl::Device;
 use std::result::Result;
 use std::thread;
 use std::time::Instant;
@@ -16,19 +15,14 @@ use structopt::StructOpt;
 
 fn bench_column_building(
     log_prefix: &str,
-    batcher_type: Option<BatcherType>,
+    column_batcher: Batcher<U11>,
+    tree_batcher: Batcher<U8>,
     leaves: usize,
-    max_column_batch_size: usize,
-    max_tree_batch_size: usize,
 ) -> Fr {
     info!("{}: Creating ColumnTreeBuilder", log_prefix);
-    let mut builder = ColumnTreeBuilder::<U11, U8>::new(
-        batcher_type,
-        leaves,
-        max_column_batch_size,
-        max_tree_batch_size,
-    )
-    .unwrap();
+    let mut builder =
+        ColumnTreeBuilder::<U11, U8>::new(Some(column_batcher), Some(tree_batcher), leaves)
+            .unwrap();
     info!("{}: ColumnTreeBuilder created", log_prefix);
 
     // Simplify computing the expected root.
@@ -125,37 +119,34 @@ fn main() -> Result<(), Error> {
     info!("max column batch size: {}", max_column_batch_size);
     info!("max tree batch size: {}", max_tree_batch_size);
 
-    // Comma separated list of GPU bus-ids
+    // Comma separated list of GPU pci-ids
     let gpus = std::env::var("NEPTUNE_GBENCH_GPUS");
 
-    #[cfg(feature = "gpu")]
-    let default_type = BatcherType::GPU;
+    #[cfg(any(feature = "gpu", feature = "opencl"))]
+    let default_device = Device::all().first().unwrap().clone();
 
-    #[cfg(feature = "opencl")]
-    let default_type = BatcherType::OpenCL;
-
-    let batcher_types = gpus
+    let devices = gpus
         .map(|v| {
             v.split(",")
-                .map(|s| s.parse::<u32>().expect("Invalid Bus-Id number!"))
-                .map(|bus_id| BatcherType::CustomGPU(GPUSelector::BusId(bus_id)))
+                .map(|s| s.parse::<u32>().expect("Invalid Pci-Id number!"))
+                .map(|pci_id| {
+                    let device = Device::by_pci_id(pci_id)
+                        .expect(&format!("No device with Pci-ID {} found!", pci_id));
+                    device
+                })
                 .collect::<Vec<_>>()
         })
-        .unwrap_or(vec![default_type]);
+        .unwrap_or(vec![default_device]);
 
     let mut threads = Vec::new();
-    for batcher_type in batcher_types {
+    for device in devices {
         threads.push(thread::spawn(move || {
-            let log_prefix = format!("GPU[Selector: {:?}]", batcher_type);
+            let log_prefix = format!("GPU[{:?}]", device);
             for i in 0..3 {
                 info!("{} --> Run {}", log_prefix, i);
-                bench_column_building(
-                    &log_prefix,
-                    Some(batcher_type.clone()),
-                    leaves,
-                    max_column_batch_size,
-                    max_tree_batch_size,
-                );
+                let column_batcher = Batcher::new(device, max_column_batch_size).unwrap();
+                let tree_batcher = Batcher::new(device, max_tree_batch_size).unwrap();
+                bench_column_building(&log_prefix, column_batcher, tree_batcher, leaves);
             }
         }));
     }

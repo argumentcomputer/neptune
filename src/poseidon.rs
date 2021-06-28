@@ -543,18 +543,15 @@ impl<A> SimplePoseidonBatchHasher<A>
 where
     A: Arity<Fr>,
 {
-    pub(crate) fn new(max_batch_size: usize) -> Result<Self, Error> {
+    pub(crate) fn new(max_batch_size: usize) -> Self {
         Self::new_with_strength(DEFAULT_STRENGTH, max_batch_size)
     }
 
-    pub(crate) fn new_with_strength(
-        strength: Strength,
-        max_batch_size: usize,
-    ) -> Result<Self, Error> {
-        Ok(Self {
+    pub(crate) fn new_with_strength(strength: Strength, max_batch_size: usize) -> Self {
+        Self {
             constants: PoseidonConstants::<Bls12, A>::new_with_strength(strength),
             max_batch_size,
-        })
+        }
     }
 }
 impl<A> BatchHasher<A> for SimplePoseidonBatchHasher<A>

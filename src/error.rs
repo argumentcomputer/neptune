@@ -7,8 +7,8 @@ use std::{error, fmt};
 pub enum ClError {
     DeviceNotFound,
     PlatformNotFound,
-    BusIdNotAvailable,
-    NvidiaBusIdNotAvailable,
+    PciIdNotAvailable,
+    NvidiaPciIdNotAvailable,
     AmdTopologyNotAvailable,
     PlatformNameNotAvailable,
     InvalidDeviceUuid,
@@ -26,12 +26,12 @@ impl fmt::Display for ClError {
         match self {
             ClError::DeviceNotFound => write!(f, "Device not found."),
             ClError::PlatformNotFound => write!(f, "Platform not found."),
-            ClError::BusIdNotAvailable => write!(f, "Cannot extract bus-id for the given device."),
-            ClError::NvidiaBusIdNotAvailable => {
-                write!(f, "Cannot extract bus-id for the given Nvidia device.")
+            ClError::PciIdNotAvailable => write!(f, "Cannot extract pci-id for the given device."),
+            ClError::NvidiaPciIdNotAvailable => {
+                write!(f, "Cannot extract pci-id for the given Nvidia device.")
             }
             ClError::AmdTopologyNotAvailable => {
-                write!(f, "Cannot extract bus-id for the given AMD device.")
+                write!(f, "Cannot extract pci-id for the given AMD device.")
             }
             ClError::PlatformNameNotAvailable => {
                 write!(f, "Cannot extract platform name for the given platform.")

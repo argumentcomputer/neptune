@@ -1,4 +1,4 @@
-use crate::batch_hasher::{Batcher, BatcherType};
+use crate::batch_hasher::Batcher;
 use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
 use crate::tree_builder::{TreeBuilder, TreeBuilderTrait};
@@ -6,8 +6,6 @@ use crate::{Arity, BatchHasher};
 use bellperson::bls::{Bls12, Fr};
 use ff::Field;
 use generic_array::GenericArray;
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
-use rust_gpu_tools::opencl::GPUSelector;
 
 pub trait ColumnTreeBuilderTrait<ColumnArity, TreeArity>
 where
@@ -145,42 +143,11 @@ where
     TreeArity: Arity<Fr>,
 {
     pub fn new(
-        t: Option<BatcherType>,
+        column_batcher: Option<Batcher<ColumnArity>>,
+        tree_batcher: Option<Batcher<TreeArity>>,
         leaf_count: usize,
-        max_column_batch_size: usize,
-        max_tree_batch_size: usize,
     ) -> Result<Self, Error> {
-        let column_batcher = match &t {
-            Some(t) => Some(Batcher::<ColumnArity>::new(t, max_column_batch_size)?),
-            None => None,
-        };
-
-        let tree_builder = match {
-            match &column_batcher {
-                #[cfg(feature = "gpu")]
-                Some(b) => b.futhark_context(),
-                #[cfg(feature = "opencl")]
-                Some(b) => b.device(),
-                None => None,
-            }
-        } {
-            #[cfg(feature = "gpu")]
-            Some(ctx) => TreeBuilder::<TreeArity>::new(
-                Some(BatcherType::FromFutharkContext(ctx)),
-                leaf_count,
-                max_tree_batch_size,
-                0,
-            )?,
-            #[cfg(feature = "opencl")]
-            Some(device) => TreeBuilder::<TreeArity>::new(
-                Some(BatcherType::FromDevice(device)),
-                leaf_count,
-                max_tree_batch_size,
-                0,
-            )?,
-            None => TreeBuilder::<TreeArity>::new(t, leaf_count, max_tree_batch_size, 0)?,
-        };
-        let are_leaves_included = false;
+        let tree_builder = TreeBuilder::<TreeArity>::new(tree_batcher, leaf_count, 0)?;
 
         let builder = Self {
             leaf_count,
@@ -224,7 +191,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::poseidon::Poseidon;
+    use crate::poseidon::{Arity, Poseidon};
     use crate::BatchHasher;
     use bellperson::bls::Fr;
     use ff::Field;
@@ -234,21 +201,33 @@ mod tests {
     #[test]
     fn test_column_tree_builder() {
         // 16KiB tree has 512 leaves.
-        test_column_tree_builder_aux(None, 512, 32, 512, 512);
-        test_column_tree_builder_aux(Some(BatcherType::CPU), 512, 32, 512, 512);
-        test_column_tree_builder_missing_columns(Some(BatcherType::CPU), 512, 32, 512, 512);
+        test_column_tree_builder_aux(None, None, 512, 32);
+        test_column_tree_builder_aux(
+            Some(Batcher::new_cpu(512)),
+            Some(Batcher::new_cpu(512)),
+            512,
+            32,
+        );
 
-        #[cfg(feature = "gpu")]
-        test_column_tree_builder_aux(Some(BatcherType::GPU), 512, 32, 512, 512);
+        test_column_tree_builder_aux(
+            Some(Batcher::pick_gpu(512).unwrap()),
+            Some(Batcher::pick_gpu(512).unwrap()),
+            512,
+            32,
+        );
+        test_column_tree_builder_missing_columns(
+            Some(Batcher::new_cpu(512)),
+            Some(Batcher::new_cpu(512)),
+            512,
+            32,
+        );
 
-        #[cfg(feature = "opencl")]
-        test_column_tree_builder_aux(Some(BatcherType::OpenCL), 512, 32, 512, 512);
-
-        #[cfg(feature = "gpu")]
-        test_column_tree_builder_build_next(Some(BatcherType::GPU), 512, 32, 512, 512);
-
-        #[cfg(feature = "opencl")]
-        test_column_tree_builder_build_next(Some(BatcherType::OpenCL), 512, 32, 512, 512);
+        test_column_tree_builder_build_next(
+            Some(Batcher::pick_gpu(512).unwrap()),
+            Some(Batcher::pick_gpu(512).unwrap()),
+            512,
+            32,
+        );
     }
 
     fn create_columns(
@@ -278,22 +257,15 @@ mod tests {
     }
 
     fn test_column_tree_builder_aux(
-        batcher_type: Option<BatcherType>,
+        column_batcher: Option<Batcher<U11>>,
+        tree_batcher: Option<Batcher<U8>>,
         leaves: usize,
         num_batches: usize,
-        max_column_batch_size: usize,
-        max_tree_batch_size: usize,
     ) {
-        // Simplify computing the expected root.
         let constant_element = Fr::zero();
         let constant_column = GenericArray::<Fr, U11>::generate(|_| constant_element);
-        let mut builder = ColumnTreeBuilder::<U11, U8>::new(
-            batcher_type,
-            leaves,
-            max_column_batch_size,
-            max_tree_batch_size,
-        )
-        .unwrap();
+        let mut builder =
+            ColumnTreeBuilder::<U11, U8>::new(column_batcher, tree_batcher, leaves).unwrap();
         let batch_size = leaves / num_batches;
 
         let max_batch_size = if let Some(batcher) = &builder.column_batcher {
@@ -324,22 +296,16 @@ mod tests {
     }
 
     fn test_column_tree_builder_build_next(
-        batcher_type: Option<BatcherType>,
+        column_batcher: Option<Batcher<U11>>,
+        tree_batcher: Option<Batcher<U8>>,
         leaves: usize,
         num_batches: usize,
-        max_column_batch_size: usize,
-        max_tree_batch_size: usize,
     ) {
         let constant_element = Fr::zero();
         let constant_column = GenericArray::<Fr, U11>::generate(|_| constant_element);
 
-        let mut builder = ColumnTreeBuilder::<U11, U8>::new(
-            batcher_type,
-            leaves,
-            max_column_batch_size,
-            max_tree_batch_size,
-        )
-        .unwrap();
+        let mut builder =
+            ColumnTreeBuilder::<U11, U8>::new(column_batcher, tree_batcher, leaves).unwrap();
 
         let batch_size = leaves / num_batches;
 
@@ -377,19 +343,14 @@ mod tests {
     }
 
     fn test_column_tree_builder_missing_columns(
-        batcher_type: Option<BatcherType>,
+        column_batcher: Option<Batcher<U11>>,
+        tree_batcher: Option<Batcher<U8>>,
         leaves: usize,
         num_batches: usize,
-        max_column_batch_size: usize,
-        max_tree_batch_size: usize,
     ) {
-        let mut builder = ColumnTreeBuilder::<U11, U8>::new(
-            batcher_type,
-            leaves,
-            max_column_batch_size,
-            max_tree_batch_size,
-        )
-        .unwrap();
+        let mut builder =
+            ColumnTreeBuilder::<U11, U8>::new(column_batcher, tree_batcher, leaves).unwrap();
+
         let batch_size = leaves / num_batches;
 
         let max_batch_size = if let Some(batcher) = &builder.column_batcher {

@@ -7,7 +7,7 @@ use bellperson::bls::{Bls12, Fr, FrRepr};
 use ff::{Field, PrimeField, PrimeFieldDecodingError};
 use generic_array::{typenum, ArrayLength, GenericArray};
 use log::info;
-use rust_gpu_tools::opencl::{self, cl_device_id, Device, GPUSelector};
+use rust_gpu_tools::opencl::{self, cl_device_id, Device};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use typenum::{U11, U2, U8};
@@ -177,22 +177,12 @@ where
     }
 }
 
-pub fn get_device(selector: &GPUSelector) -> Result<&'static opencl::Device, Error> {
-    if let Some(device) = selector.get_device() {
-        info!("device: {:?}", device);
-        Ok(device)
-    } else {
-        return Err(Error::ClError(ClError::BusIdNotAvailable));
-    }
-}
-
 impl<A> CLBatchHasher<A>
 where
     A: Arity<Fr>,
 {
     /// Create a new `GPUBatchHasher` and initialize it with state corresponding with its `A`.
-    pub(crate) fn new(selector: &GPUSelector, max_batch_size: usize) -> Result<Self, Error> {
-        let device = get_device(selector)?;
+    pub(crate) fn new(device: &opencl::Device, max_batch_size: usize) -> Result<Self, Error> {
         Self::new_with_strength(device, DEFAULT_STRENGTH, max_batch_size)
     }
 
@@ -286,7 +276,8 @@ mod test {
     #[test]
     fn test_batch_hash_2() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
-        let device = get_device(&GPUSelector::Index(0)).unwrap();
+        let all = opencl::Device::all();
+        let device = all.first().unwrap();
 
         // NOTE: `batch_size` is not a multiple of `LOCAL_WORK_SIZE`.
         let batch_size = 1025;
@@ -294,8 +285,7 @@ mod test {
         let mut cl_hasher =
             CLBatchHasher::<U2>::new_with_strength(device, Strength::Standard, batch_size).unwrap();
         let mut simple_hasher =
-            SimplePoseidonBatchHasher::<U2>::new_with_strength(Strength::Standard, batch_size)
-                .unwrap();
+            SimplePoseidonBatchHasher::<U2>::new_with_strength(Strength::Standard, batch_size);
 
         let preimages = (0..batch_size)
             .map(|_| GenericArray::<Fr, U2>::generate(|_| Fr::random(&mut rng)))
