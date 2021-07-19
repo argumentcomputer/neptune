@@ -1,6 +1,6 @@
 /// `HashType` provides support for domain separation tags.
 /// For 128-bit security, we need to reserve one (~256-bit) field element per Poseidon permutation.
-/// This element cannot be used for hash preimage data — but can be assigned a constant value designating
+/// This element cannot be used for hash preimage data   but can be assigned a constant value designating
 /// the hash function built on top of the underlying permutation.
 ///
 /// `neptune` implements a variation of the domain separation tag scheme suggested in the updated Poseidon paper. This
@@ -73,7 +73,7 @@ impl<Fr: PrimeField, A: Arity<Fr>> HashType<Fr, A> {
         match self {
             HashType::MerkleTree => true,
             HashType::MerkleTreeSparse(_) => false,
-            HashType::VariableLength => false,
+            HashType::VariableLength => true,
             HashType::ConstantLength(_) => true,
             HashType::Encryption => true,
             HashType::Custom(_) => false,
