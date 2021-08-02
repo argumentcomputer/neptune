@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 4.0.0 - 2021-8-2
+- Upgrade to latest rust-gpu-tools (https://github.com/filecoin-project/neptune/pull/91)
+- Rename GPU feature to Futhark (https://github.com/filecoin-project/neptune/pull/100)
+- Improve Clippy on CI (https://github.com/filecoin-project/neptune/pull/92)
+- Fix Clippy warnings (https://github.com/filecoin-project/neptune/pull/98)
+- Remove BatcherType (https://github.com/filecoin-project/neptune/pull/97)
+- Remove GPUSelector (https://github.com/filecoin-project/neptune/pull/96)
+
 ## 3.0.0 - 2021-6-1
 - Breaking update of `bellperson` to `0.14` and associated dependency upgrades.
 
