@@ -3,8 +3,8 @@ use crate::error::Error;
 use crate::hash_type::HashType;
 use crate::poseidon::PoseidonConstants;
 use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
-use bellperson::bls::{Bls12, Fr, FrRepr};
-use ff::{PrimeField, PrimeFieldDecodingError};
+use blstrs::Scalar as Fr;
+use ff::PrimeField;
 use generic_array::{typenum, ArrayLength, GenericArray};
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -193,7 +193,7 @@ where
 }
 
 #[derive(Debug)]
-struct GpuConstants<A>(PoseidonConstants<Bls12, A>)
+struct GpuConstants<A>(PoseidonConstants<Fr, A>)
 where
     A: Arity<Fr>;
 
@@ -243,7 +243,7 @@ where
 fn frs_to_u64s(frs: &[Fr]) -> Vec<u64> {
     let mut res = vec![u64::default(); frs.len() * 4];
     for (src, dest) in frs.iter().zip(res.chunks_mut(4)) {
-        dest.copy_from_slice(&src.into_repr().0);
+        dest.copy_from_slice(&fr_to_u64s(src));
     }
     res
 }
@@ -256,7 +256,7 @@ fn frs_2d_to_u64s(frs_2d: &[Vec<Fr>]) -> Vec<u64> {
 }
 
 fn array_u64_1d_from_fr(ctx: &FutharkContext, fr: Fr) -> Result<Array_u64_1d, Error> {
-    Array_u64_1d::from_vec(*ctx, &fr.into_repr().0, &[4, 1])
+    Array_u64_1d::from_vec(*ctx, &fr_to_u64s(&fr), &[4, 1])
         .map_err(|e| Error::Other(format!("error converting Fr: {:?}", e)))
 }
 
@@ -302,11 +302,26 @@ fn array_u64_3d_from_frs_2d(
         .map_err(|e| Error::Other(format!("error converting Frs 2d: {:?}", e)))
 }
 
-pub fn u64s_into_fr(limbs: &[u64]) -> Result<Fr, PrimeFieldDecodingError> {
+pub fn u64s_into_fr(limbs: &[u64]) -> Result<Fr, Error> {
     assert_eq!(limbs.len(), 4);
-    let limb_arr = limbs.try_into().expect("Correct length was asserted.");
-    let repr = FrRepr(limb_arr);
-    Fr::from_repr(repr)
+    let mut le_bytes = [0u8; 32];
+    le_bytes[0..8].copy_from_slice(&limbs[0].to_le_bytes());
+    le_bytes[8..16].copy_from_slice(&limbs[1].to_le_bytes());
+    le_bytes[16..24].copy_from_slice(&limbs[2].to_le_bytes());
+    le_bytes[24..32].copy_from_slice(&limbs[3].to_le_bytes());
+    let mut repr = <Fr as PrimeField>::Repr::default();
+    repr.as_mut().copy_from_slice(&le_bytes[..]);
+    Fr::from_repr_vartime(repr).ok_or(Error::DecodingError)
+}
+
+fn fr_to_u64s(fr: &Fr) -> [u64; 4] {
+    let repr = fr.to_repr();
+    [
+        u64::from_le_bytes(repr[0..8].try_into().unwrap()),
+        u64::from_le_bytes(repr[8..16].try_into().unwrap()),
+        u64::from_le_bytes(repr[16..24].try_into().unwrap()),
+        u64::from_le_bytes(repr[24..32].try_into().unwrap()),
+    ]
 }
 
 fn unpack_fr_array(vec_shape: (Vec<u64>, &[i64])) -> Result<Vec<Fr>, Error> {
@@ -316,7 +331,6 @@ fn unpack_fr_array(vec_shape: (Vec<u64>, &[i64])) -> Result<Vec<Fr>, Error> {
     vec.chunks(chunk_size)
         .map(|x| u64s_into_fr(x))
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| Error::DecodingError)
 }
 
 fn unpack_fr_array_from_monts(monts: &[u64]) -> Result<&[Fr], Error> {
@@ -375,14 +389,14 @@ fn as_u64s<U: ArrayLength<Fr>>(vec: &[GenericArray<Fr, U>]) -> Vec<u64> {
     let mut safely = Vec::with_capacity(vec.len() * U::to_usize() * fr_size);
     for row in vec {
         for column in row {
-            safely.extend_from_slice(&column.into_repr().0)
+            safely.extend_from_slice(&fr_to_u64s(column))
         }
     }
     safely
 }
 
 fn init_hash2(ctx: &mut FutharkContext, strength: Strength) -> Result<BatcherState, Error> {
-    let constants = GpuConstants(PoseidonConstants::<Bls12, U2>::new_with_strength(strength));
+    let constants = GpuConstants(PoseidonConstants::<Fr, U2>::new_with_strength(strength));
     match strength {
         Strength::Standard => {
             let state = ctx
@@ -412,7 +426,7 @@ fn init_hash2(ctx: &mut FutharkContext, strength: Strength) -> Result<BatcherSta
 }
 
 fn init_hash8(ctx: &mut FutharkContext, strength: Strength) -> Result<BatcherState, Error> {
-    let constants = GpuConstants(PoseidonConstants::<Bls12, U8>::new_with_strength(strength));
+    let constants = GpuConstants(PoseidonConstants::<Fr, U8>::new_with_strength(strength));
     match strength {
         Strength::Standard => {
             let state = ctx
@@ -444,7 +458,7 @@ fn init_hash8(ctx: &mut FutharkContext, strength: Strength) -> Result<BatcherSta
 }
 
 fn init_hash11(ctx: &mut FutharkContext, strength: Strength) -> Result<BatcherState, Error> {
-    let constants = GpuConstants(PoseidonConstants::<Bls12, U11>::new_with_strength(strength));
+    let constants = GpuConstants(PoseidonConstants::<Fr, U11>::new_with_strength(strength));
 
     match strength {
         Strength::Standard => {
@@ -629,7 +643,7 @@ mod tests {
     use crate::poseidon::{Poseidon, SimplePoseidonBatchHasher};
     use crate::triton::gpu::BatcherState;
     use crate::BatchHasher;
-    use ff::{Field, ScalarEngine};
+    use ff::Field;
     use generic_array::sequence::GenericSequence;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;

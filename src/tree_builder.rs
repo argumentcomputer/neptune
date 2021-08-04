@@ -2,7 +2,7 @@ use crate::batch_hasher::Batcher;
 use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
 use crate::{Arity, BatchHasher};
-use bellperson::bls::{Bls12, Fr};
+use blstrs::Scalar as Fr;
 use ff::Field;
 use generic_array::GenericArray;
 
@@ -24,7 +24,7 @@ where
     data: Vec<Fr>,
     /// Index of the first unfilled datum.
     fill_index: usize,
-    tree_constants: PoseidonConstants<Bls12, TreeArity>,
+    tree_constants: PoseidonConstants<Fr, TreeArity>,
     tree_batcher: Option<Batcher<TreeArity>>,
     rows_to_discard: usize,
 }
@@ -94,7 +94,7 @@ where
             leaf_count,
             data: vec![Fr::zero(); leaf_count],
             fill_index: 0,
-            tree_constants: PoseidonConstants::<Bls12, TreeArity>::new(),
+            tree_constants: PoseidonConstants::<Fr, TreeArity>::new(),
             tree_batcher,
             rows_to_discard,
         };
@@ -244,7 +244,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bellperson::bls::Fr;
+    use blstrs::Scalar as Fr;
     use ff::Field;
     use generic_array::typenum::U8;
 

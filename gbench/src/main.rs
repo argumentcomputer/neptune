@@ -1,4 +1,4 @@
-use bellperson::bls::Fr;
+use blstrs::Scalar as Fr;
 use ff::Field;
 use generic_array::sequence::GenericSequence;
 use generic_array::typenum::{U11, U8};

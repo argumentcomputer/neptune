@@ -1,3 +1,5 @@
+use std::ops::{AddAssign, MulAssign};
+
 use crate::hash_type::HashType;
 use crate::matrix::Matrix;
 use crate::mds::SparseMatrix;
@@ -7,7 +9,7 @@ use bellperson::gadgets::num;
 use bellperson::gadgets::num::AllocatedNum;
 use bellperson::{ConstraintSystem, LinearCombination, SynthesisError};
 use ff::Field;
-use ff::ScalarEngine as Engine;
+use pairing::Engine;
 use std::marker::PhantomData;
 
 /// Similar to `num::Num`, we use `Elt` to accumulate both values and linear combinations, then eventually
@@ -102,7 +104,7 @@ where
     elements: Vec<Elt<E>>,
     pos: usize,
     current_round: usize,
-    constants: &'a PoseidonConstants<E, A>,
+    constants: &'a PoseidonConstants<E::Fr, A>,
     _w: PhantomData<A>,
 }
 
@@ -113,7 +115,7 @@ where
     A: Arity<E::Fr>,
 {
     /// Create a new Poseidon hasher for `preimage`.
-    fn new(elements: Vec<Elt<E>>, constants: &'a PoseidonConstants<E, A>) -> Self {
+    fn new(elements: Vec<Elt<E>>, constants: &'a PoseidonConstants<E::Fr, A>) -> Self {
         let width = constants.width();
 
         PoseidonCircuit {
@@ -299,7 +301,7 @@ where
     // Sparse matrix in this context means one of the form, M''.
     fn product_mds_with_sparse_matrix<CS: ConstraintSystem<E>>(
         &mut self,
-        matrix: &SparseMatrix<E>,
+        matrix: &SparseMatrix<E::Fr>,
     ) -> Result<(), SynthesisError> {
         let mut result: Vec<Elt<E>> = Vec::with_capacity(self.constants.width());
 
@@ -333,7 +335,7 @@ where
 pub fn poseidon_hash<CS, E, A>(
     mut cs: CS,
     preimage: Vec<AllocatedNum<E>>,
-    constants: &PoseidonConstants<E, A>,
+    constants: &PoseidonConstants<E::Fr, A>,
 ) -> Result<AllocatedNum<E>, SynthesisError>
 where
     CS: ConstraintSystem<E>,
@@ -424,7 +426,7 @@ fn constant_quintic_s_box_pre_add_tag<CS: ConstraintSystem<E>, E: Engine>(
     pre_round_key.expect("pre_round_key must be provided");
     post_round_key.expect("post_round_key must be provided");
 
-    crate::quintic_s_box::<E>(&mut tag, pre_round_key.as_ref(), post_round_key.as_ref());
+    crate::quintic_s_box::<E::Fr>(&mut tag, pre_round_key.as_ref(), post_round_key.as_ref());
 
     Elt::num_from_fr::<CS>(tag)
 }
@@ -442,7 +444,7 @@ where
     let res = AllocatedNum::alloc(cs.namespace(|| "squared sum"), || {
         let mut tmp = num.get_value().ok_or(SynthesisError::AssignmentMissing)?;
         tmp.add_assign(&to_add);
-        tmp.square();
+        tmp = tmp.square();
 
         Ok(tmp)
     })?;
@@ -486,8 +488,7 @@ where
 
     if enforce {
         if let Some(x) = post_add {
-            let mut neg = E::Fr::zero();
-            neg.sub_assign(&x);
+            let neg = -x;
 
             if let Some(pre) = pre_add {
                 cs.enforce(
@@ -581,10 +582,10 @@ fn scalar_product<E: Engine, CS: ConstraintSystem<E>>(
 mod tests {
     use super::*;
     use crate::poseidon::HashMode;
-    use crate::{scalar_from_u64, Poseidon, Strength};
-    use bellperson::bls::{Bls12, Fr};
+    use crate::{Poseidon, Strength};
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use bellperson::ConstraintSystem;
+    use blstrs::Bls12;
     use generic_array::typenum;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
@@ -618,12 +619,12 @@ mod tests {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
         let arity = A::to_usize();
         let constants_x = if constant_length {
-            PoseidonConstants::<Bls12, A>::new_with_strength_and_type(
+            PoseidonConstants::<<Bls12 as Engine>::Fr, A>::new_with_strength_and_type(
                 strength,
                 HashType::ConstantLength(arity),
             )
         } else {
-            PoseidonConstants::<Bls12, A>::new_with_strength(strength)
+            PoseidonConstants::<<Bls12 as Engine>::Fr, A>::new_with_strength(strength)
         };
 
         let range = if constant_length {
@@ -651,11 +652,11 @@ mod tests {
             };
             let mut i = 0;
 
-            let mut fr_data = vec![Fr::zero(); preimage_length];
+            let mut fr_data = vec![<Bls12 as Engine>::Fr::zero(); preimage_length];
             let data: Vec<AllocatedNum<Bls12>> = (0..preimage_length)
                 .enumerate()
                 .map(|_| {
-                    let fr = Fr::random(&mut rng);
+                    let fr = <Bls12 as Engine>::Fr::random(&mut rng);
                     fr_data[i] = fr;
                     i += 1;
                     AllocatedNum::alloc(cs.namespace(|| format!("data {}", i)), || Ok(fr)).unwrap()
@@ -664,8 +665,9 @@ mod tests {
 
             let out = poseidon_hash(&mut cs, data, &constants).expect("poseidon hashing failed");
 
-            let mut p = Poseidon::<Bls12, A>::new_with_preimage(&fr_data, &constants);
-            let expected: Fr = p.hash_in_mode(HashMode::Correct);
+            let mut p =
+                Poseidon::<<Bls12 as Engine>::Fr, A>::new_with_preimage(&fr_data, &constants);
+            let expected: <Bls12 as Engine>::Fr = p.hash_in_mode(HashMode::Correct);
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
@@ -690,7 +692,7 @@ mod tests {
     }
 
     fn fr(n: u64) -> <Bls12 as Engine>::Fr {
-        scalar_from_u64::<<Bls12 as Engine>::Fr>(n)
+        <Bls12 as Engine>::Fr::from(n)
     }
 
     fn efr(n: u64) -> Elt<Bls12> {
@@ -703,11 +705,13 @@ mod tests {
 
         let mut cs1 = cs.namespace(|| "square_sum");
         let two = fr(2);
-        let three =
-            AllocatedNum::alloc(cs1.namespace(|| "three"), || Ok(scalar_from_u64(3))).unwrap();
+        let three = AllocatedNum::alloc(cs1.namespace(|| "three"), || {
+            Ok(<Bls12 as Engine>::Fr::from(3))
+        })
+        .unwrap();
         let res = square_sum(cs1, two, &three, true).unwrap();
 
-        let twenty_five: Fr = scalar_from_u64(25);
+        let twenty_five = <Bls12 as Engine>::Fr::from(25);
         assert_eq!(twenty_five, res.get_value().unwrap());
     }
 
@@ -726,7 +730,7 @@ mod tests {
             .unwrap();
 
             assert!(res.is_num());
-            assert_eq!(scalar_from_u64::<Fr>(56), res.val().unwrap());
+            assert_eq!(<Bls12 as Engine>::Fr::from(56), res.val().unwrap());
         }
         {
             let mut cs = TestConstraintSystem::<Bls12>::new();
@@ -734,11 +738,15 @@ mod tests {
             // Inputs are linear combinations and an allocated number.
             let two = efr(2);
 
-            let n3 =
-                AllocatedNum::alloc(cs.namespace(|| "three"), || Ok(scalar_from_u64(3))).unwrap();
+            let n3 = AllocatedNum::alloc(cs.namespace(|| "three"), || {
+                Ok(<Bls12 as Engine>::Fr::from(3))
+            })
+            .unwrap();
             let three = Elt::Allocated(n3.clone());
-            let n4 =
-                AllocatedNum::alloc(cs.namespace(|| "four"), || Ok(scalar_from_u64(4))).unwrap();
+            let n4 = AllocatedNum::alloc(cs.namespace(|| "four"), || {
+                Ok(<Bls12 as Engine>::Fr::from(4))
+            })
+            .unwrap();
             let four = Elt::Allocated(n4.clone());
 
             let res = scalar_product::<Bls12, TestConstraintSystem<Bls12>>(
@@ -748,7 +756,7 @@ mod tests {
             .unwrap();
 
             assert!(res.is_num());
-            assert_eq!(scalar_from_u64::<Fr>(56), res.val().unwrap());
+            assert_eq!(<Bls12 as Engine>::Fr::from(56), res.val().unwrap());
 
             res.lc().iter().for_each(|(var, f)| {
                 if var.get_unchecked() == n3.get_variable().get_unchecked() {
@@ -768,11 +776,15 @@ mod tests {
             // Inputs are linear combinations and an allocated number.
             let two = efr(2);
 
-            let n3 =
-                AllocatedNum::alloc(cs.namespace(|| "three"), || Ok(scalar_from_u64(3))).unwrap();
+            let n3 = AllocatedNum::alloc(cs.namespace(|| "three"), || {
+                Ok(<Bls12 as Engine>::Fr::from(3))
+            })
+            .unwrap();
             let three = Elt::Allocated(n3.clone());
-            let n4 =
-                AllocatedNum::alloc(cs.namespace(|| "four"), || Ok(scalar_from_u64(4))).unwrap();
+            let n4 = AllocatedNum::alloc(cs.namespace(|| "four"), || {
+                Ok(<Bls12 as Engine>::Fr::from(4))
+            })
+            .unwrap();
             let four = Elt::Allocated(n4.clone());
 
             let mut res_vec = Vec::new();

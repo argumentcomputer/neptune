@@ -26,30 +26,16 @@ commands:
       - *restore-workspace
       - *restore-cache
       - run:
-          name: Test default features (pairing) (<< parameters.target >>)
+          name: Test default features (<< parameters.target >>)
           command: TARGET=<< parameters.target >> cargo test --release
           no_output_timeout: 5m
       - run:
-          name: Test (blst) (<< parameters.target >>)
-          command: TARGET=<< parameters.target >> cargo test --no-default-features --features blst --release  -- --test-threads=1
-          no_output_timeout: 5m
-
-      - run:
-          name: Test (pairing, futhark) (<< parameters.target >>)
-          command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features pairing,futhark -- --test-threads=1
+          name: Test (futhark) (<< parameters.target >>)
+          command: TARGET=<< parameters.target >> cargo test --release --features futhark -- --test-threads=1
           no_output_timeout: 30m
       - run:
-          name: Test (blst, futhark) (<< parameters.target >>)
-          command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features blst,futhark -- --test-threads=1
-          no_output_timeout: 30m
-
-      - run:
-          name: Test (pairing, opencl) (<< parameters.target >>)
-          command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features pairing,opencl -- --test-threads=1
-          no_output_timeout: 30m
-      - run:
-          name: Test (blst, opencl) (<< parameters.target >>)
-          command: TARGET=<< parameters.target >> cargo test --release --no-default-features --features blst,opencl -- --test-threads=1
+          name: Test (opencl) (<< parameters.target >>)
+          command: TARGET=<< parameters.target >> cargo test --release --features opencl -- --test-threads=1
           no_output_timeout: 30m
 
 jobs:
@@ -141,24 +127,15 @@ jobs:
       - run: sudo apt install -y ocl-icd-opencl-dev
       - run:
           # gbench doesn't support running without GPU support, hence don't run Clippy on the whole workspace
-          name: Run cargo clippy (pairing), without gbench
-          command: cargo clippy --all-targets --no-default-features --features pairing -- -D warnings
+          name: Run cargo clippy, without gbench
+          command: cargo clippy --all-targets -- -D warnings
       - run:
-          # gbench doesn't support running without GPU support, hence don't run Clippy on the whole workspace
-          name: Run cargo clippy (blst), without gbench
-          command: cargo clippy --all-targets --no-default-features --features blst -- -D warnings
+          name: Run cargo clippy (futhark)
+          command: cargo clippy --workspace --all-targets --features futhark -- -D warnings
       - run:
-          name: Run cargo clippy (pairing, futhark)
-          command: cargo clippy --workspace --all-targets --no-default-features --features pairing,futhark -- -D warnings
-      - run:
-          name: Run cargo clippy (blst, futhark)
-          command: cargo clippy --workspace --all-targets --no-default-features --features blst,futhark -- -D warnings
-      - run:
-          name: Run cargo clippy (pairing, opencl)
-          command: cargo clippy --workspace --all-targets --no-default-features --features pairing,opencl -- -D warnings
-      - run:
-          name: Run cargo clippy (blst, opencl)
-          command: cargo clippy --workspace --all-targets --no-default-features --features blst,opencl -- -D warnings
+          name: Run cargo clippy (opencl)
+          # gbench enables `futhark` by default, disable it using `--no-default-features`.
+          command: cargo clippy --workspace --all-targets --no-default-features --features opencl -- -D warnings
 
 workflows:
   version: 2.1
