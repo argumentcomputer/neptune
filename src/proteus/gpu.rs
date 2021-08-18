@@ -3,7 +3,7 @@ use super::sources::{generate_program, DerivedConstants};
 use crate::error::{ClError, Error};
 use crate::hash_type::HashType;
 use crate::poseidon::PoseidonConstants;
-use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
+use crate::{BatchHasher, Strength, DEFAULT_STRENGTH};
 use blstrs::Scalar as Fr;
 use ff::{Field, PrimeField};
 use generic_array::{typenum, ArrayLength, GenericArray};
@@ -11,7 +11,6 @@ use log::info;
 use rust_gpu_tools::{program_closures, Device, Program};
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use typenum::{U11, U2, U8};
 
 #[cfg(feature = "cuda")]
 use rust_gpu_tools::cuda;
@@ -50,25 +49,17 @@ impl<T> opencl::KernelArgument for Buffer<T> {
 }
 
 #[derive(Debug)]
-struct GpuConstants<A>(PoseidonConstants<Fr, A>)
-where
-    A: Arity<Fr>;
+struct GpuConstants<const ARITY: usize, const WIDTH: usize>(PoseidonConstants<Fr, ARITY, WIDTH>);
 
-pub struct ClBatchHasher<A>
-where
-    A: Arity<Fr>,
-{
+pub struct ClBatchHasher<const ARITY: usize, const WIDTH: usize> {
     device: Device,
-    constants: GpuConstants<A>,
+    constants: GpuConstants<ARITY, WIDTH>,
     constants_buffer: Buffer<Fr>,
     max_batch_size: usize,
     program: Program,
 }
 
-impl<A> GpuConstants<A>
-where
-    A: Arity<Fr>,
-{
+impl<const ARITY: usize, const WIDTH: usize> GpuConstants<ARITY, WIDTH> {
     fn strength(&self) -> Strength {
         self.0.strength
     }
@@ -94,10 +85,7 @@ where
     }
 }
 
-impl<A> ClBatchHasher<A>
-where
-    A: Arity<Fr>,
-{
+impl<const ARITY: usize, const WIDTH: usize> ClBatchHasher<ARITY, WIDTH> {
     /// Create a new `GPUBatchHasher` and initialize it with state corresponding with its `A`.
     pub(crate) fn new(device: &Device, max_batch_size: usize) -> Result<Self, Error> {
         Self::new_with_strength(device, DEFAULT_STRENGTH, max_batch_size)
@@ -146,11 +134,10 @@ where
 }
 
 const LOCAL_WORK_SIZE: usize = 256;
-impl<A> BatchHasher<A> for ClBatchHasher<A>
-where
-    A: Arity<Fr>,
+impl<const ARITY: usize, const WIDTH: usize> BatchHasher<ARITY, WIDTH>
+    for ClBatchHasher<ARITY, WIDTH>
 {
-    fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
+    fn hash(&mut self, preimages: &[[Fr; A]]) -> Result<Vec<Fr>, Error> {
         let local_work_size = LOCAL_WORK_SIZE;
         let max_batch_size = self.max_batch_size;
         let batch_size = preimages.len();
@@ -228,7 +215,6 @@ fn calc_global_work_size(batch_size: usize, local_work_size: usize) -> usize {
 mod test {
     use super::*;
     use crate::poseidon::{Poseidon, SimplePoseidonBatchHasher};
-    use generic_array::sequence::GenericSequence;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
@@ -241,12 +227,13 @@ mod test {
         let batch_size = 1025;
 
         let mut cl_hasher =
-            ClBatchHasher::<U2>::new_with_strength(device, Strength::Standard, batch_size).unwrap();
+            ClBatchHasher::<2, 3>::new_with_strength(device, Strength::Standard, batch_size)
+                .unwrap();
         let mut simple_hasher =
-            SimplePoseidonBatchHasher::<U2>::new_with_strength(Strength::Standard, batch_size);
+            SimplePoseidonBatchHasher::<2, 3>::new_with_strength(Strength::Standard, batch_size);
 
         let preimages = (0..batch_size)
-            .map(|_| GenericArray::<Fr, U2>::generate(|_| Fr::random(&mut rng)))
+            .map(|_| [Fr::random(&mut rng); 2])
             .collect::<Vec<_>>();
 
         let cl_hashes = cl_hasher.hash(&preimages).unwrap();

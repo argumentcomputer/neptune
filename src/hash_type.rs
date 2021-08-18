@@ -1,3 +1,6 @@
+use std::marker::PhantomData;
+
+use crate::Strength;
 /// `HashType` provides support for domain separation tags.
 /// For 128-bit security, we need to reserve one (~256-bit) field element per Poseidon permutation.
 /// This element cannot be used for hash preimage data — but can be assigned a constant value designating
@@ -10,21 +13,27 @@
 /// Because `neptune` also supports a first-class notion of `Strength`, we include a mechanism for composing
 /// `Strength` with `HashType` so that hashes with `Strength` other than `Standard` (currently only `Strengthened`)
 /// may still express the full range of hash function types.
-use crate::{Arity, Strength};
 use ff::PrimeField;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum HashType<F: PrimeField, A: Arity<F>> {
+pub enum HashType<F: PrimeField, const ARITY: usize, const WIDTH: usize> {
     MerkleTree,
     MerkleTreeSparse(u64),
     VariableLength,
     ConstantLength(usize),
     Encryption,
-    Custom(CType<F, A>),
+    Custom(CType<F, ARITY, WIDTH>),
 }
 
-impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
+pub fn tag<F: PrimeField, const A: usize>() -> F {
+    assert!(A > 0);
+    F::from((1 << A) - 1)
+}
+
+impl<F: PrimeField, const ARITY: usize, const WIDTH: usize> HashType<F, ARITY, WIDTH> {
     pub fn domain_tag(&self, strength: &Strength) -> F {
+        let pow2 = |n| pow2::<F>(n);
+        let x_pow2 = |coeff, n| x_pow2::<F>(coeff, n);
         let with_strength = |x: F| {
             let mut tmp = x;
             tmp.add_assign(&Self::strength_tag_component(strength));
@@ -35,20 +44,20 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
         // the strength tag is equivalent to: res += 0 or res += 2^32
         with_strength(match self {
             // 2^arity - 1
-            HashType::MerkleTree => A::tag(),
+            HashType::MerkleTree => tag::<F, ARITY>(),
             // bitmask
             HashType::MerkleTreeSparse(bitmask) => F::from(*bitmask),
             // 2^64
-            HashType::VariableLength => pow2::<F>(64),
+            HashType::VariableLength => pow2(64),
             // length * 2^64
             // length must be greater than 0 and <= arity
             HashType::ConstantLength(length) => {
-                assert!(*length as usize <= A::to_usize());
+                assert!(*length as usize <= ARITY);
                 assert!(*length as usize > 0);
-                x_pow2::<F>(*length as u64, 64)
+                x_pow2(*length as u64, 64)
             }
             // 2^32 or (2^32 + 2^32 = 2^33) with strength tag
-            HashType::Encryption => pow2::<F>(32),
+            HashType::Encryption => pow2(32),
             // identifier * 2^40
             // identifier must be in range [1..=256]
             // If identifier == 0 then the strengthened version collides with Encryption with standard strength.
@@ -84,16 +93,16 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum CType<F: PrimeField, A: Arity<F>> {
+pub enum CType<F: PrimeField, const ARITY: usize, const WIDTH: usize> {
     Arbitrary(u64),
-    _Phantom((F, A)),
+    _Unreachable(std::convert::Infallible, PhantomData<F>),
 }
 
-impl<F: PrimeField, A: Arity<F>> CType<F, A> {
+impl<F: PrimeField, const ARITY: usize, const WIDTH: usize> CType<F, ARITY, WIDTH> {
     fn identifier(&self) -> u64 {
         match self {
             CType::Arbitrary(id) => *id,
-            CType::_Phantom(_) => panic!("_Phantom is not a real custom tag type."),
+            Self::_Unreachable(_, _) => unreachable!(),
         }
     }
 
@@ -123,12 +132,11 @@ mod tests {
     use super::*;
     use crate::{scalar_from_u64s, Strength};
     use blstrs::Scalar as Fr;
-    use generic_array::typenum::{U15, U8};
     use std::collections::HashSet;
 
     #[test]
     fn test_domain_tags() {
-        let merkle_standard = HashType::MerkleTree::<Fr, U8>.domain_tag(&Strength::Standard);
+        let merkle_standard = HashType::MerkleTree::<Fr, 8, 9>.domain_tag(&Strength::Standard);
         let expected_merkle_standard = scalar_from_u64s([
             0x00000000000000ff,
             0x0000000000000000,
@@ -139,7 +147,7 @@ mod tests {
         assert_eq!(expected_merkle_standard, merkle_standard);
 
         let merkle_strengthened =
-            HashType::MerkleTree::<Fr, U8>.domain_tag(&Strength::Strengthened);
+            HashType::MerkleTree::<Fr, 8, 9>.domain_tag(&Strength::Strengthened);
         let expected_merkle_strengthened = scalar_from_u64s([
             0x00000001000000ff,
             0x0000000000000000,
@@ -157,13 +165,13 @@ mod tests {
 
         for length in 1..15 {
             let constant_standard =
-                HashType::ConstantLength::<Fr, U15>(length).domain_tag(&Strength::Standard);
+                HashType::ConstantLength::<Fr, 16, 17>(length).domain_tag(&Strength::Standard);
 
             all_tags.push(constant_standard);
 
             if length <= 8 {
                 let constant_standard_alt_arity =
-                    HashType::ConstantLength::<Fr, U8>(length).domain_tag(&Strength::Standard);
+                    HashType::ConstantLength::<Fr, 8, 9>(length).domain_tag(&Strength::Standard);
 
                 // Constant-length tag is independent of arity.
                 assert_eq!(constant_standard, constant_standard_alt_arity);
@@ -182,13 +190,12 @@ mod tests {
 
         for length in 1..15 {
             let constant_strengthened =
-                HashType::ConstantLength::<Fr, U15>(length).domain_tag(&Strength::Strengthened);
-
+                HashType::ConstantLength::<Fr, 16, 17>(length).domain_tag(&Strength::Strengthened);
             all_tags.push(constant_strengthened);
 
             if length <= 8 {
-                let constant_strengthened_alt_arity =
-                    HashType::ConstantLength::<Fr, U8>(length).domain_tag(&Strength::Strengthened);
+                let constant_strengthened_alt_arity = HashType::ConstantLength::<Fr, 8, 9>(length)
+                    .domain_tag(&Strength::Strengthened);
 
                 // Constant-length tag is independent of arity.
                 assert_eq!(constant_strengthened, constant_strengthened_alt_arity);
@@ -205,7 +212,7 @@ mod tests {
             );
         }
 
-        let encryption_standard = HashType::Encryption::<Fr, U8>.domain_tag(&Strength::Standard);
+        let encryption_standard = HashType::Encryption::<Fr, 8, 9>.domain_tag(&Strength::Standard);
         let expected_encryption_standard = scalar_from_u64s([
             0x0000000100000000,
             0x0000000000000000,
@@ -215,7 +222,7 @@ mod tests {
         assert_eq!(expected_encryption_standard, encryption_standard,);
 
         let encryption_strengthened =
-            HashType::Encryption::<Fr, U8>.domain_tag(&Strength::Strengthened);
+            HashType::Encryption::<Fr, 8, 9>.domain_tag(&Strength::Strengthened);
         let expected_encryption_strengthened = scalar_from_u64s([
             0x0000000200000000,
             0x0000000000000000,
@@ -225,7 +232,7 @@ mod tests {
         assert_eq!(expected_encryption_strengthened, encryption_strengthened);
 
         for index in 1..=256 {
-            let custom = HashType::Custom::<Fr, U8>(CType::Arbitrary(index as u64));
+            let custom = HashType::Custom::<Fr, 8, 9>(CType::Arbitrary(index as u64));
             let standard_custom = custom.domain_tag(&Strength::Standard);
             let strengthened_custom = custom.domain_tag(&Strength::Strengthened);
 

@@ -3,106 +3,24 @@ use crate::matrix::Matrix;
 use crate::mds::{create_mds_matrices, factor_to_sparse_matrixes, MdsMatrices, SparseMatrix};
 use crate::poseidon_alt::{hash_correct, hash_optimized_dynamic};
 use crate::preprocessing::compress_round_constants;
-use crate::{matrix, quintic_s_box, BatchHasher, Strength, DEFAULT_STRENGTH};
+use crate::{quintic_s_box, BatchHasher, Strength, DEFAULT_STRENGTH};
 use crate::{round_constants, round_numbers, Error};
 use blstrs::Scalar as Fr;
 use ff::PrimeField;
-use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
-use std::marker::PhantomData;
-use typenum::marker_traits::Unsigned;
-use typenum::*;
-
-/// Available arities for the Poseidon hasher.
-pub trait Arity<T>: ArrayLength<T> {
-    /// Must be Arity + 1.
-    type ConstantsSize: ArrayLength<T>;
-
-    fn tag() -> T;
-}
-
-macro_rules! impl_arity {
-    ($($a:ty => $b:ty),*) => {
-        $(
-            impl<F: PrimeField> Arity<F> for $a {
-                type ConstantsSize = $b;
-
-                fn tag() -> F {
-                    F::from((1 << <$a as Unsigned>::to_usize()) - 1)
-                }
-            }
-        )*
-    };
-}
-
-// Dummy implementation to allow for an "optional" argument.
-impl<F: PrimeField> Arity<F> for U0 {
-    type ConstantsSize = U0;
-
-    fn tag() -> F {
-        unreachable!("dummy implementation for U0, should not be called")
-    }
-}
-
-impl_arity!(
-    U2 => U3,
-    U3 => U4,
-    U4 => U5,
-    U5 => U6,
-    U6 => U7,
-    U7 => U8,
-    U8 => U9,
-    U9 => U10,
-    U10 => U11,
-    U11 => U12,
-    U12 => U13,
-    U13 => U14,
-    U14 => U15,
-    U15 => U16,
-    U16 => U17,
-    U17 => U18,
-    U18 => U19,
-    U19 => U20,
-    U20 => U21,
-    U21 => U22,
-    U22 => U23,
-    U23 => U24,
-    U24 => U25,
-    U25 => U26,
-    U26 => U27,
-    U27 => U28,
-    U28 => U29,
-    U29 => U30,
-    U30 => U31,
-    U31 => U32,
-    U32 => U33,
-    U33 => U34,
-    U34 => U35,
-    U35 => U36,
-    U36 => U37
-);
 
 /// The `Poseidon` structure will accept a number of inputs equal to the arity.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Poseidon<'a, F, A = U2>
-where
-    F: PrimeField,
-    A: Arity<F>,
-{
+pub struct Poseidon<'a, F: PrimeField, const ARITY: usize, const WIDTH: usize> {
     pub(crate) constants_offset: usize,
     pub(crate) current_round: usize, // Used in static optimization only for now.
     /// the elements to permute
-    pub elements: GenericArray<F, A::ConstantsSize>,
+    pub elements: [F; WIDTH],
     pos: usize,
-    pub(crate) constants: &'a PoseidonConstants<F, A>,
-    _f: PhantomData<F>,
+    pub(crate) constants: &'a PoseidonConstants<F, ARITY, WIDTH>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct PoseidonConstants<F, A>
-where
-    F: PrimeField,
-    A: Arity<F>,
-{
+pub struct PoseidonConstants<F: PrimeField, const ARITY: usize, const WIDTH: usize> {
     pub mds_matrices: MdsMatrices<F>,
     pub round_constants: Vec<F>,
     pub compressed_round_constants: Vec<F>,
@@ -115,8 +33,7 @@ where
     pub full_rounds: usize,
     pub half_full_rounds: usize,
     pub partial_rounds: usize,
-    pub hash_type: HashType<F, A>,
-    _a: PhantomData<A>,
+    pub hash_type: HashType<F, ARITY, WIDTH>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -134,11 +51,7 @@ use HashMode::{Correct, OptimizedDynamic, OptimizedStatic};
 
 pub const DEFAULT_HASH_MODE: HashMode = OptimizedStatic;
 
-impl<'a, F, A> PoseidonConstants<F, A>
-where
-    F: PrimeField,
-    A: Arity<F>,
-{
+impl<'a, F: PrimeField, const ARITY: usize, const WIDTH: usize> PoseidonConstants<F, ARITY, WIDTH> {
     pub fn new() -> Self {
         Self::new_with_strength(DEFAULT_STRENGTH)
     }
@@ -146,14 +59,12 @@ where
     /// `new_constant_length` creates constants for hashing a constant-sized preimage which is <= the max
     /// supported by the permutation width.
     pub fn new_constant_length(length: usize) -> Self {
-        let arity = A::to_usize();
-        assert!(length <= arity);
+        assert!(length <= ARITY);
         Self::new_with_strength_and_type(DEFAULT_STRENGTH, HashType::ConstantLength(length))
     }
 
     pub fn with_length(&self, length: usize) -> Self {
-        let arity = A::to_usize();
-        assert!(length <= arity);
+        assert!(length <= ARITY);
 
         let hash_type = match self.hash_type {
             HashType::ConstantLength(_) => HashType::ConstantLength(length),
@@ -173,18 +84,18 @@ where
         Self::new_with_strength_and_type(strength, HashType::MerkleTree)
     }
 
-    pub fn new_with_strength_and_type(strength: Strength, hash_type: HashType<F, A>) -> Self {
+    pub fn new_with_strength_and_type(
+        strength: Strength,
+        hash_type: HashType<F, ARITY, WIDTH>,
+    ) -> Self {
         assert!(hash_type.is_supported());
-        let arity = A::to_usize();
-        let width = arity + 1;
 
-        let mds_matrices = create_mds_matrices(width);
+        let mds_matrices = create_mds_matrices(WIDTH);
 
-        let (full_rounds, partial_rounds) = round_numbers(arity, &strength);
+        let (full_rounds, partial_rounds) = round_numbers(ARITY, &strength);
         let half_full_rounds = full_rounds / 2;
-        let round_constants = round_constants(arity, &strength);
-        let compressed_round_constants = compress_round_constants(
-            width,
+        let round_constants = round_constants(ARITY, &strength);
+        let compressed_round_constants = compress_round_constants::<F, WIDTH>(
             full_rounds,
             partial_rounds,
             &round_constants,
@@ -197,12 +108,12 @@ where
 
         // Ensure we have enough constants for the sbox rounds
         assert!(
-            width * (full_rounds + partial_rounds) <= round_constants.len(),
+            WIDTH * (full_rounds + partial_rounds) <= round_constants.len(),
             "Not enough round constants"
         );
 
         assert_eq!(
-            full_rounds * width + partial_rounds,
+            full_rounds * WIDTH + partial_rounds,
             compressed_round_constants.len()
         );
 
@@ -218,93 +129,71 @@ where
             half_full_rounds,
             partial_rounds,
             hash_type,
-            _a: PhantomData::<A>,
         }
     }
 
     /// Returns the width.
     #[inline]
     pub fn arity(&self) -> usize {
-        A::to_usize()
+        ARITY
     }
 
     /// Returns the width.
     #[inline]
     pub fn width(&self) -> usize {
-        A::ConstantsSize::to_usize()
+        WIDTH
     }
 }
 
-impl<F, A> Default for PoseidonConstants<F, A>
-where
-    F: PrimeField,
-    A: Arity<F>,
+impl<F: PrimeField, const ARITY: usize, const WIDTH: usize> Default
+    for PoseidonConstants<F, ARITY, WIDTH>
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a, F, A> Poseidon<'a, F, A>
-where
-    F: PrimeField,
-    A: Arity<F>,
-{
-    pub fn new(constants: &'a PoseidonConstants<F, A>) -> Self {
-        let elements = GenericArray::generate(|i| {
-            if i == 0 {
-                constants.domain_tag
-            } else {
-                F::zero()
-            }
-        });
+impl<'a, F: PrimeField, const ARITY: usize, const WIDTH: usize> Poseidon<'a, F, ARITY, WIDTH> {
+    pub fn new(constants: &'a PoseidonConstants<F, ARITY, WIDTH>) -> Self {
+        let mut elements = [F::zero(); WIDTH];
+        elements[0] = constants.domain_tag;
+
         Poseidon {
             constants_offset: 0,
             current_round: 0,
             elements,
             pos: 1,
             constants,
-            _f: PhantomData::<F>,
         }
     }
 
-    pub fn new_with_preimage(preimage: &[F], constants: &'a PoseidonConstants<F, A>) -> Self {
-        let elements = match constants.hash_type {
+    pub fn new_with_preimage(
+        preimage: &[F],
+        constants: &'a PoseidonConstants<F, ARITY, WIDTH>,
+    ) -> Self {
+        let mut elements = [F::zero(); WIDTH];
+        elements[0] = constants.domain_tag;
+
+        match constants.hash_type {
             HashType::ConstantLength(constant_len) => {
                 assert_eq!(constant_len, preimage.len(), "Invalid preimage size");
 
-                GenericArray::generate(|i| {
-                    if i == 0 {
-                        constants.domain_tag
-                    } else if i > preimage.len() {
-                        F::zero()
-                    } else {
-                        preimage[i - 1]
-                    }
-                })
+                elements[1..preimage.len() + 1].copy_from_slice(preimage);
             }
             HashType::VariableLength => panic!("variable-length hashes are not yet supported."),
             _ => {
-                assert_eq!(preimage.len(), A::to_usize(), "Invalid preimage size");
+                assert_eq!(preimage.len(), ARITY, "Invalid preimage size");
 
-                GenericArray::generate(|i| {
-                    if i == 0 {
-                        constants.domain_tag
-                    } else {
-                        preimage[i - 1]
-                    }
-                })
+                elements[1..].copy_from_slice(preimage);
             }
         };
-        let width = preimage.len();
 
         Poseidon {
             constants_offset: 0,
             current_round: 0,
             elements,
-            pos: width,
+            pos: preimage.len(),
             constants,
-            _f: PhantomData::<F>,
         }
     }
 
@@ -503,7 +392,7 @@ where
     /// exploits the fact that our MDS matrices are symmetric by construction.
     #[allow(clippy::ptr_arg)]
     pub(crate) fn product_mds_with_matrix(&mut self, matrix: &Matrix<F>) {
-        let mut result = GenericArray::<F, A::ConstantsSize>::generate(|_| F::zero());
+        let mut result = [F::zero(); WIDTH];
 
         for (j, val) in result.iter_mut().enumerate() {
             for (i, row) in matrix.iter().enumerate() {
@@ -518,7 +407,7 @@ where
 
     // Sparse matrix in this context means one of the form, M''.
     fn product_mds_with_sparse_matrix(&mut self, sparse_matrix: &SparseMatrix<F>) {
-        let mut result = GenericArray::<F, A::ConstantsSize>::generate(|_| F::zero());
+        let mut result = [F::zero(); WIDTH];
 
         // First column is dense.
         for (i, val) in sparse_matrix.w_hat.iter().enumerate() {
@@ -540,43 +429,39 @@ where
         let _ = std::mem::replace(&mut self.elements, result);
     }
 
+    #[allow(unused)]
     fn debug(&self, msg: &str) {
         dbg!(msg, &self.constants_offset, &self.elements);
     }
 }
 
 #[derive(Debug)]
-pub struct SimplePoseidonBatchHasher<A>
-where
-    A: Arity<Fr>,
-{
-    constants: PoseidonConstants<Fr, A>,
+pub struct SimplePoseidonBatchHasher<const ARITY: usize, const WIDTH: usize> {
+    constants: PoseidonConstants<Fr, ARITY, WIDTH>,
     max_batch_size: usize,
 }
 
-impl<A> SimplePoseidonBatchHasher<A>
-where
-    A: Arity<Fr>,
-{
+impl<const ARITY: usize, const WIDTH: usize> SimplePoseidonBatchHasher<ARITY, WIDTH> {
+    #[allow(unused)]
     pub(crate) fn new(max_batch_size: usize) -> Self {
         Self::new_with_strength(DEFAULT_STRENGTH, max_batch_size)
     }
 
+    #[allow(unused)]
     pub(crate) fn new_with_strength(strength: Strength, max_batch_size: usize) -> Self {
         Self {
-            constants: PoseidonConstants::<Fr, A>::new_with_strength(strength),
+            constants: PoseidonConstants::<Fr, ARITY, WIDTH>::new_with_strength(strength),
             max_batch_size,
         }
     }
 }
-impl<A> BatchHasher<A> for SimplePoseidonBatchHasher<A>
-where
-    A: Arity<Fr>,
+impl<const ARITY: usize, const WIDTH: usize> BatchHasher<ARITY, WIDTH>
+    for SimplePoseidonBatchHasher<ARITY, WIDTH>
 {
-    fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
+    fn hash(&mut self, preimages: &[[Fr; ARITY]]) -> Result<Vec<Fr>, Error> {
         Ok(preimages
             .iter()
-            .map(|preimage| Poseidon::new_with_preimage(&preimage, &self.constants).hash())
+            .map(|preimage| Poseidon::new_with_preimage(&preimage[..], &self.constants).hash())
             .collect())
     }
 
@@ -591,18 +476,17 @@ mod tests {
     use crate::*;
     use blstrs::Scalar as Fr;
     use ff::Field;
-    use generic_array::typenum;
 
     #[test]
     fn reset() {
         let test_arity = 2;
         let preimage = vec![Fr::one(); test_arity];
         let constants = PoseidonConstants::new();
-        let mut h = Poseidon::<Fr, U2>::new_with_preimage(&preimage, &constants);
+        let mut h = Poseidon::<Fr, 2, 3>::new_with_preimage(&preimage, &constants);
         h.hash();
         h.reset();
 
-        let default = Poseidon::<Fr, U2>::new(&constants);
+        let default = Poseidon::<Fr, 2, 3>::new(&constants);
         assert_eq!(default.pos, h.pos);
         assert_eq!(default.elements, h.elements);
         assert_eq!(default.constants_offset, h.constants_offset);
@@ -615,8 +499,7 @@ mod tests {
         let constants = PoseidonConstants::new();
         preimage[0] = Fr::one();
 
-        let mut h = Poseidon::<Fr, U2>::new_with_preimage(&preimage, &constants);
-
+        let mut h = Poseidon::<Fr, 2, 3>::new_with_preimage(&preimage, &constants);
         let mut h2 = h.clone();
         let result = h.hash();
 
@@ -629,8 +512,7 @@ mod tests {
         let constants = PoseidonConstants::new();
         preimage[0] = Fr::one();
 
-        let mut h = Poseidon::<Fr, typenum::U3>::new_with_preimage(&preimage, &constants);
-
+        let mut h = Poseidon::<Fr, 3, 4>::new_with_preimage(&preimage, &constants);
         let mut h2 = h.clone();
         let result = h.hash();
 
@@ -644,25 +526,22 @@ mod tests {
     }
 
     fn hash_values_cases(strength: Strength) {
-        hash_values_aux::<typenum::U2>(strength);
-        hash_values_aux::<typenum::U4>(strength);
-        hash_values_aux::<typenum::U8>(strength);
-        hash_values_aux::<typenum::U11>(strength);
-        hash_values_aux::<typenum::U16>(strength);
-        hash_values_aux::<typenum::U24>(strength);
-        hash_values_aux::<typenum::U36>(strength);
+        hash_values_aux::<2, 3>(strength);
+        hash_values_aux::<4, 5>(strength);
+        hash_values_aux::<8, 9>(strength);
+        hash_values_aux::<11, 12>(strength);
+        hash_values_aux::<16, 17>(strength);
+        hash_values_aux::<24, 25>(strength);
+        hash_values_aux::<36, 37>(strength);
     }
 
     /// Simple test vectors to ensure results don't change unintentionally in development.
-    fn hash_values_aux<A>(strength: Strength)
-    where
-        A: Arity<Fr>,
-    {
-        let constants = PoseidonConstants::<Fr, A>::new_with_strength(strength);
-        let mut p = Poseidon::<Fr, A>::new(&constants);
-        let mut p2 = Poseidon::<Fr, A>::new(&constants);
-        let mut p3 = Poseidon::<Fr, A>::new(&constants);
-        let mut p4 = Poseidon::<Fr, A>::new(&constants);
+    fn hash_values_aux<const ARITY: usize, const WIDTH: usize>(strength: Strength) {
+        let constants = PoseidonConstants::<Fr, ARITY, WIDTH>::new_with_strength(strength);
+        let mut p = Poseidon::<Fr, ARITY, WIDTH>::new(&constants);
+        let mut p2 = Poseidon::<Fr, ARITY, WIDTH>::new(&constants);
+        let mut p3 = Poseidon::<Fr, ARITY, WIDTH>::new(&constants);
+        let mut p4 = Poseidon::<Fr, ARITY, WIDTH>::new(&constants);
 
         let test_arity = constants.arity();
         for n in 0..test_arity {
@@ -792,8 +671,8 @@ mod tests {
 
     #[test]
     fn hash_compare_optimized() {
-        let constants = PoseidonConstants::<Fr, U2>::new();
-        let mut p = Poseidon::<Fr, U2>::new(&constants);
+        let constants = PoseidonConstants::<Fr, 2, 3>::new();
+        let mut p = Poseidon::<Fr, 2, 3>::new(&constants);
         let test_arity = constants.arity();
         for n in 0..test_arity {
             let scalar = Fr::from(n as u64);
@@ -813,8 +692,9 @@ mod tests {
 
     #[test]
     fn default_is_standard() {
-        let default_constants = PoseidonConstants::<Fr, U8>::new();
-        let standard_constants = PoseidonConstants::<Fr, U8>::new_with_strength(Strength::Standard);
+        let default_constants = PoseidonConstants::<Fr, 8, 9>::new();
+        let standard_constants =
+            PoseidonConstants::<Fr, 8, 9>::new_with_strength(Strength::Standard);
 
         assert_eq!(
             standard_constants.partial_rounds,

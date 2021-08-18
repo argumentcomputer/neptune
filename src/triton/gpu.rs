@@ -2,10 +2,9 @@ use super::cl;
 use crate::error::Error;
 use crate::hash_type::HashType;
 use crate::poseidon::PoseidonConstants;
-use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
+use crate::{BatchHasher, Strength, DEFAULT_STRENGTH};
 use blstrs::Scalar as Fr;
 use ff::PrimeField;
-use generic_array::{typenum, ArrayLength, GenericArray};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::marker::PhantomData;
@@ -13,7 +12,6 @@ use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
 use std::sync::{Arc, Mutex};
 use triton::FutharkContext;
 use triton::{Array_u64_1d, Array_u64_2d, Array_u64_3d};
-use typenum::{U11, U2, U8};
 
 /// Convenience type aliases for opaque pointers from the generated Futhark bindings.
 type P2State = triton::FutharkOpaqueP2State;
@@ -49,31 +47,28 @@ enum BatcherState {
 impl BatcherState {
     /// Create a new state for use in batch hashing preimages of `Arity` elements.
     /// State is an opaque pointer supplied to the corresponding GPU entry point when processing a batch.
-    fn new<A: Arity<Fr>>(ctx: Arc<Mutex<FutharkContext>>) -> Result<Self, Error> {
+    fn new<const A: usize>(ctx: Arc<Mutex<FutharkContext>>) -> Result<Self, Error> {
         Self::new_with_strength::<A>(ctx, DEFAULT_STRENGTH)
     }
-    fn new_with_strength<A: Arity<Fr>>(
+    fn new_with_strength<const A: usize>(
         ctx: Arc<Mutex<FutharkContext>>,
         strength: Strength,
     ) -> Result<Self, Error> {
         let mut ctx = ctx.lock().unwrap();
-        Ok(match A::to_usize() {
+        Ok(match A {
             size if size == 2 => init_hash2(&mut ctx, strength)?,
             size if size == 8 => init_hash8(&mut ctx, strength)?,
             size if size == 11 => init_hash11(&mut ctx, strength)?,
-            _ => panic!("unsupported arity: {}", A::to_usize()),
+            _ => panic!("unsupported arity: {}", A),
         })
     }
 
     /// Hash a batch of N * `Arity` `Fr`s into N `Fr`s.
-    fn hash<A: ArrayLength<Fr>>(
+    fn hash<const A: usize>(
         &mut self,
         ctx: &mut FutharkContext,
-        preimages: &[GenericArray<Fr, A>],
-    ) -> Result<(Vec<Fr>, Self), Error>
-    where
-        A: Arity<Fr>,
-    {
+        preimages: &[Fr; A],
+    ) -> Result<(Vec<Fr>, Self), Error> {
         match self {
             BatcherState::Arity2(state) => {
                 let (res, state) = mbatch_hash2(ctx, state, preimages)?;
@@ -104,19 +99,15 @@ impl BatcherState {
 }
 
 /// `GpuBatchHasher` implements `BatchHasher` and performs the batched hashing on GPU.
-pub struct GpuBatchHasher<A> {
+pub struct GpuBatchHasher<const A: usize> {
     ctx: Arc<Mutex<FutharkContext>>,
     state: BatcherState,
     /// If `tree_builder_state` is provided, use it to build the final 64MiB tree on the GPU with one call.
     tree_builder_state: Option<T864MState>,
     max_batch_size: usize,
-    _a: PhantomData<A>,
 }
 
-impl<A> GpuBatchHasher<A>
-where
-    A: Arity<Fr>,
-{
+impl<const A: usize> GpuBatchHasher<A> {
     /// Create a new `GpuBatchHasher` and initialize it with state corresponding with its `A`.
     pub(crate) fn new(
         ctx: Arc<Mutex<FutharkContext>>,
@@ -136,7 +127,6 @@ where
             state: BatcherState::new_with_strength::<A>(Arc::clone(&ctx), strength)?,
             tree_builder_state: None,
             max_batch_size,
-            _a: PhantomData::<A>,
         };
 
         let ptr = {
@@ -156,7 +146,7 @@ where
     }
 }
 
-impl<A> Drop for GpuBatchHasher<A> {
+impl<const A: usize> Drop for GpuBatchHasher<A> {
     fn drop(&mut self) {
         let ctx = self.ctx.lock().unwrap();
         let mut locked = BATCH_HASHERS.lock().unwrap();
@@ -175,12 +165,9 @@ impl<A> Drop for GpuBatchHasher<A> {
     }
 }
 
-impl<A> BatchHasher<A> for GpuBatchHasher<A>
-where
-    A: Arity<Fr>,
-{
+impl<const A: usize> BatchHasher<A> for GpuBatchHasher<A> {
     /// Hash a batch of `A`-sized preimages.
-    fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
+    fn hash(&mut self, preimages: &[[Fr; A]]) -> Result<Vec<Fr>, Error> {
         let mut ctx = self.ctx.lock().unwrap();
         let (res, state) = self.state.hash(&mut ctx, preimages)?;
         self.state = state;
@@ -193,14 +180,9 @@ where
 }
 
 #[derive(Debug)]
-struct GpuConstants<A>(PoseidonConstants<Fr, A>)
-where
-    A: Arity<Fr>;
+struct GpuConstants<const ARITY:  usize, const WIDTH: usize>(PoseidonConstants<Fr, ARITY, WIDTH>)
 
-impl<A> GpuConstants<A>
-where
-    A: Arity<Fr>,
-{
+impl<const ARITY: usize, const WIDTH: usize> GpuConstants<ARITY, WIDTH> {
     fn arity_tag(&self, ctx: &FutharkContext) -> Result<Array_u64_1d, Error> {
         let arity_tag = self.0.domain_tag;
         array_u64_1d_from_fr(ctx, arity_tag)
@@ -426,7 +408,7 @@ fn init_hash2(ctx: &mut FutharkContext, strength: Strength) -> Result<BatcherSta
 }
 
 fn init_hash8(ctx: &mut FutharkContext, strength: Strength) -> Result<BatcherState, Error> {
-    let constants = GpuConstants(PoseidonConstants::<Fr, U8>::new_with_strength(strength));
+    let constants = GpuConstants(PoseidonConstants::<Fr, 8, 9>::new_with_strength(strength));
     match strength {
         Strength::Standard => {
             let state = ctx
@@ -458,7 +440,7 @@ fn init_hash8(ctx: &mut FutharkContext, strength: Strength) -> Result<BatcherSta
 }
 
 fn init_hash11(ctx: &mut FutharkContext, strength: Strength) -> Result<BatcherState, Error> {
-    let constants = GpuConstants(PoseidonConstants::<Fr, U11>::new_with_strength(strength));
+    let constants = GpuConstants(PoseidonConstants::<Fr, 11, 12>::new_with_strength(strength));
 
     match strength {
         Strength::Standard => {
@@ -732,17 +714,17 @@ mod tests {
         };
         let batch_size = 100;
 
-        let mut gpu_hasher = GpuBatchHasher::<U8>::new_with_strength(
+        let mut gpu_hasher = GpuBatchHasher::<9>::new_with_strength(
             cl::default_futhark_context().unwrap(),
             Strength::Standard,
             batch_size,
         )
         .unwrap();
         let mut simple_hasher =
-            SimplePoseidonBatchHasher::<U8>::new_with_strength(Strength::Standard, batch_size);
+            SimplePoseidonBatchHasher::<9>::new_with_strength(Strength::Standard, batch_size);
 
         let preimages = (0..batch_size)
-            .map(|_| GenericArray::<Fr, U8>::generate(|_| Fr::random(&mut rng)))
+            .map(|_| GenericArray::<Fr, 9>::generate(|_| Fr::random(&mut rng)))
             .collect::<Vec<_>>();
 
         let (hashes, _) =
@@ -767,17 +749,17 @@ mod tests {
         };
         let batch_size = 100;
 
-        let mut gpu_hasher = GpuBatchHasher::<U8>::new_with_strength(
+        let mut gpu_hasher = GpuBatchHasher::<9>::new_with_strength(
             cl::default_futhark_context().unwrap(),
             Strength::Strengthened,
             batch_size,
         )
         .unwrap();
         let mut simple_hasher =
-            SimplePoseidonBatchHasher::<U8>::new_with_strength(Strength::Strengthened, batch_size);
+            SimplePoseidonBatchHasher::<9>::new_with_strength(Strength::Strengthened, batch_size);
 
         let preimages = (0..batch_size)
-            .map(|_| GenericArray::<Fr, U8>::generate(|_| Fr::random(&mut rng)))
+            .map(|_| GenericArray::<Fr, 9>::generate(|_| Fr::random(&mut rng)))
             .collect::<Vec<_>>();
 
         let (hashes, _) =
@@ -802,17 +784,17 @@ mod tests {
         };
         let batch_size = 100;
 
-        let mut gpu_hasher = GpuBatchHasher::<U11>::new_with_strength(
+        let mut gpu_hasher = GpuBatchHasher::<12>::new_with_strength(
             cl::default_futhark_context().unwrap(),
             Strength::Standard,
             batch_size,
         )
         .unwrap();
         let mut simple_hasher =
-            SimplePoseidonBatchHasher::<U11>::new_with_strength(Strength::Standard, batch_size);
+            SimplePoseidonBatchHasher::<12>::new_with_strength(Strength::Standard, batch_size);
 
         let preimages = (0..batch_size)
-            .map(|_| GenericArray::<Fr, U11>::generate(|_| Fr::random(&mut rng)))
+            .map(|_| GenericArray::<Fr, 12>::generate(|_| Fr::random(&mut rng)))
             .collect::<Vec<_>>();
 
         let (hashes, _) =
@@ -837,17 +819,17 @@ mod tests {
         };
         let batch_size = 100;
 
-        let mut gpu_hasher = GpuBatchHasher::<U11>::new_with_strength(
+        let mut gpu_hasher = GpuBatchHasher::<12>::new_with_strength(
             cl::default_futhark_context().unwrap(),
             Strength::Strengthened,
             batch_size,
         )
         .unwrap();
         let mut simple_hasher =
-            SimplePoseidonBatchHasher::<U11>::new_with_strength(Strength::Strengthened, batch_size);
+            SimplePoseidonBatchHasher::<12>::new_with_strength(Strength::Strengthened, batch_size);
 
         let preimages = (0..batch_size)
-            .map(|_| GenericArray::<Fr, U11>::generate(|_| Fr::random(&mut rng)))
+            .map(|_| GenericArray::<Fr, 12>::generate(|_| Fr::random(&mut rng)))
             .collect::<Vec<_>>();
 
         let (hashes, _) =
@@ -872,12 +854,12 @@ mod tests {
         let batch_size = 100;
 
         let mut gpu_hasher =
-            GpuBatchHasher::<U8>::new_with_strength(dev, Strength::Standard, batch_size).unwrap();
+            GpuBatchHasher::<9>::new_with_strength(dev, Strength::Standard, batch_size).unwrap();
         let mut simple_hasher =
-            SimplePoseidonBatchHasher::<U8>::new_with_strength(Strength::Standard, batch_size);
+            SimplePoseidonBatchHasher::<9>::new_with_strength(Strength::Standard, batch_size);
 
         let preimages = (0..batch_size)
-            .map(|_| GenericArray::<Fr, U8>::generate(|_| Fr::random(&mut rng)))
+            .map(|_| GenericArray::<Fr, 9>::generate(|_| Fr::random(&mut rng)))
             .collect::<Vec<_>>();
 
         let (hashes, _) =

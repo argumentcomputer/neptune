@@ -1,15 +1,9 @@
-#![allow(dead_code)]
-#![allow(unused_imports)]
-#[macro_use]
-extern crate lazy_static;
-
-pub use crate::poseidon::{Arity, Poseidon};
+pub use crate::poseidon::Poseidon;
 use crate::round_constants::generate_constants;
 use crate::round_numbers::{round_numbers_base, round_numbers_strengthened};
-use blstrs::Scalar as Fr;
+use blstrs::Scalar;
 pub use error::Error;
 use ff::PrimeField;
-use generic_array::GenericArray;
 
 #[cfg(all(feature = "futhark", any(feature = "cuda", feature = "opencl")))]
 compile_error!("`futhark` and `cuda/opencl` features are mutually exclusive");
@@ -68,6 +62,7 @@ pub mod batch_hasher;
 #[cfg(any(feature = "cuda", feature = "opencl"))]
 pub mod proteus;
 
+#[cfg(test)]
 pub(crate) const TEST_SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
 ];
@@ -80,18 +75,15 @@ pub enum Strength {
 
 pub(crate) const DEFAULT_STRENGTH: Strength = Strength::Standard;
 
-pub trait BatchHasher<A>
-where
-    A: Arity<Fr>,
-{
+pub trait BatchHasher<const ARITY: usize, const WIDTH: usize> {
     // type State;
 
-    fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error>;
+    fn hash(&mut self, preimages: &[[Scalar; ARITY]]) -> Result<Vec<Scalar>, Error>;
 
     fn hash_into_slice(
         &mut self,
-        target_slice: &mut [Fr],
-        preimages: &[GenericArray<Fr, A>],
+        target_slice: &mut [Scalar],
+        preimages: &[[Scalar; ARITY]],
     ) -> Result<(), Error> {
         assert_eq!(target_slice.len(), preimages.len());
         // FIXME: Account for max batch size.
@@ -117,15 +109,15 @@ pub fn round_numbers(arity: usize, strength: &Strength) -> (usize, usize) {
 }
 
 #[cfg(test)]
-pub(crate) fn scalar_from_u64s(parts: [u64; 4]) -> Fr {
+pub(crate) fn scalar_from_u64s(parts: [u64; 4]) -> Scalar {
     let mut le_bytes = [0u8; 32];
     le_bytes[0..8].copy_from_slice(&parts[0].to_le_bytes());
     le_bytes[8..16].copy_from_slice(&parts[1].to_le_bytes());
     le_bytes[16..24].copy_from_slice(&parts[2].to_le_bytes());
     le_bytes[24..32].copy_from_slice(&parts[3].to_le_bytes());
-    let mut repr = <Fr as PrimeField>::Repr::default();
+    let mut repr = <Scalar as PrimeField>::Repr::default();
     repr.as_mut().copy_from_slice(&le_bytes[..]);
-    Fr::from_repr_vartime(repr).expect("u64s exceed BLS12-381 scalar field modulus")
+    Scalar::from_repr_vartime(repr).expect("u64s exceed BLS12-381 scalar field modulus")
 }
 
 const SBOX: u8 = 1; // x^5

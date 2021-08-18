@@ -2,30 +2,21 @@ use crate::batch_hasher::Batcher;
 use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
 use crate::tree_builder::{TreeBuilder, TreeBuilderTrait};
-use crate::{Arity, BatchHasher};
+use crate::BatchHasher;
 use blstrs::Scalar as Fr;
 use ff::Field;
-use generic_array::GenericArray;
 
-pub trait ColumnTreeBuilderTrait<ColumnArity, TreeArity>
-where
-    ColumnArity: Arity<Fr>,
-    TreeArity: Arity<Fr>,
-{
-    fn add_columns(&mut self, columns: &[GenericArray<Fr, ColumnArity>]) -> Result<(), Error>;
+pub trait ColumnTreeBuilderTrait<const ColumnArity: usize, const TreeArity: usize> {
+    fn add_columns(&mut self, columns: &[[Fr; ColumnArity]]) -> Result<(), Error>;
     fn add_final_columns(
         &mut self,
-        columns: &[GenericArray<Fr, ColumnArity>],
+        columns: &[[Fr; ColumnArity]],
     ) -> Result<(Vec<Fr>, Vec<Fr>), Error>;
 
     fn reset(&mut self);
 }
 
-pub struct ColumnTreeBuilder<ColumnArity, TreeArity>
-where
-    ColumnArity: Arity<Fr>,
-    TreeArity: Arity<Fr>,
-{
+pub struct ColumnTreeBuilder<const ColumnArity: usize, const TreeArity: usize> {
     pub leaf_count: usize,
     data: Vec<Fr>,
     /// Index of the first unfilled datum.
@@ -35,13 +26,10 @@ where
     tree_builder: TreeBuilder<TreeArity>,
 }
 
-impl<ColumnArity, TreeArity> ColumnTreeBuilderTrait<ColumnArity, TreeArity>
-    for ColumnTreeBuilder<ColumnArity, TreeArity>
-where
-    ColumnArity: Arity<Fr>,
-    TreeArity: Arity<Fr>,
+impl<const ColumnArity: usize, const TreeArity: usize>
+    ColumnTreeBuilderTrait<ColumnArity, TreeArity> for ColumnTreeBuilder<ColumnArity, TreeArity>
 {
-    fn add_columns(&mut self, columns: &[GenericArray<Fr, ColumnArity>]) -> Result<(), Error> {
+    fn add_columns(&mut self, columns: &[[Fr; ColumnArity]]) -> Result<(), Error> {
         let start = self.fill_index;
         let column_count = columns.len();
         let end = start + column_count;
@@ -56,7 +44,7 @@ where
             }
             None => columns.iter().enumerate().for_each(|(i, column)| {
                 self.data[start + i] =
-                    Poseidon::new_with_preimage(&column, &self.column_constants).hash();
+                    Poseidon::new_with_preimage(column, &self.column_constants).hash();
             }),
         };
 
@@ -67,7 +55,7 @@ where
 
     fn add_final_columns(
         &mut self,
-        columns: &[GenericArray<Fr, ColumnArity>],
+        columns: &[[Fr; ColumnArity]],
     ) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
         self.add_columns(columns)?;
 
@@ -82,29 +70,22 @@ where
         self.data.iter_mut().for_each(|place| *place = Fr::zero());
     }
 }
-fn as_generic_arrays<A: Arity<Fr>>(vec: &[Fr]) -> &[GenericArray<Fr, A>] {
+fn as_generic_arrays<const A: usize>(vec: &[Fr]) -> &[[Fr; A]] {
     // It is a programmer error to call `as_generic_arrays` on a vector whose underlying data cannot be divided
     // into an even number of `GenericArray<Fr, Arity>`.
     assert_eq!(
         0,
-        (vec.len() * std::mem::size_of::<Fr>()) % std::mem::size_of::<GenericArray<Fr, A>>()
+        (vec.len() * std::mem::size_of::<Fr>()) % std::mem::size_of::<[Fr; A]>()
     );
 
     // This block does not affect the underlying `Fr`s. It just groups them into `GenericArray`s of length `Arity`.
     // We know by the assertion above that `vec` can be evenly divided into these units.
     unsafe {
-        std::slice::from_raw_parts(
-            vec.as_ptr() as *const () as *const GenericArray<Fr, A>,
-            vec.len() / A::to_usize(),
-        )
+        std::slice::from_raw_parts(vec.as_ptr() as *const () as *const [Fr; A], vec.len() / A)
     }
 }
 
-impl<ColumnArity, TreeArity> ColumnTreeBuilder<ColumnArity, TreeArity>
-where
-    ColumnArity: Arity<Fr>,
-    TreeArity: Arity<Fr>,
-{
+impl<const ColumnArity: usize, const TreeArity: usize> ColumnTreeBuilder<ColumnArity, TreeArity> {
     pub fn new(
         column_batcher: Option<Batcher<ColumnArity>>,
         tree_batcher: Option<Batcher<TreeArity>>,
@@ -130,10 +111,7 @@ where
 
     // Compute root of tree composed of all identical columns. For use in checking correctness of GPU column tree-building
     // without the cost of generating a full column tree.
-    pub fn compute_uniform_tree_root(
-        &mut self,
-        column: GenericArray<Fr, ColumnArity>,
-    ) -> Result<Fr, Error> {
+    pub fn compute_uniform_tree_root(&mut self, column: [Fr; ColumnArity]) -> Result<Fr, Error> {
         // All the leaves will be the same.
         let element = Poseidon::new_with_preimage(&column, &self.column_constants).hash();
 
@@ -148,12 +126,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::poseidon::{Arity, Poseidon};
+    use crate::poseidon::Poseidon;
     use crate::BatchHasher;
     use blstrs::Scalar as Fr;
     use ff::Field;
-    use generic_array::sequence::GenericSequence;
-    use generic_array::typenum::{U11, U8};
 
     #[test]
     fn test_column_tree_builder() {
@@ -175,19 +151,19 @@ mod tests {
     }
 
     fn test_column_tree_builder_aux(
-        column_batcher: Option<Batcher<U11>>,
-        tree_batcher: Option<Batcher<U8>>,
+        column_batcher: Option<Batcher<11>>,
+        tree_batcher: Option<Batcher<8>>,
         leaves: usize,
         num_batches: usize,
     ) {
         let batch_size = leaves / num_batches;
 
         let mut builder =
-            ColumnTreeBuilder::<U11, U8>::new(column_batcher, tree_batcher, leaves).unwrap();
+            ColumnTreeBuilder::<11, 8>::new(column_batcher, tree_batcher, leaves).unwrap();
 
         // Simplify computing the expected root.
         let constant_element = Fr::zero();
-        let constant_column = GenericArray::<Fr, U11>::generate(|_| constant_element);
+        let constant_column = [constant_element; 11];
 
         let max_batch_size = if let Some(batcher) = &builder.column_batcher {
             batcher.max_batch_size()
@@ -199,15 +175,14 @@ mod tests {
 
         let mut total_columns = 0;
         while total_columns + effective_batch_size < leaves {
-            let columns: Vec<GenericArray<Fr, U11>> =
-                (0..effective_batch_size).map(|_| constant_column).collect();
+            let columns: Vec<_> = (0..effective_batch_size).map(|_| constant_column).collect();
 
             let _ = builder.add_columns(columns.as_slice()).unwrap();
             total_columns += columns.len();
         }
 
         let final_columns: Vec<_> = (0..leaves - total_columns)
-            .map(|_| GenericArray::<Fr, U11>::generate(|_| constant_element))
+            .map(|_| [constant_element; 11])
             .collect();
 
         let (base, res) = builder.add_final_columns(final_columns.as_slice()).unwrap();

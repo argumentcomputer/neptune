@@ -34,6 +34,7 @@ pub(crate) fn is_invertible<F: PrimeField>(matrix: &Matrix<F>) -> bool {
     is_square(matrix) && invert(matrix).is_some()
 }
 
+#[cfg(test)]
 fn scalar_mul<F: PrimeField>(scalar: F, matrix: &Matrix<F>) -> Matrix<F> {
     matrix
         .iter()
@@ -110,6 +111,7 @@ pub fn vec_sub<F: PrimeField>(a: &[F], b: &[F]) -> Vec<F> {
 }
 
 /// Left-multiply a vector by a square matrix of same size: MV where V is considered a column vector.
+#[cfg(test)]
 pub fn left_apply_matrix<F: PrimeField>(m: &Matrix<F>, v: &[F]) -> Vec<F> {
     assert!(is_square(m), "Only square matrix can be applied to vector.");
     assert_eq!(
