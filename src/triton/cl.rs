@@ -1,8 +1,7 @@
 use crate::error::{ClError, ClResult};
 use log::*;
-use rust_gpu_tools::opencl::{Device, UniqueId};
+use rust_gpu_tools::opencl::{cl_device_id, Device};
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::fmt;
 use std::ptr;
 use std::sync::{Arc, Mutex, RwLock};
@@ -76,27 +75,26 @@ pub fn futhark_context(device: &Device) -> ClResult<Arc<Mutex<FutharkContext>>> 
 
 pub fn default_futhark_context() -> ClResult<Arc<Mutex<FutharkContext>>> {
     info!("getting default futhark context");
-    let unique_id =
-        std::env::var("NEPTUNE_DEFAULT_GPU")
-            .ok()
-            .and_then(|v| match UniqueId::try_from(&v[..]) {
-                Ok(unique_id) => Some(unique_id),
-                Err(err) => {
-                    error!("{}", err);
-                    None
-                }
-            });
-    match unique_id {
-        Some(unique_id) => {
+    let bus_id = std::env::var("NEPTUNE_DEFAULT_GPU")
+        .ok()
+        .and_then(|v| match v.parse::<u32>() {
+            Ok(bus_id) => Some(bus_id),
+            Err(_) => {
+                error!("Bus-id '{}' is given in wrong format!", v);
+                None
+            }
+        });
+    match bus_id {
+        Some(bus_id) => {
             info!(
-                "Using device with unique ID {} for creating the FutharkContext...",
-                unique_id
+                "Using device with bus-id {} for creating the FutharkContext...",
+                bus_id
             );
-            match Device::by_unique_id(unique_id) {
+            match Device::by_bus_id(bus_id) {
                 Ok(device) => futhark_context(device),
                 Err(_) => {
                     error!(
-                       "A device with the given unique ID doesn't exist! Defaulting to the first device..."
+                       "A device with the given bus-id doesn't exist! Defaulting to the first device..."
                    );
                     let all = Device::all();
                     let device = all.first().ok_or(ClError::DeviceNotFound)?;
