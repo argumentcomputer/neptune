@@ -115,12 +115,13 @@ where
     fn to_buffer(&self, program: &opencl::Program) -> Result<opencl::Buffer<Fr>, Error> {
         let constants_elements = self.derived_constants().constants_elements;
 
+        let constants = &self.0;
         let mut data = Vec::with_capacity(constants_elements);
-        data.push(self.0.domain_tag);
-        data.extend(&self.0.compressed_round_constants);
-        data.extend(self.0.mds_matrices.m.iter().flatten());
-        data.extend(self.0.pre_sparse_matrix.iter().flatten());
-        for sm in &self.0.sparse_matrixes {
+        data.push(constants.domain_tag);
+        data.extend(&constants.compressed_round_constants);
+        data.extend(constants.mds_matrices.m.iter().flatten());
+        data.extend(constants.pre_sparse_matrix.iter().flatten());
+        for sm in &constants.sparse_matrixes {
             data.extend(&sm.w_hat);
             data.extend(&sm.v_rest);
         }
