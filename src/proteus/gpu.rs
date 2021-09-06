@@ -113,67 +113,24 @@ where
     }
 
     fn to_buffer(&self, program: &opencl::Program) -> Result<opencl::Buffer<Fr>, Error> {
-        let DerivedConstants {
-            arity: _,
-            partial_rounds: _,
-            width: _,
-            sparse_matrix_size: _,
-            full_half: _,
-            sparse_offset: _,
-            constants_elements,
-            domain_tag_offset,
-            round_keys_offset,
-            mds_matrix_offset,
-            pre_sparse_matrix_offset,
-            sparse_matrixes_offset,
-            w_hat_offset: _,
-            v_rest_offset: _,
-        } = self.derived_constants();
+        let constants_elements = self.derived_constants().constants_elements;
+
+        let constants = &self.0;
+        let mut data = Vec::with_capacity(constants_elements);
+        data.push(constants.domain_tag);
+        data.extend(&constants.compressed_round_constants);
+        data.extend(constants.mds_matrices.m.iter().flatten());
+        data.extend(constants.pre_sparse_matrix.iter().flatten());
+        for sm in &constants.sparse_matrixes {
+            data.extend(&sm.w_hat);
+            data.extend(&sm.v_rest);
+        }
 
         let buffer = program
             .create_buffer::<Fr>(constants_elements)
             .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
-
-        let c = &self.0;
-
         program
-            .write_from_buffer(&buffer, domain_tag_offset, &[c.domain_tag])
-            .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
-        program
-            .write_from_buffer(&buffer, round_keys_offset, &c.compressed_round_constants)
-            .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
-        program
-            .write_from_buffer(
-                &buffer,
-                mds_matrix_offset,
-                c.mds_matrices
-                    .m
-                    .iter()
-                    .flatten()
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .as_slice(),
-            )
-            .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
-        program
-            .write_from_buffer(
-                &buffer,
-                pre_sparse_matrix_offset,
-                c.pre_sparse_matrix
-                    .iter()
-                    .flatten()
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .as_slice(),
-            )
-            .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
-        let mut sm_elts = Vec::new();
-        for sm in c.sparse_matrixes.iter() {
-            sm_elts.extend(sm.w_hat.iter());
-            sm_elts.extend(sm.v_rest.iter());
-        }
-        program
-            .write_from_buffer(&buffer, sparse_matrixes_offset, &sm_elts)
+            .write_from_buffer(&buffer, 0, &data)
             .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
 
         Ok(buffer)
