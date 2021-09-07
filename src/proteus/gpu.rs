@@ -217,7 +217,7 @@ where
         self.program
             .read_into_buffer(&result_buffer, 0, &mut frs)
             .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
-        Ok(frs.to_vec())
+        Ok(frs)
     }
 
     fn max_batch_size(&self) -> usize {
