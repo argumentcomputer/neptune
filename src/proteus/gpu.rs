@@ -180,10 +180,10 @@ where
         let batch_size = preimages.len();
         assert!(batch_size <= max_batch_size);
 
-        // Set `global_work_size` to smallest multiple of `local_work_size` >= `batch-size`.
-        let global_work_size = ((batch_size / local_work_size)
-            + (batch_size % local_work_size != 0) as usize)
-            * local_work_size;
+        // Set `global_work_size` to the smallest value possible, so that the total number of
+        // threads is >= `batch-size`.
+        let global_work_size =
+            (batch_size / local_work_size) + (batch_size % local_work_size != 0) as usize;
 
         let num_hashes = preimages.len();
 
