@@ -10,12 +10,12 @@ resolver = "2"
 
 [dependencies]
 lazy_static = "1.4.0"
-bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "halo" }
+bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "master" }
 blake2s_simd = "0.5"
-blstrs = { git = "https://github.com/filecoin-project/blstrs", branch = "halo" }
+blstrs = { git = "https://github.com/filecoin-project/blstrs", branch = "master" }
 byteorder = "1"
-ec-gpu = { git = "https://github.com/filecoin-project/ff-cl-gen", branch = "halo", optional = true }
-ec-gpu-gen = { git = "https://github.com/filecoin-project/ff-cl-gen", branch = "halo", optional = true }
+ec-gpu = { git = "https://github.com/filecoin-project/ec-gpu", branch = "master", optional = true }
+ec-gpu-gen = { git = "https://github.com/filecoin-project/ec-gpu", branch = "master", optional = true }
 ff = "0.11.0"
 generic-array = "0.14.4"
 itertools = { version = "0.8.0" }
