@@ -8,20 +8,19 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 lazy_static = "1.4.0"
-bellperson = { version = "0.16", default-features = false }
+bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "master" }
 blake2s_simd = "0.5"
 byteorder = "1"
 env_logger = "0.7.1"
-ff = { version = "0.3.1", package = "fff" }
+ff = "0.11.0"
 generic-array = "0.14.4"
 log = "0.4.8"
 neptune = { path = "../", default-features = false }
 rust-gpu-tools = { version = "0.4.0", optional = true }
 structopt = { version = "0.3", default-features = false }
+blstrs = { git = "https://github.com/filecoin-project/blstrs", branch = "master" }
 
 [features]
-default = ["pairing", "futhark"]
+default = ["futhark"]
 futhark = ["neptune/futhark", "rust-gpu-tools"]
 opencl = ["neptune/opencl", "rust-gpu-tools"]
-pairing = ["neptune/pairing", "bellperson/pairing"]
-blst = ["neptune/blst", "bellperson/blst"]

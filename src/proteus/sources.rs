@@ -1,5 +1,4 @@
 use super::gpu::DerivedConstants;
-use bellperson::bls::{Engine, Fr};
 use ff::PrimeField;
 use itertools::join;
 
@@ -47,12 +46,12 @@ fn poseidon_source(field: &str, derived_constants: DerivedConstants) -> String {
 
 pub fn generate_program<Fr>(limb64: bool, derived_constants: DerivedConstants) -> String
 where
-    Fr: PrimeField,
+    Fr: ec_gpu::GpuField,
 {
     let field_source = if limb64 {
-        ff_cl_gen::field::<Fr, ff_cl_gen::Limb64>("Fr")
+        ec_gpu_gen::field::<Fr, ec_gpu_gen::Limb64>("Fr")
     } else {
-        ff_cl_gen::field::<Fr, ff_cl_gen::Limb32>("Fr")
+        ec_gpu_gen::field::<Fr, ec_gpu_gen::Limb32>("Fr")
     };
     join(
         &[

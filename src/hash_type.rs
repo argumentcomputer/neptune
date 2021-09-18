@@ -10,24 +10,22 @@
 /// Because `neptune` also supports a first-class notion of `Strength`, we include a mechanism for composing
 /// `Strength` with `HashType` so that hashes with `Strength` other than `Standard` (currently only `Strengthened`)
 /// may still express the full range of hash function types.
-use crate::{scalar_from_u64, Arity, Strength};
-use ff::{Field, PrimeField, ScalarEngine};
+use crate::{Arity, Strength};
+use ff::PrimeField;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum HashType<Fr: PrimeField, A: Arity<Fr>> {
+pub enum HashType<F: PrimeField, A: Arity<F>> {
     MerkleTree,
     MerkleTreeSparse(u64),
     VariableLength,
     ConstantLength(usize),
     Encryption,
-    Custom(CType<Fr, A>),
+    Custom(CType<F, A>),
 }
 
-impl<Fr: PrimeField, A: Arity<Fr>> HashType<Fr, A> {
-    pub fn domain_tag(&self, strength: &Strength) -> Fr {
-        let pow2 = |n| pow2::<Fr, A>(n);
-        let x_pow2 = |coeff, n| x_pow2::<Fr, A>(coeff, n);
-        let with_strength = |x: Fr| {
+impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
+    pub fn domain_tag(&self, strength: &Strength) -> F {
+        let with_strength = |x: F| {
             let mut tmp = x;
             tmp.add_assign(&Self::strength_tag_component(strength));
             tmp
@@ -37,18 +35,18 @@ impl<Fr: PrimeField, A: Arity<Fr>> HashType<Fr, A> {
             // 2^arity - 1
             HashType::MerkleTree => with_strength(A::tag()),
             // bitmask
-            HashType::MerkleTreeSparse(bitmask) => with_strength(scalar_from_u64(*bitmask)),
+            HashType::MerkleTreeSparse(bitmask) => with_strength(F::from(*bitmask)),
             // 2^64
-            HashType::VariableLength => with_strength(pow2(64)),
+            HashType::VariableLength => with_strength(pow2::<F>(64)),
             // length * 2^64
             // length must be greater than 0 and <= arity
             HashType::ConstantLength(length) => {
                 assert!(*length as usize <= A::to_usize());
                 assert!(*length as usize > 0);
-                with_strength(x_pow2(*length as u64, 64))
+                with_strength(x_pow2::<F>(*length as u64, 64))
             }
             // 2^32
-            HashType::Encryption => with_strength(pow2(32)),
+            HashType::Encryption => with_strength(pow2::<F>(32)),
             // identifier * 2^40
             // NOTE: in order to leave room for future `Strength` tags,
             // we make identifier a multiple of 2^40 rather than 2^32.
@@ -56,14 +54,14 @@ impl<Fr: PrimeField, A: Arity<Fr>> HashType<Fr, A> {
         }
     }
 
-    fn strength_tag_component(strength: &Strength) -> Fr {
+    fn strength_tag_component(strength: &Strength) -> F {
         let id = match strength {
             // Standard strength doesn't affect the base tag.
             Strength::Standard => 0,
             Strength::Strengthened => 1,
         };
 
-        x_pow2::<Fr, A>(id, 32)
+        x_pow2::<F>(id, 32)
     }
 
     /// Some HashTypes require more testing so are not yet supported, since they are not yet needed.
@@ -82,12 +80,12 @@ impl<Fr: PrimeField, A: Arity<Fr>> HashType<Fr, A> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum CType<Fr: PrimeField, A: Arity<Fr>> {
+pub enum CType<F: PrimeField, A: Arity<F>> {
     Arbitrary(u64),
-    _Phantom((Fr, A)),
+    _Phantom((F, A)),
 }
 
-impl<Fr: PrimeField, A: Arity<Fr>> CType<Fr, A> {
+impl<F: PrimeField, A: Arity<F>> CType<F, A> {
     fn identifier(&self) -> u64 {
         match self {
             CType::Arbitrary(id) => *id,
@@ -95,21 +93,20 @@ impl<Fr: PrimeField, A: Arity<Fr>> CType<Fr, A> {
         }
     }
 
-    fn domain_tag(&self, _strength: &Strength) -> Fr {
-        x_pow2::<Fr, A>(self.identifier(), 32)
+    fn domain_tag(&self, _strength: &Strength) -> F {
+        x_pow2::<F>(self.identifier(), 32)
     }
 }
 
 /// pow2(n) = 2^n
-fn pow2<Fr: PrimeField, A: Arity<Fr>>(n: i32) -> Fr {
-    let two: Fr = scalar_from_u64(2);
-    two.pow([n as u64, 0, 0, 0])
+fn pow2<F: PrimeField>(n: u64) -> F {
+    F::from(2).pow_vartime([n])
 }
 
 /// x_pow2(x, n) = x * 2^n
-fn x_pow2<Fr: PrimeField, A: Arity<Fr>>(coeff: u64, n: i32) -> Fr {
-    let mut tmp: Fr = pow2::<Fr, A>(n);
-    tmp.mul_assign(&scalar_from_u64(coeff));
+fn x_pow2<F: PrimeField>(coeff: u64, n: u64) -> F {
+    let mut tmp = pow2::<F>(n);
+    tmp.mul_assign(F::from(coeff));
     tmp
 }
 
@@ -117,7 +114,7 @@ fn x_pow2<Fr: PrimeField, A: Arity<Fr>>(coeff: u64, n: i32) -> Fr {
 mod tests {
     use super::*;
     use crate::{scalar_from_u64s, Strength};
-    use bellperson::bls::{Bls12, Fr, FrRepr};
+    use blstrs::Scalar as Fr;
     use generic_array::typenum::{U15, U8};
     use std::collections::HashSet;
 
@@ -228,7 +225,7 @@ mod tests {
 
         let mut all_tags_set = HashSet::new();
         all_tags.iter().for_each(|x| {
-            let _ = all_tags_set.insert(x.into_repr().0);
+            let _ = all_tags_set.insert(x.to_repr());
         });
 
         // Cardinality of set and vector are the same,

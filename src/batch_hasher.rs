@@ -10,7 +10,7 @@ use crate::proteus::gpu::ClBatchHasher;
 #[cfg(feature = "futhark")]
 use crate::triton::{cl, gpu::GpuBatchHasher};
 use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
-use bellperson::bls::Fr;
+use blstrs::Scalar as Fr;
 use generic_array::GenericArray;
 
 #[cfg(feature = "futhark")]
