@@ -5,14 +5,34 @@ extern crate lazy_static;
 
 pub use crate::poseidon::{Arity, Poseidon};
 use crate::round_constants::generate_constants;
-use crate::round_numbers::calc_round_numbers;
+use crate::round_numbers::{round_numbers_base, round_numbers_strengthened};
 use blstrs::Scalar as Fr;
 pub use error::Error;
 use ff::PrimeField;
 use generic_array::GenericArray;
 
-#[cfg(all(feature = "futhark", feature = "opencl"))]
-compile_error!("futhark and opencl features are mutually exclusive");
+#[cfg(all(feature = "futhark", any(feature = "cuda", feature = "opencl")))]
+compile_error!("`futhark` and `cuda/opencl` features are mutually exclusive");
+
+#[cfg(all(
+    any(feature = "cuda", feature = "opencl"),
+    not(any(
+        feature = "arity2",
+        feature = "arity4",
+        feature = "arity8",
+        feature = "arity11",
+        feature = "arity16",
+        feature = "arity24",
+        feature = "arity36"
+    ))
+))]
+compile_error!("The `cuda` and `opencl` features need at least one arity feature to be set");
+
+#[cfg(all(
+    feature = "strengthened",
+    not(any(feature = "cuda", feature = "opencl"))
+))]
+compile_error!("The `strengthened` feature needs the `cuda` and/or `opencl` feature to be set");
 
 /// Poseidon circuit
 pub mod circuit;
@@ -31,21 +51,21 @@ mod round_numbers;
 pub mod hash_type;
 
 /// Tree Builder
-#[cfg(any(feature = "futhark", feature = "opencl"))]
+#[cfg(any(feature = "futhark", feature = "cuda", feature = "opencl"))]
 pub mod tree_builder;
 
 /// Column Tree Builder
-#[cfg(any(feature = "futhark", feature = "opencl"))]
+#[cfg(any(feature = "futhark", feature = "cuda", feature = "opencl"))]
 pub mod column_tree_builder;
 
 #[cfg(feature = "futhark")]
 pub mod triton;
 
 /// Batch Hasher
-#[cfg(any(feature = "futhark", feature = "opencl"))]
+#[cfg(any(feature = "futhark", feature = "cuda", feature = "opencl"))]
 pub mod batch_hasher;
 
-#[cfg(feature = "opencl")]
+#[cfg(any(feature = "cuda", feature = "opencl"))]
 pub mod proteus;
 
 pub(crate) const TEST_SEED: [u8; 16] = [
@@ -87,29 +107,6 @@ where
     fn max_batch_size(&self) -> usize {
         700000
     }
-}
-
-// Returns the round numbers for a given arity `(R_F, R_P)`.
-fn round_numbers_base(arity: usize) -> (usize, usize) {
-    let t = arity + 1;
-    calc_round_numbers(t, true)
-}
-
-// In case of newly-discovered attacks, we may need stronger security.
-// This option exists so we can preemptively create circuits in order to switch
-// to them quickly if needed.
-//
-// "A realistic alternative is to increase the number of partial rounds by 25%.
-// Then it is unlikely that a new attack breaks through this number,
-// but even if this happens then the complexity is almost surely above 2^64, and you will be safe."
-// - D Khovratovich
-fn round_numbers_strengthened(arity: usize) -> (usize, usize) {
-    let (full_round, partial_rounds) = round_numbers_base(arity);
-
-    // Increase by 25%, rounding up.
-    let strengthened_partial_rounds = f64::ceil(partial_rounds as f64 * 1.25) as usize;
-
-    (full_round, strengthened_partial_rounds)
 }
 
 pub fn round_numbers(arity: usize, strength: &Strength) -> (usize, usize) {

@@ -3,7 +3,7 @@ use crate::triton::cl;
 use std::{error, fmt};
 
 #[derive(Debug, Clone)]
-#[cfg(any(feature = "futhark", feature = "opencl"))]
+#[cfg(any(feature = "futhark", feature = "cuda", feature = "opencl"))]
 pub enum ClError {
     DeviceNotFound,
     PlatformNotFound,
@@ -16,10 +16,10 @@ pub enum ClError {
     GetDeviceError,
 }
 
-#[cfg(any(feature = "futhark", feature = "opencl"))]
+#[cfg(any(feature = "futhark", feature = "cuda", feature = "opencl"))]
 pub type ClResult<T> = std::result::Result<T, ClError>;
 
-#[cfg(any(feature = "futhark", feature = "opencl"))]
+#[cfg(any(feature = "futhark", feature = "cuda", feature = "opencl"))]
 impl fmt::Display for ClError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
@@ -49,9 +49,8 @@ pub enum Error {
     FullBuffer,
     /// Attempt to reference an index element that is out of bounds
     IndexOutOfBounds,
-    /// The provided leaf was not found in the tree
     GpuError(String),
-    #[cfg(any(feature = "futhark", feature = "opencl"))]
+    #[cfg(any(feature = "futhark", feature = "cuda", feature = "opencl"))]
     ClError(ClError),
     #[cfg(feature = "futhark")]
     TritonError(String),
@@ -73,6 +72,13 @@ impl From<triton::Error> for Error {
     }
 }
 
+#[cfg(any(feature = "cuda", feature = "opencl"))]
+impl From<rust_gpu_tools::GPUError> for Error {
+    fn from(e: rust_gpu_tools::GPUError) -> Self {
+        Self::GpuError(format!("GPU tools error: {}", e))
+    }
+}
+
 impl error::Error for Error {}
 
 impl fmt::Display for Error {
@@ -84,7 +90,7 @@ impl fmt::Display for Error {
             ),
             Error::IndexOutOfBounds => write!(f, "The referenced index is outs of bounds."),
             Error::GpuError(s) => write!(f, "GPU Error: {}", s),
-            #[cfg(any(feature = "futhark", feature = "opencl"))]
+            #[cfg(any(feature = "futhark", feature = "cuda", feature = "opencl"))]
             Error::ClError(e) => write!(f, "OpenCL Error: {}", e),
             #[cfg(feature = "futhark")]
             Error::TritonError(e) => write!(f, "Neptune-triton Error: {}", e),

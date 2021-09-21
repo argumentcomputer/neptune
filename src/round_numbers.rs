@@ -19,6 +19,29 @@ fn n_sboxes(t: usize, rf: usize, rp: usize) -> usize {
     t * rf + rp
 }
 
+// Returns the round numbers for a given arity `(R_F, R_P)`.
+pub(crate) fn round_numbers_base(arity: usize) -> (usize, usize) {
+    let t = arity + 1;
+    calc_round_numbers(t, true)
+}
+
+// In case of newly-discovered attacks, we may need stronger security.
+// This option exists so we can preemptively create circuits in order to switch
+// to them quickly if needed.
+//
+// "A realistic alternative is to increase the number of partial rounds by 25%.
+// Then it is unlikely that a new attack breaks through this number,
+// but even if this happens then the complexity is almost surely above 2^64, and you will be safe."
+// - D Khovratovich
+pub(crate) fn round_numbers_strengthened(arity: usize) -> (usize, usize) {
+    let (full_round, partial_rounds) = round_numbers_base(arity);
+
+    // Increase by 25%, rounding up.
+    let strengthened_partial_rounds = f64::ceil(partial_rounds as f64 * 1.25) as usize;
+
+    (full_round, strengthened_partial_rounds)
+}
+
 // Returns the round numbers for a given width `t`. Here, the `security_margin` parameter does not
 // indicate that we are calculating `R_F` and `R_P` for the "strengthened" round numbers, done in
 // the function `round_numbers_strengthened()`.

@@ -1,6 +1,6 @@
 use crate::error::{ClError, ClResult};
 use log::*;
-use rust_gpu_tools::opencl::{Device, UniqueId};
+use rust_gpu_tools::{opencl, Device, UniqueId};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
@@ -11,7 +11,7 @@ use triton::FutharkContext;
 const MAX_LEN: usize = 128;
 
 lazy_static! {
-    static ref FUTHARK_CONTEXT_MAP: RwLock<HashMap<Device, Arc<Mutex<FutharkContext>>>> =
+    static ref FUTHARK_CONTEXT_MAP: RwLock<HashMap<opencl::Device, Arc<Mutex<FutharkContext>>>> =
         RwLock::new(HashMap::new());
 }
 
@@ -61,7 +61,7 @@ fn create_futhark_context(device: bindings::cl_device_id) -> ClResult<FutharkCon
     }
 }
 
-pub fn futhark_context(device: &Device) -> ClResult<Arc<Mutex<FutharkContext>>> {
+pub fn futhark_context(device: &opencl::Device) -> ClResult<Arc<Mutex<FutharkContext>>> {
     info!("getting context for ~{:?}", device.name());
     let mut map = FUTHARK_CONTEXT_MAP.write().unwrap();
 
@@ -72,6 +72,15 @@ pub fn futhark_context(device: &Device) -> ClResult<Arc<Mutex<FutharkContext>>> 
         map.insert(device.clone(), Arc::new(Mutex::new(context)));
     }
     Ok(Arc::clone(&map[&device]))
+}
+
+/// Returns the first device available
+fn first_device() -> ClResult<&'static opencl::Device> {
+    Device::all()
+        .iter()
+        .filter_map(|device| device.opencl_device())
+        .next()
+        .ok_or(ClError::DeviceNotFound)
 }
 
 pub fn default_futhark_context() -> ClResult<Arc<Mutex<FutharkContext>>> {
@@ -93,20 +102,20 @@ pub fn default_futhark_context() -> ClResult<Arc<Mutex<FutharkContext>>> {
                 unique_id
             );
             match Device::by_unique_id(unique_id) {
-                Ok(device) => futhark_context(device),
-                Err(_) => {
+                Some(device) => {
+                    futhark_context(device.opencl_device().expect("Not an OpenCL device."))
+                }
+                None => {
                     error!(
                        "A device with the given unique ID doesn't exist! Defaulting to the first device..."
                    );
-                    let all = Device::all();
-                    let device = all.first().ok_or(ClError::DeviceNotFound)?;
+                    let device = first_device()?;
                     futhark_context(device)
                 }
             }
         }
         None => {
-            let all = Device::all();
-            let device = all.first().ok_or(ClError::DeviceNotFound)?;
+            let device = first_device()?;
             futhark_context(device)
         }
     }
