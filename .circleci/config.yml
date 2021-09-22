@@ -3,7 +3,7 @@ version: 2.1
 executors:
   default:
     machine:
-      image: ubuntu-1604-cuda-10.1:201909-23
+      image: ubuntu-2004-cuda-11.2:202103-01
     working_directory: ~/gpuci
     resource_class: gpu.nvidia.medium
 
@@ -18,6 +18,22 @@ restore-cache: &restore-cache
       - repo-source-{{ .Branch }}-{{ .Revision }}
 
 commands:
+  set-env-path:
+    steps:
+      - run:
+          name: Set the PATH env variable
+          command: |
+            echo 'export PATH="$HOME:~/.cargo/bin:/usr/local/cuda-11.2/bin:$PATH"' | tee --append $BASH_ENV
+            source $BASH_ENV
+
+  install-gpu-deps:
+    steps:
+      - run:
+          name: Install libraries for GPU tests
+          command: |
+            sudo apt update
+            sudo apt install -y ocl-icd-opencl-dev
+
   test_target:
     parameters:
       target:
@@ -35,8 +51,22 @@ commands:
           no_output_timeout: 30m
       - run:
           name: Test (opencl) (<< parameters.target >>)
-          command: TARGET=<< parameters.target >> cargo test --release --features opencl -- --test-threads=1
+          command: TARGET=<< parameters.target >> cargo test --release --features opencl,arity2,arity4,arity8,arity11,arity16,arity24,arity36 -- --test-threads=1
           no_output_timeout: 30m
+      # Darwin CI doesn't support CUDA
+      - when:
+          condition:
+            not:
+              equal: [ darwin, << parameters.target >> ]
+          steps:
+            - run:
+                name: Test (cuda) (<< parameters.target >>)
+                command: TARGET=<< parameters.target >> cargo test --release --features cuda,arity2,arity4,arity8,arity11,arity16,arity24,arity36 -- --test-threads=1
+                no_output_timeout: 30m
+            - run:
+                name: Test (cuda,opencl) (<< parameters.target >>)
+                command: TARGET=<< parameters.target >> cargo test --release --features cuda,opencl,arity2,arity4,arity8,arity11,arity16,arity24,arity36 -- --test-threads=1
+                no_output_timeout: 30m
 
 jobs:
   cargo_fetch:
@@ -44,10 +74,8 @@ jobs:
     steps:
       - checkout
       - run: curl https://sh.rustup.rs -sSf | sh -s -- -y
-      - run: echo 'export PATH="$HOME:~/.cargo/bin:$PATH"' >> $BASH_ENV
-      - run: echo $BASH_ENV
+      - set-env-path
       - run: echo $HOME
-      - run: source $BASH_ENV
       - run: cargo --version
       - run: rustc --version
       - run:
@@ -77,12 +105,14 @@ jobs:
 
   test_x86_64-unknown-linux-gnu:
     executor: default
+    environment:
+      RUST_LOG: debug
+      # Build the kernel only for the single architecture that is used on CI. This should reduce
+      # the overall compile-time significantly.
+      NEPTUNE_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
     steps:
-      - run: echo 'export PATH="$HOME:~/.cargo/bin:$PATH"' >> $BASH_ENV
-      - run: source $BASH_ENV
-      - run: sudo apt-get update -y
-      - run: apt-cache search opencl
-      - run: sudo apt install -y ocl-icd-opencl-dev
+      - set-env-path
+      - install-gpu-deps
       - test_target:
           target: "x86_64-unknown-linux-gnu"
 
@@ -109,8 +139,7 @@ jobs:
     steps:
       - *restore-workspace
       - *restore-cache
-      - run: echo 'export PATH="$HOME:~/.cargo/bin:$PATH"' >> $BASH_ENV
-      - run: source $BASH_ENV
+      - set-env-path
       - run:
           name: Run cargo fmt
           command: cargo fmt --all -- --check
@@ -120,22 +149,25 @@ jobs:
     steps:
       - *restore-workspace
       - *restore-cache
-      - run: echo 'export PATH="$HOME:~/.cargo/bin:$PATH"' >> $BASH_ENV
-      - run: source $BASH_ENV
-      - run: sudo apt-get update -y
-      - run: apt-cache search opencl
-      - run: sudo apt install -y ocl-icd-opencl-dev
+      - set-env-path
+      - install-gpu-deps
       - run:
           # gbench doesn't support running without GPU support, hence don't run Clippy on the whole workspace
           name: Run cargo clippy, without gbench
           command: cargo clippy --all-targets -- -D warnings
       - run:
           name: Run cargo clippy (futhark)
-          command: cargo clippy --workspace --all-targets --features futhark -- -D warnings
+          command: cargo clippy --workspace --all-targets --no-default-features --features futhark -- -D warnings
       - run:
           name: Run cargo clippy (opencl)
           # gbench enables `futhark` by default, disable it using `--no-default-features`.
-          command: cargo clippy --workspace --all-targets --no-default-features --features opencl -- -D warnings
+          command: cargo clippy --workspace --all-targets --no-default-features --features opencl,arity2 -- -D warnings
+      - run:
+          name: Run cargo clippy (cuda)
+          command: cargo clippy --workspace --all-targets --no-default-features --features cuda,arity2 -- -D warnings
+      - run:
+          name: Run cargo clippy (cuda,opencl)
+          command: cargo clippy --workspace --all-targets --no-default-features --features cuda,opencl,arity2 -- -D warnings
 
 workflows:
   version: 2.1

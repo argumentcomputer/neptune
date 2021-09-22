@@ -6,7 +6,7 @@ use generic_array::GenericArray;
 use log::info;
 use neptune::column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait};
 use neptune::{batch_hasher::Batcher, BatchHasher};
-use rust_gpu_tools::opencl::{Device, UniqueId};
+use rust_gpu_tools::{Device, UniqueId};
 use std::convert::TryFrom;
 use std::thread;
 use std::time::Instant;
@@ -100,7 +100,7 @@ struct Opts {
 }
 
 fn main() {
-    #[cfg(all(any(feature = "gpu", feature = "opencl"), target_os = "macos"))]
+    #[cfg(all(any(feature = "cuda", feature = "opencl"), target_os = "macos"))]
     unimplemented!("Running on macos is not recommended and may have bad consequences -- experiment at your own risk.");
     env_logger::init();
 
@@ -121,17 +121,15 @@ fn main() {
     // Comma separated list of GPU bus-ids
     let gpus = std::env::var("NEPTUNE_GBENCH_GPUS");
 
-    let default_device = *Device::all().first().unwrap();
+    let default_device = *Device::all().first().expect("Cannot get a default device");
 
     let devices = gpus
         .map(|v| {
             v.split(',')
                 .map(|s| UniqueId::try_from(s).expect("Invalid unique ID!"))
                 .map(|unique_id| {
-                    let device = Device::by_unique_id(unique_id).unwrap_or_else(|_| {
-                        panic!("No device with unique ID {} found!", unique_id)
-                    });
-                    device
+                    Device::by_unique_id(unique_id)
+                        .unwrap_or_else(|| panic!("No device with unique ID {} found!", unique_id))
                 })
                 .collect::<Vec<_>>()
         })
