@@ -180,11 +180,7 @@ where
         let batch_size = preimages.len();
         assert!(batch_size <= max_batch_size);
 
-        // Set `global_work_size` to smallest multiple of `local_work_size` >= `batch-size`.
-        let global_work_size = ((batch_size / local_work_size)
-            + (batch_size % local_work_size != 0) as usize)
-            * local_work_size;
-
+        let global_work_size = calc_global_work_size(batch_size, local_work_size);
         let num_hashes = preimages.len();
 
         let kernel = self
@@ -225,6 +221,12 @@ where
     }
 }
 
+/// Set `global_work_size` to the smallest value possible, so that the
+/// total number of threads is >= `batch-size`.
+fn calc_global_work_size(batch_size: usize, local_work_size: usize) -> usize {
+    (batch_size / local_work_size) + (batch_size % local_work_size != 0) as usize
+}
+
 #[cfg(test)]
 #[cfg(all(feature = "opencl", not(target_os = "macos")))]
 mod test {
@@ -263,5 +265,47 @@ mod test {
         );
 
         assert_eq!(expected_hashes, cl_hashes);
+    }
+
+    #[test]
+    fn test_calc_global_work_size() {
+        let inputs = vec![
+            (10, 1),
+            (10, 2),
+            (10, 3),
+            (10, 4),
+            (10, 5),
+            (10, 6),
+            (10, 7),
+            (10, 8),
+            (10, 9),
+            (10, 10),
+            (10, 11),
+            (1, 1),
+            (1, 4),
+            (37, 11),
+            (37, 57),
+            (32, 4),
+            (32, 16),
+        ];
+
+        for (batch_size, local_work_size) in inputs {
+            let global_work_size = calc_global_work_size(batch_size, local_work_size);
+            // Make sure the total number of threads is bigger than the batch size.
+            assert!(
+                global_work_size * local_work_size >= batch_size,
+                "global work size is not greater than or equal to the batch size:: {} * {} is not >= {}",
+                global_work_size,
+                local_work_size,
+                batch_size);
+            // Make also sure that it's the minimum value.
+            assert!(
+                (global_work_size - 1) * local_work_size < batch_size,
+                "global work size is not minimal: ({} - 1) * {} is not < {}",
+                global_work_size,
+                local_work_size,
+                batch_size
+            );
+        }
     }
 }
