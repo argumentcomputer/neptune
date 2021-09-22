@@ -55,6 +55,7 @@ where
     };
     join(
         &[
+            ec_gpu_gen::common(),
             config(),
             field_source,
             poseidon_source("Fr", derived_constants),
