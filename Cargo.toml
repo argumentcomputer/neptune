@@ -10,7 +10,7 @@ resolver = "2"
 
 [dependencies]
 lazy_static = "1.4.0"
-bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "refactor-remove-pairing-req" }
+bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "master" }
 blake2s_simd = "0.5"
 blstrs = { git = "https://github.com/filecoin-project/blstrs", branch = "master" }
 byteorder = "1"
