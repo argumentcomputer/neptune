@@ -2,7 +2,7 @@ use crate::poseidon::{Arity, PoseidonConstants};
 use bellperson::gadgets::num::AllocatedNum;
 use bellperson::util_cs::bench_cs::BenchCS;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use blstrs::{Bls12, Scalar as Fr};
+use blstrs::Scalar as Fr;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ff::Field;
 use generic_array::typenum;
@@ -16,11 +16,8 @@ struct BenchCircuit<A: Arity<Fr>> {
     _a: PhantomData<A>,
 }
 
-impl<A: Arity<Fr>> Circuit<Bls12> for BenchCircuit<A> {
-    fn synthesize<CS: ConstraintSystem<Bls12>>(
-        self,
-        mut cs: &mut CS,
-    ) -> Result<(), SynthesisError> {
+impl<A: Arity<Fr>> Circuit<Fr> for BenchCircuit<A> {
+    fn synthesize<CS: ConstraintSystem<Fr>>(self, mut cs: &mut CS) -> Result<(), SynthesisError> {
         let mut rng = thread_rng();
         let arity = A::to_usize();
         let constants = PoseidonConstants::<Fr, A>::new();
@@ -28,7 +25,7 @@ impl<A: Arity<Fr>> Circuit<Bls12> for BenchCircuit<A> {
         for _ in 0..self.n {
             let mut i = 0;
             let mut fr_data = vec![Fr::random(&mut rng); arity];
-            let data: Vec<AllocatedNum<Bls12>> = (0..arity)
+            let data: Vec<AllocatedNum<Fr>> = (0..arity)
                 .enumerate()
                 .map(|_| {
                     let fr = Fr::random(&mut rng);
@@ -60,7 +57,7 @@ where
             &num_hashes,
             |b, n| {
                 b.iter(|| {
-                    let mut cs = BenchCS::<Bls12>::new();
+                    let mut cs = BenchCS::<Fr>::new();
                     let circuit = BenchCircuit::<A> {
                         n: *n,
                         _a: PhantomData::<A>,

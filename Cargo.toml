@@ -22,7 +22,6 @@ itertools = { version = "0.8.0" }
 log = "0.4.8"
 rust-gpu-tools = { git = "https://github.com/filecoin-project/rust-gpu-tools", branch = "master", default-features = false, optional = true }
 triton = { version = "2.1.0", package = "neptune-triton", default-features = false, features = ["opencl"], optional = true }
-pairing = "0.21"
 
 [dev-dependencies]
 criterion = "0.3"
