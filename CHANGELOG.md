@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 5.0.0 - 2021-9-30
+
+- Remove pairing requirement for circuits (https://github.com/filecoin-project/neptune/pull/111)
+- Add support for CUDA (https://github.com/filecoin-project/neptune/pull/109)
+- Use correct global work size (https://github.com/filecoin-project/neptune/pull/108)
+- Properly call ec_gpu_gen::common() (https://github.com/filecoin-project/neptune/pull/110)
+- Use upstream group, ff and pairing dependencies (https://github.com/filecoin-project/neptune/pull/103)
+- Remove unnecessary to_vec (https://github.com/filecoin-project/neptune/pull/107)
+- Pass GPU data from a pre-populated vector (https://github.com/filecoin-project/neptune/pull/106)
+
 ## 4.0.0 - 2021-8-2
 - Upgrade to latest rust-gpu-tools (https://github.com/filecoin-project/neptune/pull/91)
 - Rename GPU feature to Futhark (https://github.com/filecoin-project/neptune/pull/100)
