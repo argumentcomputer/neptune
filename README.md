@@ -21,7 +21,19 @@ At the time of the 1.0.0 release, Neptune on RTX 2080Ti GPU can build 8-ary Merk
 
 ## Implementation Specification
 
-Filecoin's Poseidon specification is published in the Filecoin specification document [here](https://spec.filecoin.io/#section-algorithms.crypto.poseidon). Additionally, a PDF version is mirrored in this repo [here](poseidon_spec.pdf).
+Filecoin's Poseidon specification is published in the Filecoin specification document [here](https://spec.filecoin.io/#section-algorithms.crypto.poseidon). Additionally, Markdown and PDF versions are mirrored in this repo in the [`spec`](spec) directory.
+
+### Contributing to the Spec
+
+### PDF Rendering Instructions
+
+The spec's PDF is rendered using [Typora](https://typora.io/). Download the spec's Markdown file [here](spec/poseidon_spec.md), open the file in Typora, make and save your changes, then export the file as a PDF.
+
+### Ensuring Spec Documents Stay in Sync
+
+When making changes to the spec documents in `neptune`, make sure that the spec's PDF file `poseidon_spec.pdf` is the PDF rendering of the Markdown spec `poseidon_spec.md`.
+
+If you make changes to the spec in `neptune`, you must make those same changes to the Filecoin spec [here](https://github.com/filecoin-project/specs/blob/master/content/algorithms/crypto/poseidon.md), thus ensuring all three document's (one Markdown+Latex and one PDF in `neptune` and one Markdown+MathJax in [`filecoin-project/specs`](https://github.com/filecoin-project/specs/)) stay in sync.
 
 ## Environment variables
 
