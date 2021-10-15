@@ -10,7 +10,7 @@ resolver = "2"
 
 [dependencies]
 lazy_static = "1.4.0"
-bellperson = "0.17.0"
+bellperson = "0.18.0"
 blake2s_simd = "0.5"
 blstrs = "0.4.0"
 byteorder = "1"
