@@ -36,7 +36,7 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
             HashType::MerkleTree => with_strength(A::tag()),
             // bitmask
             HashType::MerkleTreeSparse(bitmask) => with_strength(F::from(*bitmask)),
-            // 2^64
+            // 2^64 or (2^64 + 2^32)
             HashType::VariableLength => with_strength(pow2::<F>(64)),
             // length * 2^64
             // length must be greater than 0 and <= arity
@@ -45,12 +45,14 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
                 assert!(*length as usize > 0);
                 with_strength(x_pow2::<F>(*length as u64, 64))
             }
-            // 2^32
+            // 2^32 or (2^32 + 2^32 = 2^33)
             HashType::Encryption => with_strength(pow2::<F>(32)),
-            // identifier * 2^40
+            // identifier * 2^(40 + strength) -- where standard strength is 0.
+            // identifier must be in range [1..=256]
+            // If identifier == 0 then the strengthened version collides with Encryption with standard strength.
             // NOTE: in order to leave room for future `Strength` tags,
-            // we make identifier a multiple of 2^40 rather than 2^32.
-            HashType::Custom(ref ctype) => ctype.domain_tag(&strength),
+            // we make identifier a multiple of 2^40 (or 2^41) rather than 2^32.
+            HashType::Custom(ref ctype) => with_strength(ctype.domain_tag()),
         }
     }
 
@@ -74,7 +76,7 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
             HashType::VariableLength => false,
             HashType::ConstantLength(_) => true,
             HashType::Encryption => true,
-            HashType::Custom(_) => false,
+            HashType::Custom(_) => true,
         }
     }
 }
@@ -93,8 +95,12 @@ impl<F: PrimeField, A: Arity<F>> CType<F, A> {
         }
     }
 
-    fn domain_tag(&self, _strength: &Strength) -> F {
-        x_pow2::<F>(self.identifier(), 32)
+    fn domain_tag(&self) -> F {
+        let id = self.identifier();
+        assert!(id > 0, "custom domain tag id out of range");
+        assert!(id <= 256, "custom domain tag id out of range");
+
+        x_pow2::<F>(id, 40)
     }
 }
 
@@ -179,11 +185,11 @@ mod tests {
             all_tags.push(constant_strengthened);
 
             if length <= 8 {
-                let constant_strenghtened_alt_arity =
+                let constant_strengthened_alt_arity =
                     HashType::ConstantLength::<Fr, U8>(length).domain_tag(&Strength::Strengthened);
 
                 // Constant-length tag is independent of arity.
-                assert_eq!(constant_strengthened, constant_strenghtened_alt_arity);
+                assert_eq!(constant_strengthened, constant_strengthened_alt_arity);
             }
 
             assert_eq!(
@@ -216,6 +222,32 @@ mod tests {
         ]);
         assert_eq!(expected_encryption_strengthened, encryption_strengthened);
 
+        for index in 1..=256 {
+            let custom = HashType::Custom::<Fr, U8>(CType::Arbitrary(index as u64));
+            let standard_custom = custom.domain_tag(&Strength::Standard);
+            let strengthened_custom = custom.domain_tag(&Strength::Strengthened);
+
+            let expected_standard_custom = scalar_from_u64s([
+                0x0000010000000000 * index,
+                0x0000000000000000,
+                0x0000000000000000,
+                0x0000000000000000,
+            ]);
+
+            let expected_strengthened_custom = scalar_from_u64s([
+                0x0000010000000000 * index + 0x0000000100000000,
+                0x0000000000000000,
+                0x0000000000000000,
+                0x0000000000000000,
+            ]);
+
+            all_tags.push(expected_standard_custom);
+            all_tags.push(expected_strengthened_custom);
+
+            assert_eq!(expected_standard_custom, standard_custom);
+            assert_eq!(expected_strengthened_custom, strengthened_custom);
+        }
+
         all_tags.extend(&[
             expected_merkle_standard,
             expected_merkle_strengthened,
@@ -230,6 +262,6 @@ mod tests {
 
         // Cardinality of set and vector are the same,
         // hence no tag is duplicated.
-        assert_eq!(all_tags.len(), all_tags_set.len());
+        assert_eq!(all_tags.len(), all_tags_set.len(), "duplicate tag produced");
     }
 }
