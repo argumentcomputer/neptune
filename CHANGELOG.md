@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 5.1.0 - 2021-10-21
+- Fix, test, and enable custom domain tags. (https://github.com/filecoin-project/neptune/pull/116)
+- Update bellperson to v0.18.0 (https://github.com/filecoin-project/neptune/pull/115)
+- Fix spec's sparse factorization w vector (https://github.com/filecoin-project/neptune/pull/114)
+
 ## 5.0.0 - 2021-9-30
 
 - Remove pairing requirement for circuits (https://github.com/filecoin-project/neptune/pull/111)
