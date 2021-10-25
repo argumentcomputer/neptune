@@ -31,29 +31,31 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
             tmp
         };
 
-        match self {
+        // every domain tag receives a strength tag
+        // the strength tag is equivalent to: res += 0 or res += 2^32
+        with_strength(match self {
             // 2^arity - 1
-            HashType::MerkleTree => with_strength(A::tag()),
+            HashType::MerkleTree => A::tag(),
             // bitmask
-            HashType::MerkleTreeSparse(bitmask) => with_strength(F::from(*bitmask)),
-            // 2^64 or (2^64 + 2^32)
-            HashType::VariableLength => with_strength(pow2::<F>(64)),
+            HashType::MerkleTreeSparse(bitmask) => F::from(*bitmask),
+            // 2^64
+            HashType::VariableLength => pow2::<F>(64),
             // length * 2^64
             // length must be greater than 0 and <= arity
             HashType::ConstantLength(length) => {
                 assert!(*length as usize <= A::to_usize());
                 assert!(*length as usize > 0);
-                with_strength(x_pow2::<F>(*length as u64, 64))
+                x_pow2::<F>(*length as u64, 64)
             }
-            // 2^32 or (2^32 + 2^32 = 2^33)
-            HashType::Encryption => with_strength(pow2::<F>(32)),
-            // identifier * 2^(40 + strength) -- where standard strength is 0.
+            // 2^32 or (2^32 + 2^32 = 2^33) with strength tag
+            HashType::Encryption => pow2::<F>(32),
+            // identifier * 2^40
             // identifier must be in range [1..=256]
             // If identifier == 0 then the strengthened version collides with Encryption with standard strength.
             // NOTE: in order to leave room for future `Strength` tags,
-            // we make identifier a multiple of 2^40 (or 2^41) rather than 2^32.
-            HashType::Custom(ref ctype) => with_strength(ctype.domain_tag()),
-        }
+            // we make identifier a multiple of 2^40 rather than 2^32.
+            HashType::Custom(ref ctype) => ctype.domain_tag(),
+        })
     }
 
     fn strength_tag_component(strength: &Strength) -> F {
