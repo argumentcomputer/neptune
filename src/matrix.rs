@@ -261,6 +261,10 @@ fn eliminate<F: PrimeField>(
             shadow[i] = vec_sub(shadow_row, &scaled_shadow_pivot);
         }
     }
+
+    let pivot_row = shadow.remove(pivot_index);
+    shadow.insert(0, pivot_row);
+
     Some(result)
 }
 
@@ -459,6 +463,7 @@ mod tests {
 
     #[test]
     fn test_inverse() {
+        let zero = Fr::from(0);
         let one = Fr::from(1);
         let two = Fr::from(2);
         let three = Fr::from(3);
@@ -516,6 +521,16 @@ mod tests {
 
         // S + M(B) = M(B + M^-1(S))
         assert_eq!(add_after_apply, apply_after_add, "breakin' the law");
+
+        let m = vec![
+            vec![zero, one],
+            vec![one, zero],
+        ];
+        let m_inv = invert(&m).unwrap();
+        let computed_identity= mat_mul(&m, &m_inv).unwrap();
+        assert!(is_identity(&computed_identity));
+        let computed_identity= mat_mul(&m_inv, &m).unwrap();
+        assert!(is_identity(&computed_identity));
     }
 
     #[test]
