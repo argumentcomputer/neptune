@@ -38,23 +38,13 @@ DEVICE state_{arity}_{strength} apply_sparse_matrix_{arity}_{strength} (CONSTANT
   }}
 
 DEVICE state_{arity}_{strength} apply_round_matrix_{arity}_{strength} (CONSTANT {field} constants[{constants_elements}], state_{arity}_{strength} s) {{
-    // Needed to get the casting right
-    typedef {field} {field}Matrix[{width}][{width}];
     if (s.current_round == {sparse_offset}) {{
-#ifdef CUDA
-        s = apply_matrix_{arity}_{strength}(*({field}Matrix *)(constants + {pre_sparse_matrix_offset}), s);
-#else
-        s = apply_matrix_{arity}_{strength}(constants + {pre_sparse_matrix_offset}, s);
-#endif
+        s = apply_matrix_{arity}_{strength}((CONSTANT {field} (*)[{width}])(constants + {pre_sparse_matrix_offset}), s);
       }} else if ((s.current_round > {sparse_offset}) && (s.current_round < {full_half} + {partial_rounds})) {{
         int index = s.current_round - {sparse_offset} - 1;
         s = apply_sparse_matrix_{arity}_{strength}(constants + {sparse_matrixes_offset} + (index * {sparse_matrix_size}), s);
       }} else {{
-#ifdef CUDA
-        s = apply_matrix_{arity}_{strength}(*({field}Matrix *)(constants + {mds_matrix_offset}), s);
-#else
-        s = apply_matrix_{arity}_{strength}(constants + {mds_matrix_offset}, s);
-#endif
+        s = apply_matrix_{arity}_{strength}((CONSTANT {field} (*)[{width}])(constants + {mds_matrix_offset}), s);
       }}
     return s;
   }}
