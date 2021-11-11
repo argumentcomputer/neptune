@@ -71,3 +71,6 @@ strengthened = []
 members = [
   "gbench",
 ]
+
+[patch.crates-io]
+ec-gpu-gen = { git = "https://github.com/filecoin-project/ec-gpu", branch = "amd-initialize-fix" }
