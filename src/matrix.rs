@@ -522,14 +522,11 @@ mod tests {
         // S + M(B) = M(B + M^-1(S))
         assert_eq!(add_after_apply, apply_after_add, "breakin' the law");
 
-        let m = vec![
-            vec![zero, one],
-            vec![one, zero],
-        ];
+        let m = vec![vec![zero, one], vec![one, zero]];
         let m_inv = invert(&m).unwrap();
-        let computed_identity= mat_mul(&m, &m_inv).unwrap();
+        let computed_identity = mat_mul(&m, &m_inv).unwrap();
         assert!(is_identity(&computed_identity));
-        let computed_identity= mat_mul(&m_inv, &m).unwrap();
+        let computed_identity = mat_mul(&m_inv, &m).unwrap();
         assert!(is_identity(&computed_identity));
     }
 
