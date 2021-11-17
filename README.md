@@ -73,6 +73,16 @@ As the compile-time of the kernel depends on how many arities are used, there ar
 
     cargo test --no-default-features --features blst,cuda,arity2,arity4,arity8,arity11,arity16,arity24,arity36
 
+## Benchmarking Poseidon by Field and Preimage Length
+
+Benchmark Poseidon over the BLS12-381, Pallas, and Vesta scalar fields for preimages of length `2`, `4`, `8`, or `11` using:
+
+    cargo bench arity-<preimage len>
+
+Benchmark Poseidon over a specific field (`bls`, `pallas`, or `vesta`) and preimage length using:
+
+    cargo bench arity-<preimage len>/<field name>
+
 ## Future Work
 
 The following are likely areas of future work:
