@@ -180,7 +180,7 @@ impl<const A: usize> BatchHasher<A> for GpuBatchHasher<A> {
 }
 
 #[derive(Debug)]
-struct GpuConstants<const ARITY:  usize, const WIDTH: usize>(PoseidonConstants<Fr, ARITY, WIDTH>)
+struct GpuConstants<const ARITY: usize, const WIDTH: usize>(PoseidonConstants<Fr, ARITY, WIDTH>);
 
 impl<const ARITY: usize, const WIDTH: usize> GpuConstants<ARITY, WIDTH> {
     fn arity_tag(&self, ctx: &FutharkContext) -> Result<Array_u64_1d, Error> {

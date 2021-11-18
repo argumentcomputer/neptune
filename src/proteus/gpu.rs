@@ -96,7 +96,9 @@ impl<const ARITY: usize, const WIDTH: usize> ClBatchHasher<ARITY, WIDTH> {
         strength: Strength,
         max_batch_size: usize,
     ) -> Result<Self, Error> {
-        let constants = GpuConstants(PoseidonConstants::<Fr, A>::new_with_strength(strength));
+        let constants = GpuConstants(PoseidonConstants::<Fr, ARITY, WIDTH>::new_with_strength(
+            strength,
+        ));
         let program = program::program::<Fr>(device)?;
 
         // Allocate the buffer only once and re-use it in the hashing steps
@@ -137,7 +139,7 @@ const LOCAL_WORK_SIZE: usize = 256;
 impl<const ARITY: usize, const WIDTH: usize> BatchHasher<ARITY, WIDTH>
     for ClBatchHasher<ARITY, WIDTH>
 {
-    fn hash(&mut self, preimages: &[[Fr; A]]) -> Result<Vec<Fr>, Error> {
+    fn hash(&mut self, preimages: &[[Fr; ARITY]]) -> Result<Vec<Fr>, Error> {
         let local_work_size = LOCAL_WORK_SIZE;
         let max_batch_size = self.max_batch_size;
         let batch_size = preimages.len();
@@ -146,7 +148,7 @@ impl<const ARITY: usize, const WIDTH: usize> BatchHasher<ARITY, WIDTH>
         let global_work_size = calc_global_work_size(batch_size, local_work_size);
         let num_hashes = preimages.len();
 
-        let kernel_name = match (A::to_usize(), self.constants.strength()) {
+        let kernel_name = match (ARITY, self.constants.strength()) {
             #[cfg(feature = "arity2")]
             (2, Strength::Standard) => "hash_preimages_2_standard",
             #[cfg(all(feature = "arity2", feature = "strengthened"))]

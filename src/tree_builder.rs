@@ -5,24 +5,26 @@ use crate::BatchHasher;
 use blstrs::Scalar as Fr;
 use ff::Field;
 
-pub trait TreeBuilderTrait<const A: usize> {
+pub trait TreeBuilderTrait<const A: usize, const W: usize> {
     fn add_leaves(&mut self, leaves: &[Fr]) -> Result<(), Error>;
     fn add_final_leaves(&mut self, leaves: &[Fr]) -> Result<(Vec<Fr>, Vec<Fr>), Error>;
 
     fn reset(&mut self);
 }
 
-pub struct TreeBuilder<const A: usize> {
+pub struct TreeBuilder<const ARITY: usize, const WIDTH: usize> {
     pub leaf_count: usize,
     data: Vec<Fr>,
     /// Index of the first unfilled datum.
     fill_index: usize,
-    tree_constants: PoseidonConstants<Fr, A>,
-    tree_batcher: Option<Batcher<A>>,
+    tree_constants: PoseidonConstants<Fr, ARITY, WIDTH>,
+    tree_batcher: Option<Batcher<ARITY, WIDTH>>,
     rows_to_discard: usize,
 }
 
-impl<const A: usize> TreeBuilderTrait<A> for TreeBuilder<A> {
+impl<const ARITY: usize, const WIDTH: usize> TreeBuilderTrait<ARITY, WIDTH>
+    for TreeBuilder<ARITY, WIDTH>
+{
     fn add_leaves(&mut self, leaves: &[Fr]) -> Result<(), Error> {
         let start = self.fill_index;
         let batch_leaf_count = leaves.len();
@@ -68,9 +70,9 @@ fn as_generic_arrays<const A: usize>(vec: &[Fr]) -> &[[Fr; A]] {
     }
 }
 
-impl<const A: usize> TreeBuilder<A> {
+impl<const ARITY: usize, const WIDTH: usize> TreeBuilder<ARITY, WIDTH> {
     pub fn new(
-        tree_batcher: Option<Batcher<A>>,
+        tree_batcher: Option<Batcher<ARITY, WIDTH>>,
         leaf_count: usize,
         rows_to_discard: usize,
     ) -> Result<Self, Error> {
@@ -78,7 +80,7 @@ impl<const A: usize> TreeBuilder<A> {
             leaf_count,
             data: vec![Fr::zero(); leaf_count],
             fill_index: 0,
-            tree_constants: PoseidonConstants::<Fr, A>::new(),
+            tree_constants: PoseidonConstants::<Fr, ARITY, WIDTH>::new(),
             tree_batcher,
             rows_to_discard,
         };
@@ -96,13 +98,12 @@ impl<const A: usize> TreeBuilder<A> {
     pub fn build_tree(&mut self, rows_to_discard: usize) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
         let final_tree_size = self.tree_size(rows_to_discard);
         let intermediate_tree_size = self.tree_size(0) + self.leaf_count;
-        let arity = A - 1;
 
         let mut tree_data = vec![Fr::zero(); intermediate_tree_size];
 
         tree_data[0..self.leaf_count].copy_from_slice(&self.data);
 
-        let (mut start, mut end) = (0, arity);
+        let (mut start, mut end) = (0, ARITY);
 
         match &mut self.tree_batcher {
             Some(batcher) => {
@@ -111,16 +112,17 @@ impl<const A: usize> TreeBuilder<A> {
                 let (mut row_start, mut row_end) = (0, self.leaf_count);
                 while row_end < intermediate_tree_size {
                     let row_size = row_end - row_start;
-                    assert_eq!(0, row_size % arity);
-                    let new_row_size = row_size / arity;
+                    assert_eq!(0, row_size % ARITY);
+                    let new_row_size = row_size / ARITY;
                     let (new_row_start, new_row_end) = (row_end, row_end + new_row_size);
 
                     let mut total_hashed = 0;
                     let mut batch_start = row_start;
                     while total_hashed < new_row_size {
-                        let batch_end = usize::min(batch_start + (max_batch_size * arity), row_end);
-                        let batch_size = (batch_end - batch_start) / arity;
-                        let preimages = as_generic_arrays::<A>(&tree_data[batch_start..batch_end]);
+                        let batch_end = usize::min(batch_start + (max_batch_size * ARITY), row_end);
+                        let batch_size = (batch_end - batch_start) / ARITY;
+                        let preimages =
+                            as_generic_arrays::<ARITY>(&tree_data[batch_start..batch_end]);
                         let hashed = batcher.hash(&preimages)?;
 
                         #[allow(clippy::drop_ref)]
@@ -141,8 +143,8 @@ impl<const A: usize> TreeBuilder<A> {
                     tree_data[i] =
                         Poseidon::new_with_preimage(&tree_data[start..end], &self.tree_constants)
                             .hash();
-                    start += arity;
-                    end += arity;
+                    start += ARITY;
+                    end += ARITY;
                 }
             }
         }
@@ -155,8 +157,6 @@ impl<const A: usize> TreeBuilder<A> {
     /// `tree_size` returns the number of nodes in the tree to cache.
     /// This excludes the base row and the following `rows_to_discard` rows.
     pub fn tree_size(&self, rows_to_discard: usize) -> usize {
-        let arity = A - 1;
-
         let mut tree_size = 0;
         let mut current_row_size = self.leaf_count;
 
@@ -172,21 +172,19 @@ impl<const A: usize> TreeBuilder<A> {
             if current_row_size != 1 {
                 assert_eq!(
                     0,
-                    current_row_size % arity,
-                    "Tree leaf count {} is not a power of arity {}.",
+                    current_row_size % ARITY,
+                    "Tree leaf count {} is not a power of ARITY {}.",
                     self.leaf_count,
-                    arity
+                    ARITY
                 )
             }
-            current_row_size /= arity;
+            current_row_size /= ARITY;
         }
 
         tree_size
     }
 
     pub fn tree_height(&self) -> usize {
-        let arity = A - 1;
-
         let mut tree_height = 0;
         let mut current_row_size = self.leaf_count;
 
@@ -196,24 +194,23 @@ impl<const A: usize> TreeBuilder<A> {
                 tree_height += 1;
                 assert_eq!(
                     0,
-                    current_row_size % arity,
+                    current_row_size % ARITY,
                     "Tree leaf count {} is not a power of arity {}.",
                     self.leaf_count,
-                    arity
+                    ARITY
                 );
             }
-            current_row_size /= arity;
+            current_row_size /= ARITY;
         }
         tree_height
     }
 
-    // Compute root of tree composed of all identical columns. For use in checking correctness of GPU tree-building
-    // without the cost of generating a full tree.
+    /// Compute root of tree composed of all identical columns. For use in checking correctness of GPU tree-building
+    /// without the cost of generating a full tree.
     pub fn compute_uniform_tree_root(&mut self, leaf: Fr) -> Result<Fr, Error> {
-        let arity = A - 1;
         let mut element = leaf;
         for _ in 0..self.tree_height() {
-            let preimage = vec![element; arity];
+            let preimage = [element; ARITY];
             // Each row is the hash of the identical elements in the previous row.
             element = Poseidon::new_with_preimage(&preimage, &self.tree_constants).hash();
         }
@@ -261,7 +258,7 @@ mod tests {
                 BatcherType::Cpu => Some(Batcher::new_cpu(512)),
                 BatcherType::Gpu => Some(Batcher::pick_gpu(512).unwrap()),
             };
-            let mut builder = TreeBuilder::<9>::new(batcher, leaves, rows_to_discard).unwrap();
+            let mut builder = TreeBuilder::<9, 10>::new(batcher, leaves, rows_to_discard).unwrap();
 
             // Simplify computing the expected root.
             let constant_element = Fr::zero();

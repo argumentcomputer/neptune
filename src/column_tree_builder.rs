@@ -16,18 +16,28 @@ pub trait ColumnTreeBuilderTrait<const ColumnArity: usize, const TreeArity: usiz
     fn reset(&mut self);
 }
 
-pub struct ColumnTreeBuilder<const ColumnArity: usize, const TreeArity: usize> {
+pub struct ColumnTreeBuilder<
+    const ColumnArity: usize,
+    const ColumnWidth: usize,
+    const TreeArity: usize,
+    const TreeWidth: usize,
+> {
     pub leaf_count: usize,
     data: Vec<Fr>,
     /// Index of the first unfilled datum.
     fill_index: usize,
-    column_constants: PoseidonConstants<Fr, ColumnArity>,
-    pub column_batcher: Option<Batcher<ColumnArity>>,
-    tree_builder: TreeBuilder<TreeArity>,
+    column_constants: PoseidonConstants<Fr, ColumnArity, ColumnWidth>,
+    pub column_batcher: Option<Batcher<ColumnArity, ColumnWidth>>,
+    tree_builder: TreeBuilder<TreeArity, TreeWidth>,
 }
 
-impl<const ColumnArity: usize, const TreeArity: usize>
-    ColumnTreeBuilderTrait<ColumnArity, TreeArity> for ColumnTreeBuilder<ColumnArity, TreeArity>
+impl<
+        const ColumnArity: usize,
+        const ColumnWidth: usize,
+        const TreeArity: usize,
+        const TreeWidth: usize,
+    > ColumnTreeBuilderTrait<ColumnArity, TreeArity>
+    for ColumnTreeBuilder<ColumnArity, ColumnWidth, TreeArity, TreeWidth>
 {
     fn add_columns(&mut self, columns: &[[Fr; ColumnArity]]) -> Result<(), Error> {
         let start = self.fill_index;
@@ -85,19 +95,25 @@ fn as_generic_arrays<const A: usize>(vec: &[Fr]) -> &[[Fr; A]] {
     }
 }
 
-impl<const ColumnArity: usize, const TreeArity: usize> ColumnTreeBuilder<ColumnArity, TreeArity> {
+impl<
+        const ColumnArity: usize,
+        const ColumnWidth: usize,
+        const TreeArity: usize,
+        const TreeWidth: usize,
+    > ColumnTreeBuilder<ColumnArity, ColumnWidth, TreeArity, TreeWidth>
+{
     pub fn new(
-        column_batcher: Option<Batcher<ColumnArity>>,
-        tree_batcher: Option<Batcher<TreeArity>>,
+        column_batcher: Option<Batcher<ColumnArity, ColumnWidth>>,
+        tree_batcher: Option<Batcher<TreeArity, TreeWidth>>,
         leaf_count: usize,
     ) -> Result<Self, Error> {
-        let tree_builder = TreeBuilder::<TreeArity>::new(tree_batcher, leaf_count, 0)?;
+        let tree_builder = TreeBuilder::<TreeArity, TreeWidth>::new(tree_batcher, leaf_count, 0)?;
 
         let builder = Self {
             leaf_count,
             data: vec![Fr::zero(); leaf_count],
             fill_index: 0,
-            column_constants: PoseidonConstants::<Fr, ColumnArity>::new(),
+            column_constants: PoseidonConstants::<Fr, ColumnArity, ColumnWidth>::new(),
             column_batcher,
             tree_builder,
         };
@@ -151,15 +167,15 @@ mod tests {
     }
 
     fn test_column_tree_builder_aux(
-        column_batcher: Option<Batcher<11>>,
-        tree_batcher: Option<Batcher<8>>,
+        column_batcher: Option<Batcher<11, 12>>,
+        tree_batcher: Option<Batcher<8, 9>>,
         leaves: usize,
         num_batches: usize,
     ) {
         let batch_size = leaves / num_batches;
 
         let mut builder =
-            ColumnTreeBuilder::<11, 8>::new(column_batcher, tree_batcher, leaves).unwrap();
+            ColumnTreeBuilder::<11, 12, 8, 9>::new(column_batcher, tree_batcher, leaves).unwrap();
 
         // Simplify computing the expected root.
         let constant_element = Fr::zero();
