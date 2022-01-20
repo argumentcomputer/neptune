@@ -55,6 +55,7 @@ pub enum Error {
     #[cfg(feature = "futhark")]
     TritonError(String),
     DecodingError,
+    TagMismatch,
     Other(String),
 }
 
@@ -95,6 +96,7 @@ impl fmt::Display for Error {
             #[cfg(feature = "futhark")]
             Error::TritonError(e) => write!(f, "Neptune-triton Error: {}", e),
             Error::DecodingError => write!(f, "PrimeFieldDecodingError"),
+            Error::TagMismatch => write!(f, "Tag mismatch"),
             Error::Other(s) => write!(f, "{}", s),
         }
     }

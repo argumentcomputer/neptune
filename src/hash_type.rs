@@ -39,7 +39,7 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
             // bitmask
             HashType::MerkleTreeSparse(bitmask) => F::from(*bitmask),
             // 2^64
-            HashType::VariableLength => pow2::<F>(64),
+            HashType::VariableLength => self.encryption_domain_tag(0, 0),
             // length * 2^64
             // length must be greater than 0 and <= arity
             HashType::ConstantLength(length) => {
@@ -56,6 +56,21 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
             // we make identifier a multiple of 2^40 rather than 2^32.
             HashType::Custom(ref ctype) => ctype.domain_tag(),
         })
+    }
+
+    pub fn encryption_domain_tag(&self, key_length: usize, message_length: usize) -> F {
+        match self {
+            Self::Encryption => {
+                assert!(key_length <= u64::MAX as usize);
+                assert!(message_length <= u64::MAX as usize);
+
+                let mut tag: F = pow2::<F>(32);
+                tag += x_pow2::<F>(key_length as u64, 33);
+                tag += x_pow2::<F>(message_length as u64, 97);
+                tag
+            }
+            _ => panic!("cannot set encryption domain tag"),
+        }
     }
 
     fn strength_tag_component(strength: &Strength) -> F {
