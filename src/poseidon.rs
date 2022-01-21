@@ -315,7 +315,7 @@ where
     /// Panics if the provided slice is bigger than the arity.
     pub fn set_preimage(&mut self, preimage: &[F]) {
         self.reset();
-        self.elements[1..].copy_from_slice(&preimage);
+        self.elements[1..].copy_from_slice(preimage);
         self.pos = self.elements.len();
     }
 
@@ -497,7 +497,7 @@ where
                 let index = self.current_round - sparse_offset - 1;
                 let sparse_matrix = &self.constants.sparse_matrixes[index];
 
-                self.product_mds_with_sparse_matrix(&sparse_matrix);
+                self.product_mds_with_sparse_matrix(sparse_matrix);
             } else {
                 self.product_mds();
             }
@@ -606,7 +606,7 @@ where
     pub fn encrypt(&mut self, key: &[F], plaintext: &[F]) -> Result<(Vec<F>, F), Error> {
         // https://link.springer.com/content/pdf/10.1007%2F978-3-642-28496-0_19.pdf
         let arity = A::to_usize();
-        assert!(key.len() > 0);
+        assert!(!key.is_empty());
 
         self.shared_initialize(key, plaintext.len())?;
 
@@ -625,7 +625,7 @@ where
 
     pub fn decrypt(&mut self, key: &[F], ciphertext: &[F], tag: &F) -> Result<Vec<F>, Error> {
         let arity = A::to_usize();
-        assert!(key.len() > 0);
+        assert!(!key.is_empty());
 
         self.shared_initialize(key, ciphertext.len())?;
         let mut plaintext = Vec::with_capacity(ciphertext.len());
@@ -682,7 +682,7 @@ where
     fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
         Ok(preimages
             .iter()
-            .map(|preimage| Poseidon::new_with_preimage(&preimage, &self.constants).hash())
+            .map(|preimage| Poseidon::new_with_preimage(preimage, &self.constants).hash())
             .collect())
     }
 
