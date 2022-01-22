@@ -11,10 +11,11 @@ where
     A: Arity<F>,
 {
     fn set_encryption_domain_tag(&mut self, key_length: usize, message_length: usize) {
-        self.elements[0] = self
-            .constants
-            .hash_type
-            .encryption_domain_tag(key_length, message_length);
+        self.elements[0] = self.constants.hash_type.encryption_domain_tag(
+            &self.constants.strength,
+            key_length,
+            message_length,
+        );
     }
 
     /// Initialize state with key, shared by encryption and decryption.
@@ -127,58 +128,58 @@ mod tests {
             ciphertext,
             [
                 scalar_from_u64s([
-                    0xaec64216978527ac,
-                    0xdf5f10f7a1a9a8b7,
-                    0xe34ddf5197d75feb,
-                    0x1be88365866ae3d6
+                    0x5ff0cfcb4e85930b,
+                    0x414ba007bd03ebf4,
+                    0xd6f74ff3f8c551d2,
+                    0x559e8d0119147a58
                 ]),
                 scalar_from_u64s([
-                    0xda0d5ec9eff654da,
-                    0x7017055a0a081c34,
-                    0x1bce42bb6937ab48,
-                    0x35a2e74eeaa97f6c
+                    0x27b444621fb66c53,
+                    0xfd93155d4bfd6390,
+                    0x057278df25ed0755,
+                    0x6aba53c18d1e6e19
                 ]),
                 scalar_from_u64s([
-                    0x298936f51cf3aa12,
-                    0x906cf40d00e4411c,
-                    0xc195c1ed48a6c223,
-                    0x4598c18291315dbc
+                    0xcf372c291876cbb7,
+                    0x11c0fd7f08e2cd3c,
+                    0x3fcda5c47584f1bf,
+                    0x1ace845c63a281c5
                 ]),
                 scalar_from_u64s([
-                    0xd59a3a87f0dec416,
-                    0x0d9fd7b5282925d8,
-                    0x0ea1b98d0b00d561,
-                    0x023704693c4abf1b
+                    0x1c6ece3946a87525,
+                    0x5a5e7a53bfa88a06,
+                    0x80b1b7fc3057c99f,
+                    0x384830fff68907ae
                 ]),
                 scalar_from_u64s([
-                    0x211b61f66285bd55,
-                    0xbf26070055e78d4a,
-                    0x3682aa0ce38835cf,
-                    0x4e6a9d5424f77ac5
+                    0x9cf97e49da0764d9,
+                    0xb22f72ce3848eec4,
+                    0x44b456ea90ff3eb2,
+                    0x6e4bd3b52abc3da1
                 ]),
                 scalar_from_u64s([
-                    0xa1b8442758bec43b,
-                    0xaf3248c718643bf9,
-                    0x66ad9b69d73bc44a,
-                    0x243e604b5138226a
+                    0xb5bd052b5cd4950e,
+                    0x2310f368ebaa3a7e,
+                    0x28e774fd3c3f65f1,
+                    0x22270e75c580e1a9
                 ]),
                 scalar_from_u64s([
-                    0xf92fd3ed19af0733,
-                    0x6b96bc196f6c2d5b,
-                    0xefe6d3b5c1dc730a,
-                    0x0dabad8c3dbd4147
+                    0xf28d6c4beca28050,
+                    0x356f6048a3db8b1d,
+                    0x48ede4c915994a31,
+                    0x317816a5fb29b815
                 ]),
                 scalar_from_u64s([
-                    0x556595727f046c2a,
-                    0xaecc434fb16c8631,
-                    0xd5da55ffc78a420f,
-                    0x081a166a1909cbed
+                    0xec253d996f303928,
+                    0xba901e485ba84221,
+                    0xf31af5cb8dfd1c03,
+                    0x05b026c0904e93ed
                 ]),
                 scalar_from_u64s([
-                    0x40d5a2d5052cb583,
-                    0x5c0b5265c006a5cb,
-                    0xfd936f0a297114f8,
-                    0x1191f085dc4d2286
+                    0x612315aa5c696bfd,
+                    0x65feed64c6aa4f02,
+                    0x75f5bef81e7e5043,
+                    0x38e55933719f8a21
                 ]),
             ]
         )
