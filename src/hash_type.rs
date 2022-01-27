@@ -39,7 +39,7 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
             // bitmask
             HashType::MerkleTreeSparse(bitmask) => F::from(*bitmask),
             // 2^64
-            HashType::VariableLength => self.base_encryption_domain_tag(0, 0),
+            HashType::VariableLength => pow2::<F>(64),
             // length * 2^64
             // length must be greater than 0 and <= arity
             HashType::ConstantLength(length) => {
@@ -48,7 +48,7 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
                 x_pow2::<F>(*length as u64, 64)
             }
             // 2^32 or (2^32 + 2^32 = 2^33) with strength tag
-            HashType::Encryption => pow2::<F>(32),
+            HashType::Encryption => self.base_encryption_domain_tag(0, 0),
             // identifier * 2^40
             // identifier must be in range [1..=256]
             // If identifier == 0 then the strengthened version collides with Encryption with standard strength.

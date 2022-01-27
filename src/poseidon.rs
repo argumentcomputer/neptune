@@ -321,14 +321,12 @@ where
 
     /// Restore the initial state
     pub fn reset(&mut self) {
-        self.partial_reset();
-        self.elements[1..]
-            .iter_mut()
-            .for_each(|l| *l = F::from(0u64));
+        self.reset_offsets();
+        self.elements[1..].iter_mut().for_each(|l| *l = F::zero());
         self.elements[0] = self.constants.domain_tag;
     }
 
-    pub(crate) fn partial_reset(&mut self) {
+    pub(crate) fn reset_offsets(&mut self) {
         self.constants_offset = 0;
         self.current_round = 0;
         self.pos = 1;
@@ -554,7 +552,7 @@ where
         let _ = std::mem::replace(&mut self.elements, result);
     }
 
-    fn debug(&self, msg: &str) {
+    pub(crate) fn debug(&self, msg: &str) {
         dbg!(msg, &self.constants_offset, &self.elements);
     }
 }

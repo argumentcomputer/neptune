@@ -116,6 +116,19 @@ jobs:
       - test_target:
           target: "x86_64-unknown-linux-gnu"
 
+  test_aarch64-unknown-linux-gnu:
+    executor: default
+    environment:
+      RUST_LOG: debug
+      # Build the kernel only for the single architecture that is used on CI. This should reduce
+      # the overall compile-time significantly.
+      NEPTUNE_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
+    steps:
+      - set-env-path
+      - install-gpu-deps
+      - test_target:
+          target: "aarch64-unknown-linux-gnu"
+
   test_darwin:
     macos:
       xcode: "12.5.0"
@@ -182,6 +195,9 @@ workflows:
           requires:
             - cargo_fetch
       - test_x86_64-unknown-linux-gnu:
+          requires:
+            - cargo_fetch
+      - test_aarch64-unknown-linux-gnu:
           requires:
             - cargo_fetch
       - test_darwin:

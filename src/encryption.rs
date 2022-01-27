@@ -2,9 +2,290 @@ use crate::hash_type::HashType;
 use crate::poseidon::{Arity, Poseidon, PoseidonConstants};
 use crate::Error;
 use ff::PrimeField;
+use generic_array::{
+    sequence::GenericSequence, typenum::operator_aliases::Sub1, ArrayLength, GenericArray,
+};
+
+/// https://link.springer.com/content/pdf/10.1007%2F978-3-642-28496-0_19.pdf
+
+pub struct Crypt<'a, F, A>
+where
+    F: PrimeField,
+    A: Arity<F>,
+{
+    poseidon: Poseidon<'a, F, A>,
+    direction: EncDec,
+    is_streaming: bool,
+}
+
+impl<'a, F, A> Crypt<'a, F, A>
+where
+    F: PrimeField,
+    A: Arity<F>,
+{
+    fn require_enc(&self) -> Result<(), Error> {
+        if self.direction.is_enc() {
+            Ok(())
+        } else {
+            Err(Error::UnsupportedCryptOp)
+        }
+    }
+
+    fn require_dec(&self) -> Result<(), Error> {
+        if self.direction.is_dec() {
+            Ok(())
+        } else {
+            Err(Error::UnsupportedCryptOp)
+        }
+    }
+
+    fn require_streaming(&self) -> Result<(), Error> {
+        if self.is_streaming {
+            Ok(())
+        } else {
+            Err(Error::UnsupportedCryptOp)
+        }
+    }
+
+    fn require_fixed(&self) -> Result<(), Error> {
+        if !self.is_streaming {
+            Ok(())
+        } else {
+            Err(Error::UnsupportedCryptOp)
+        }
+    }
+}
+
+pub enum EncDec {
+    Enc,
+    Dec,
+}
+
+impl EncDec {
+    fn is_enc(&self) -> bool {
+        match self {
+            Self::Enc => true,
+            Self::Dec => false,
+        }
+    }
+    fn is_dec(&self) -> bool {
+        match self {
+            Self::Enc => false,
+            Self::Dec => true,
+        }
+    }
+}
+
+impl<'a, F, A> Crypt<'a, F, A>
+where
+    F: PrimeField + Sized,
+    A: Arity<F>,
+{
+    // NOTE: If an empty key is provided, tags still provide authentication,
+    // but decryption is trivial.
+    pub fn init_stream(&mut self, key: &[F]) -> Result<(), Error> {
+        self.require_streaming()?;
+
+        self.poseidon.shared_initialize(key, 0)?;
+        self.poseidon.reset_offsets();
+        Ok(())
+    }
+
+    pub fn init_fixed(&mut self, key: &[F], message_length: usize) -> Result<(), Error> {
+        self.require_fixed()?;
+
+        self.poseidon.shared_initialize(key, message_length)?;
+        self.poseidon.reset_offsets();
+        Ok(())
+    }
+
+    // Returns array containing transient tag as first element and ciphertext chunk as remainder.
+    // Transient tags may have application value, since they summarize the state of the stream.
+    // However, they must not be leaked, since discovery of a transient tag will allow decryption
+    // of the remainder of the stream.
+    fn encrypt_chunk_internal(
+        &mut self,
+        plaintext_chunk: &[F],
+    ) -> Result<GenericArray<F, A::ConstantsSize>, Error> {
+        let mut ciphertext_chunk = GenericArray::generate(|i| {
+            if i > 0 && i <= plaintext_chunk.len() {
+                plaintext_chunk[i - 1] + self.poseidon.elements[i]
+            } else {
+                F::zero()
+            }
+        });
+        self.poseidon.duplex(plaintext_chunk)?;
+
+        let tag = self.poseidon.extract_output();
+        ciphertext_chunk[0] = tag;
+
+        Ok(ciphertext_chunk)
+    }
+
+    pub fn encrypt(
+        poseidon: Poseidon<'a, F, A>,
+        key: &[F],
+        plaintext: &[F],
+    ) -> Result<(Vec<F>, F), Error> {
+        let arity = A::to_usize();
+        assert!(!key.is_empty());
+
+        let mut enc = Crypt {
+            poseidon,
+            is_streaming: false,
+            direction: EncDec::Enc,
+        };
+
+        let effective_length = plaintext.len();
+        assert!(effective_length > 0);
+
+        enc.init_fixed(key, effective_length)?;
+
+        let mut ciphertext = Vec::with_capacity(effective_length);
+
+        let mut tag = enc.poseidon.extract_output();
+
+        for plaintext_chunk in plaintext.chunks(arity) {
+            let ciphertext_chunk = enc.encrypt_chunk_internal(plaintext_chunk)?;
+            ciphertext_chunk
+                .iter()
+                .skip(1)
+                .zip(plaintext_chunk)
+                .for_each(|(x, _)| ciphertext.push(*x));
+            tag = ciphertext_chunk[0];
+        }
+
+        Ok((ciphertext.to_vec(), tag))
+    }
+
+    pub fn new_encryption_stream(poseidon: Poseidon<'a, F, A>, key: &[F]) -> Result<Self, Error> {
+        assert!(!key.is_empty());
+
+        let mut enc = Crypt {
+            poseidon,
+            direction: EncDec::Enc,
+            is_streaming: true,
+        };
+        enc.init_stream(key)?;
+        Ok(enc)
+    }
+
+    pub fn new_decryption_stream(poseidon: Poseidon<'a, F, A>, key: &[F]) -> Result<Self, Error> {
+        assert!(!key.is_empty());
+
+        let mut enc = Crypt {
+            poseidon,
+            direction: EncDec::Dec,
+            is_streaming: true,
+        };
+        enc.init_stream(key)?;
+        Ok(enc)
+    }
+
+    pub fn start_header(&mut self, body_length: usize, nonce: Option<F>) -> Result<(), Error> {
+        self.require_streaming()?;
+
+        self.add_header_element(F::from(body_length as u64))?;
+        self.add_header_element(nonce.unwrap_or_else(|| F::zero()))?;
+
+        Ok(())
+    }
+
+    pub fn add_header_element(&mut self, elt: F) -> Result<(), Error> {
+        self.require_streaming()?;
+
+        self.poseidon.duplex1(&elt)?;
+
+        Ok(())
+    }
+
+    pub fn encrypt_element(&mut self, elt: F) -> Result<F, Error> {
+        self.require_enc()?;
+
+        let encrypted = self.poseidon.elements[self.poseidon.pos] + elt;
+
+        self.poseidon.duplex1(&elt)?;
+
+        Ok(encrypted)
+    }
+
+    pub fn decrypt_element(&mut self, elt: F) -> Result<F, Error> {
+        self.require_dec()?;
+
+        let decrypted = elt - self.poseidon.elements[self.poseidon.pos];
+
+        self.poseidon.duplex1(&decrypted)?;
+
+        Ok(decrypted)
+    }
+
+    pub fn finalize_part(&mut self) -> Result<(), Error> {
+        self.require_streaming()?;
+
+        if self.poseidon.pos != self.poseidon.constants.width() {
+            self.poseidon.hash();
+            self.poseidon.reset_offsets();
+        };
+
+        Ok(())
+    }
+
+    pub fn finalize_header(&mut self) -> Result<(), Error> {
+        self.finalize_part()?;
+        Ok(())
+    }
+
+    pub fn finalize_body(&mut self) -> Result<(), Error> {
+        self.finalize_part()?;
+        Ok(())
+    }
+
+    pub fn finalize_message(&mut self) -> Result<F, Error> {
+        self.require_streaming()?;
+
+        if self.poseidon.pos != self.poseidon.constants.width() {
+            self.poseidon.hash();
+            self.poseidon.reset_offsets();
+        };
+
+        let tag = self.poseidon.extract_output();
+
+        Ok(tag)
+    }
+
+    pub fn finalize(&mut self, decrypted: &mut Vec<F>) -> Result<(Vec<F>, F), Error> {
+        self.require_dec()?;
+        self.require_streaming()?;
+        let tag = self.poseidon.extract_output();
+
+        loop {
+            if let Some(last) = decrypted.last() {
+                if *last == F::zero() {
+                    decrypted.pop();
+                    continue;
+                } else {
+                    break;
+                }
+            } else {
+                return Ok((decrypted.to_vec(), tag));
+            }
+        }
+
+        if let Some(last) = decrypted.last() {
+            if *last == F::one() {
+                decrypted.pop();
+            }
+        }
+
+        Ok((decrypted.to_vec(), tag))
+    }
+}
 
 /// Encryption
-/// https://link.springer.com/content/pdf/10.1007%2F978-3-642-28496-0_19.pdf
+///
+/// References:
+/// - https://link.springer.com/content/pdf/10.1007%2F978-3-642-28496-0_19.pdf
+/// - https://drive.google.com/file/d/1EVrP3DzoGbmzkRmYnyEDcIQcXVU7GlOd/edit
 impl<'a, F, A> Poseidon<'a, F, A>
 where
     F: PrimeField,
@@ -32,28 +313,41 @@ where
 
     /// Incorporate input (by element-wise field addition), then permute the state.
     /// Output is left in state (self.elements).
-    pub fn duplex(&mut self, input: &[F]) -> Result<(), Error> {
+    fn duplex(&mut self, input: &[F]) -> Result<(), Error> {
         assert!(input.len() <= self.constants.arity());
-        self.partial_reset();
 
         for elt in input.iter() {
-            self.elements[self.pos] += elt;
-            self.pos += 1;
+            self.duplex1(elt)?;
         }
 
-        self.hash();
-
         Ok(())
+    }
+
+    fn duplex1(&mut self, input_elt: &F) -> Result<F, Error> {
+        let res = self.elements[self.pos] + input_elt;
+
+        self.elements[self.pos] = res;
+        self.pos += 1;
+
+        if self.pos >= self.constants.width() {
+            self.hash();
+            self.reset_offsets();
+        }
+
+        Ok(res)
     }
 
     pub fn encrypt(&mut self, key: &[F], plaintext: &[F]) -> Result<(Vec<F>, F), Error> {
         // https://link.springer.com/content/pdf/10.1007%2F978-3-642-28496-0_19.pdf
         let arity = A::to_usize();
-        assert!(!key.is_empty());
+        // assert!(!key.is_empty());
 
-        self.shared_initialize(key, plaintext.len())?;
+        let effective_length = plaintext.len();
+        assert!(effective_length > 0);
 
-        let mut ciphertext = Vec::with_capacity(plaintext.len());
+        self.shared_initialize(key, effective_length)?;
+
+        let mut ciphertext = Vec::with_capacity(effective_length);
 
         for plaintext_chunk in plaintext.chunks(arity) {
             for (elt, resp) in plaintext_chunk.iter().zip(self.elements.iter().skip(1)) {
@@ -68,7 +362,7 @@ where
 
     pub fn decrypt(&mut self, key: &[F], ciphertext: &[F], tag: &F) -> Result<Vec<F>, Error> {
         let arity = A::to_usize();
-        assert!(!key.is_empty());
+        // assert!(!key.is_empty());
 
         self.shared_initialize(key, ciphertext.len())?;
         let mut plaintext = Vec::with_capacity(ciphertext.len());
@@ -80,7 +374,6 @@ where
             }
             let plaintext_chunk = &plaintext[last_chunk_start..];
             self.duplex(plaintext_chunk)?;
-
             last_chunk_start += arity;
         }
 
@@ -100,7 +393,9 @@ mod tests {
     use crate::*;
     use blstrs::Scalar as Fr;
     use ff::Field;
-    use generic_array::typenum::U2;
+    use generic_array::typenum::{U2, U5};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
 
     #[test]
     fn encrypt_decrypt() {
@@ -121,9 +416,14 @@ mod tests {
             .collect::<Vec<_>>();
 
         let (ciphertext, tag) = p.encrypt(&key, &plaintext).unwrap();
+        let (ciphertext2, tag2) = Crypt::encrypt(p.clone(), &key, &plaintext).unwrap();
+
         let decrypted = p.decrypt(&key, &ciphertext, &tag).unwrap();
+        let decrypted2 = p.decrypt(&key, &ciphertext2, &tag2).unwrap();
 
         assert_eq!(plaintext, decrypted);
+        assert_eq!(plaintext, decrypted2);
+        assert_eq!(ciphertext2, ciphertext2);
         assert_eq!(
             ciphertext,
             [
@@ -183,5 +483,109 @@ mod tests {
                 ]),
             ]
         )
+    }
+
+    #[test]
+    fn streaming_encrypt_decrypt() {
+        // TODO: other arities.
+        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
+
+        let constants = PoseidonConstants::<Fr, U5>::new_with_strength_and_type(
+            Strength::Standard,
+            HashType::Encryption,
+        );
+        let p = Poseidon::<Fr, U5>::new(&constants);
+
+        let trials = 20;
+        let messages = 10;
+        let max_key_length = 7;
+        let max_header_length = 7;
+        let max_message_length = 20;
+
+        for _ in 0..trials {
+            // Create random key
+            let mut key = Vec::new();
+
+            for _ in 0..rng.gen_range(1..max_key_length) {
+                key.push(Fr::random(&mut rng))
+            }
+
+            let mut e = Crypt::new_encryption_stream(p.clone(), &key).unwrap();
+            let mut d = Crypt::new_decryption_stream(p.clone(), &key).unwrap();
+
+            let mut message_data = Vec::with_capacity(messages);
+
+            for _ in 0..messages {
+                // Create nonce
+                let nonce = Some(Fr::random(&mut rng));
+
+                // Create random header
+                let mut header = Vec::new();
+
+                for _ in 0..rng.gen_range(1..max_header_length) {
+                    header.push(Fr::random(&mut rng))
+                }
+
+                let message_length = rng.gen_range(0..max_message_length);
+                // Create random plaintext
+                let mut plaintext = Vec::with_capacity(message_length);
+
+                for _ in 0..message_length {
+                    let elt = Fr::random(&mut rng);
+                    plaintext.push(elt);
+                }
+
+                ////////////////////////////////////////
+                // Encrypt plaintext
+                let mut ciphertext = Vec::with_capacity(plaintext.len());
+
+                // Add header
+                e.start_header(plaintext.len(), nonce).unwrap();
+
+                for elt in header.iter() {
+                    e.add_header_element(elt.clone()).unwrap();
+                }
+                e.finalize_header().unwrap();
+
+                // Encrypt body
+                for elt in plaintext.iter() {
+                    let encrypted = e.encrypt_element(*elt).unwrap();
+
+                    ciphertext.push(encrypted);
+                }
+
+                // Finalize message
+                let tag = e.finalize_message().unwrap();
+
+                message_data.push((header, nonce, ciphertext, tag));
+            }
+
+            for (header, nonce, ciphertext, tag) in message_data.iter() {
+                ////////////////////////////////////////
+                // Decrypt ciphertext
+                let mut decrypted = Vec::with_capacity(ciphertext.len());
+
+                // Add header
+                d.start_header(ciphertext.len(), *nonce).unwrap();
+
+                for elt in header.iter() {
+                    d.add_header_element(*elt).unwrap();
+                }
+                d.finalize_header().unwrap();
+
+                // Decrypt body
+                for elt in ciphertext.iter() {
+                    let decrypted_elt = d.decrypt_element(*elt).unwrap();
+
+                    decrypted.push(decrypted_elt);
+                }
+
+                // Finalize message
+                let computed_tag = d.finalize_message().unwrap();
+
+                assert_eq!(tag, &computed_tag);
+                assert_eq!(decrypted, decrypted);
+            }
+        }
     }
 }
