@@ -6,6 +6,10 @@ executors:
       image: ubuntu-2004-cuda-11.2:202103-01
     working_directory: ~/gpuci
     resource_class: gpu.nvidia.medium
+  arm:
+    machine:
+      image: ubuntu-2004:202101-01
+    resource_class: arm.medium
 
 restore-workspace: &restore-workspace
   attach_workspace:
@@ -103,6 +107,41 @@ jobs:
             - "~/.cargo"
             - "~/.rustup"
 
+  cargo_fetch_arm:
+    executor: arm
+    steps:
+      - checkout
+      - run: curl https://sh.rustup.rs -sSf | sh -s -- -y
+      - set-env-path
+      - run: echo $HOME
+      - run: cargo --version
+      - run: rustc --version
+      - run:
+          name: Update submodules
+          command: git submodule update --init --recursive
+      - run:
+          name: Calculate dependencies
+          command: cargo generate-lockfile
+      - restore_cache:
+          keys:
+            - cargo-v1-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - run: cargo update
+      - run: cargo fetch
+      - run: rustup install $(cat rust-toolchain)
+      - run: rustup default $(cat rust-toolchain)
+      - run: rustc --version
+      - run: rm -rf .git
+      - persist_to_workspace:
+          root: ~/
+          paths:
+            - gpuci
+      - save_cache:
+          key: cargo-v1-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+          paths:
+            - "~/.cargo"
+            - "~/.rustup"
+
+
   test_x86_64-unknown-linux-gnu:
     executor: default
     environment:
@@ -117,7 +156,7 @@ jobs:
           target: "x86_64-unknown-linux-gnu"
 
   test_aarch64-unknown-linux-gnu:
-    executor: default
+    executor: arm
     environment:
       RUST_LOG: debug
       # Build the kernel only for the single architecture that is used on CI. This should reduce
@@ -128,24 +167,6 @@ jobs:
       - install-gpu-deps
       - test_target:
           target: "aarch64-unknown-linux-gnu"
-
-  test_darwin:
-    macos:
-      xcode: "12.5.0"
-    working_directory: ~/crate
-    resource_class: large
-    steps:
-      - checkout
-      - run:
-          name: Install Rust
-          command: |
-            curl https://sh.rustup.rs -sSf | sh -s -- -y
-      - run: rustup install $(cat rust-toolchain)
-      - run: rustup default $(cat rust-toolchain)
-      - run: cargo update
-      - run: cargo fetch
-      - test_target:
-          target: "darwin"
 
   rustfmt:
     executor: default
@@ -198,8 +219,5 @@ workflows:
           requires:
             - cargo_fetch
       - test_aarch64-unknown-linux-gnu:
-          requires:
-            - cargo_fetch
-      - test_darwin:
           requires:
             - cargo_fetch
