@@ -8,14 +8,12 @@ Neptune has been [audited by ADBK Consulting](poseidon-in-filecoin-final-report.
 paper ([Starkad and Poseidon: New Hash Functions for Zero Knowledge Proof
 Systems](https://eprint.iacr.org/2019/458.pdf)).
 
-Neptune is specialized to the [BLS12-381 curve](https://electriccoin.co/blog/new-snark-curve/). Although the API allows
-for type specialization to other fields, the round numbers, constants, and s-box selection may not be correct. Do not do
-this.
-
-Hashes of arbitrary arities are generally supported — but secure round numbers have only been calculated for a
-selection (including especially 2, 4, and 8 — which are explicitly, rather than incidentally, supported). [Filecoin
-Proofs](https://github.com/filecoin-project/rust-fil-proofs) make heavy use of 8-ary merkle trees and merkle inclusion
-proofs (in SNARKs).
+Neptune was initially specialized to the [BLS12-381 curve](https://electriccoin.co/blog/new-snark-curve/). Although the
+API allows for type specialization to other fields, the round numbers, constants, and s-box selection may not be
+correct. As long as the alternate field is a prime field of ~256 bits, the 128-bit security Neptune targets will apply.
+There is a run-time assertion which will fail if constants are generated for a field whose elements do not have a
+representation of exactly 32 byte. The [Pasta Curves](https://github.com/zcash/pasta_curves) meet these criteria and are
+explicitly supported by Neptune.
 
 At the time of the 1.0.0 release, Neptune on RTX 2080Ti GPU can build 8-ary Merkle trees for 4GiB of input in 16 seconds.
 
