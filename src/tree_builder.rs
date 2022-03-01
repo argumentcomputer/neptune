@@ -2,38 +2,40 @@ use crate::batch_hasher::Batcher;
 use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
 use crate::{Arity, BatchHasher};
-use blstrs::Scalar as Fr;
-use ff::Field;
+use ff::{Field, PrimeField};
 use generic_array::GenericArray;
 
-pub trait TreeBuilderTrait<TreeArity>
+pub trait TreeBuilderTrait<F, TreeArity>
 where
-    TreeArity: Arity<Fr>,
+    F: PrimeField,
+    TreeArity: Arity<F>,
 {
-    fn add_leaves(&mut self, leaves: &[Fr]) -> Result<(), Error>;
-    fn add_final_leaves(&mut self, leaves: &[Fr]) -> Result<(Vec<Fr>, Vec<Fr>), Error>;
+    fn add_leaves(&mut self, leaves: &[F]) -> Result<(), Error>;
+    fn add_final_leaves(&mut self, leaves: &[F]) -> Result<(Vec<F>, Vec<F>), Error>;
 
     fn reset(&mut self);
 }
 
-pub struct TreeBuilder<TreeArity>
+pub struct TreeBuilder<F, TreeArity>
 where
-    TreeArity: Arity<Fr>,
+    F: PrimeField,
+    TreeArity: Arity<F>,
 {
     pub leaf_count: usize,
-    data: Vec<Fr>,
+    data: Vec<F>,
     /// Index of the first unfilled datum.
     fill_index: usize,
-    tree_constants: PoseidonConstants<Fr, TreeArity>,
-    tree_batcher: Option<Batcher<TreeArity>>,
+    tree_constants: PoseidonConstants<F, TreeArity>,
+    tree_batcher: Option<Batcher<F, TreeArity>>,
     rows_to_discard: usize,
 }
 
-impl<TreeArity> TreeBuilderTrait<TreeArity> for TreeBuilder<TreeArity>
+impl<F, TreeArity> TreeBuilderTrait<F, TreeArity> for TreeBuilder<F, TreeArity>
 where
-    TreeArity: Arity<Fr>,
+    F: PrimeField,
+    TreeArity: Arity<F>,
 {
-    fn add_leaves(&mut self, leaves: &[Fr]) -> Result<(), Error> {
+    fn add_leaves(&mut self, leaves: &[F]) -> Result<(), Error> {
         let start = self.fill_index;
         let batch_leaf_count = leaves.len();
         let end = start + batch_leaf_count;
@@ -48,7 +50,7 @@ where
         Ok(())
     }
 
-    fn add_final_leaves(&mut self, leaves: &[Fr]) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
+    fn add_final_leaves(&mut self, leaves: &[F]) -> Result<(Vec<F>, Vec<F>), Error> {
         self.add_leaves(leaves)?;
 
         let res = self.build_tree(self.rows_to_discard);
@@ -59,42 +61,43 @@ where
 
     fn reset(&mut self) {
         self.fill_index = 0;
-        self.data.iter_mut().for_each(|place| *place = Fr::zero());
+        self.data.iter_mut().for_each(|place| *place = F::zero());
     }
 }
 
-fn as_generic_arrays<A: Arity<Fr>>(vec: &[Fr]) -> &[GenericArray<Fr, A>] {
+fn as_generic_arrays<A: Arity<F>, F: PrimeField>(vec: &[F]) -> &[GenericArray<F, A>] {
     // It is a programmer error to call `as_generic_arrays` on a vector whose underlying data cannot be divided
     // into an even number of `GenericArray<Fr, Arity>`.
     assert_eq!(
         0,
-        (vec.len() * std::mem::size_of::<Fr>()) % std::mem::size_of::<GenericArray<Fr, A>>()
+        (vec.len() * std::mem::size_of::<F>()) % std::mem::size_of::<GenericArray<F, A>>()
     );
 
     // This block does not affect the underlying `Fr`s. It just groups them into `GenericArray`s of length `Arity`.
     // We know by the assertion above that `vec` can be evenly divided into these units.
     unsafe {
         std::slice::from_raw_parts(
-            vec.as_ptr() as *const () as *const GenericArray<Fr, A>,
+            vec.as_ptr() as *const () as *const GenericArray<F, A>,
             vec.len() / A::to_usize(),
         )
     }
 }
 
-impl<TreeArity> TreeBuilder<TreeArity>
+impl<F, TreeArity> TreeBuilder<F, TreeArity>
 where
-    TreeArity: Arity<Fr>,
+    F: PrimeField,
+    TreeArity: Arity<F>,
 {
     pub fn new(
-        tree_batcher: Option<Batcher<TreeArity>>,
+        tree_batcher: Option<Batcher<F, TreeArity>>,
         leaf_count: usize,
         rows_to_discard: usize,
     ) -> Result<Self, Error> {
         let builder = Self {
             leaf_count,
-            data: vec![Fr::zero(); leaf_count],
+            data: vec![F::zero(); leaf_count],
             fill_index: 0,
-            tree_constants: PoseidonConstants::<Fr, TreeArity>::new(),
+            tree_constants: PoseidonConstants::<F, TreeArity>::new(),
             tree_batcher,
             rows_to_discard,
         };
@@ -109,12 +112,12 @@ where
         Ok(builder)
     }
 
-    pub fn build_tree(&mut self, rows_to_discard: usize) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
+    pub fn build_tree(&mut self, rows_to_discard: usize) -> Result<(Vec<F>, Vec<F>), Error> {
         let final_tree_size = self.tree_size(rows_to_discard);
         let intermediate_tree_size = self.tree_size(0) + self.leaf_count;
         let arity = TreeArity::to_usize();
 
-        let mut tree_data = vec![Fr::zero(); intermediate_tree_size];
+        let mut tree_data = vec![F::zero(); intermediate_tree_size];
 
         tree_data[0..self.leaf_count].copy_from_slice(&self.data);
 
@@ -137,7 +140,7 @@ where
                         let batch_end = usize::min(batch_start + (max_batch_size * arity), row_end);
                         let batch_size = (batch_end - batch_start) / arity;
                         let preimages =
-                            as_generic_arrays::<TreeArity>(&tree_data[batch_start..batch_end]);
+                            as_generic_arrays::<TreeArity, F>(&tree_data[batch_start..batch_end]);
                         let hashed = batcher.hash(preimages)?;
 
                         #[allow(clippy::drop_ref)]
@@ -226,7 +229,7 @@ where
 
     // Compute root of tree composed of all identical columns. For use in checking correctness of GPU tree-building
     // without the cost of generating a full tree.
-    pub fn compute_uniform_tree_root(&mut self, leaf: Fr) -> Result<Fr, Error> {
+    pub fn compute_uniform_tree_root(&mut self, leaf: F) -> Result<F, Error> {
         let arity = TreeArity::to_usize();
         let mut element = leaf;
         for _ in 0..self.tree_height() {
@@ -276,7 +279,7 @@ mod tests {
                 BatcherType::Cpu => Some(Batcher::new_cpu(512)),
                 BatcherType::Gpu => Some(Batcher::pick_gpu(512).unwrap()),
             };
-            let mut builder = TreeBuilder::<U8>::new(batcher, leaves, rows_to_discard).unwrap();
+            let mut builder = TreeBuilder::<Fr, U8>::new(batcher, leaves, rows_to_discard).unwrap();
 
             // Simplify computing the expected root.
             let constant_element = Fr::zero();

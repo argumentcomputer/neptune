@@ -7,22 +7,27 @@ use crate::poseidon::SimplePoseidonBatchHasher;
 #[cfg(any(feature = "cuda", feature = "opencl"))]
 use crate::proteus::gpu::ClBatchHasher;
 use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
-use blstrs::Scalar as Fr;
+#[cfg(any(feature = "cuda", feature = "opencl"))]
+use ec_gpu::GpuField;
+use ff::PrimeField;
 use generic_array::GenericArray;
 use rust_gpu_tools::Device;
 
-pub enum Batcher<A>
+pub enum Batcher<F, A>
 where
-    A: Arity<Fr>,
+    F: PrimeField,
+    A: Arity<F>,
 {
-    Cpu(SimplePoseidonBatchHasher<A>),
+    Cpu(SimplePoseidonBatchHasher<F, A>),
     #[cfg(any(feature = "cuda", feature = "opencl"))]
-    OpenCl(ClBatchHasher<A>),
+    OpenCl(ClBatchHasher<F, A>),
 }
 
-impl<A> Batcher<A>
-where
-    A: Arity<Fr>,
+impl<
+        #[cfg(not(any(feature = "cuda", feature = "opencl")))] F: PrimeField,
+        #[cfg(any(feature = "cuda", feature = "opencl"))] F: PrimeField + GpuField,
+        A: Arity<F>,
+    > Batcher<F, A>
 {
     /// Create a new CPU batcher.
     pub fn new_cpu(max_batch_size: usize) -> Self {
@@ -31,7 +36,7 @@ where
 
     /// Create a new CPU batcher with a specified strength.
     pub fn with_strength_cpu(strength: Strength, max_batch_size: usize) -> Self {
-        Self::Cpu(SimplePoseidonBatchHasher::<A>::new_with_strength(
+        Self::Cpu(SimplePoseidonBatchHasher::<F, A>::new_with_strength(
             strength,
             max_batch_size,
         ))
@@ -59,7 +64,7 @@ where
         strength: Strength,
         max_batch_size: usize,
     ) -> Result<Self, Error> {
-        Ok(Self::OpenCl(ClBatchHasher::<A>::new_with_strength(
+        Ok(Self::OpenCl(ClBatchHasher::<F, A>::new_with_strength(
             device,
             strength,
             max_batch_size,
@@ -67,11 +72,12 @@ where
     }
 }
 
-impl<A> BatchHasher<A> for Batcher<A>
+impl<F, A> BatchHasher<F, A> for Batcher<F, A>
 where
-    A: Arity<Fr>,
+    F: PrimeField,
+    A: Arity<F>,
 {
-    fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
+    fn hash(&mut self, preimages: &[GenericArray<F, A>]) -> Result<Vec<F>, Error> {
         match self {
             Batcher::Cpu(batcher) => batcher.hash(preimages),
             #[cfg(any(feature = "cuda", feature = "opencl"))]

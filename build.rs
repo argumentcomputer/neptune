@@ -6,14 +6,13 @@ fn main() {
     use std::process::Command;
     use std::{env, fs};
 
-    use blstrs::Scalar as Fr;
     use ec_gpu_gen::Limb32;
     use sha2::{Digest, Sha256};
 
     #[path = "src/proteus/sources.rs"]
     mod sources;
 
-    let kernel_source = sources::generate_program::<Fr, Limb32>();
+    let kernel_source = sources::generate_program::<Limb32>();
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR was not set.");
 
     // Make it possible to override the default options. Though the source and output file is
@@ -24,6 +23,8 @@ fn main() {
             let mut command = Command::new("nvcc");
             command
                 .arg("--optimize=6")
+                // Compile with as many threads as CPUs are available.
+                .arg("--threads=0")
                 .arg("--fatbin")
                 .arg("--gpu-architecture=sm_86")
                 .arg("--generate-code=arch=compute_86,code=sm_86")

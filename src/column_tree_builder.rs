@@ -3,45 +3,47 @@ use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
 use crate::tree_builder::{TreeBuilder, TreeBuilderTrait};
 use crate::{Arity, BatchHasher};
-use blstrs::Scalar as Fr;
-use ff::Field;
-use generic_array::GenericArray;
+use ff::{Field, PrimeField};
+use generic_array::{ArrayLength, GenericArray};
 
-pub trait ColumnTreeBuilderTrait<ColumnArity, TreeArity>
+pub trait ColumnTreeBuilderTrait<F, ColumnArity, TreeArity>
 where
-    ColumnArity: Arity<Fr>,
-    TreeArity: Arity<Fr>,
+    F: PrimeField,
+    ColumnArity: Arity<F>,
+    TreeArity: Arity<F>,
 {
-    fn add_columns(&mut self, columns: &[GenericArray<Fr, ColumnArity>]) -> Result<(), Error>;
+    fn add_columns(&mut self, columns: &[GenericArray<F, ColumnArity>]) -> Result<(), Error>;
     fn add_final_columns(
         &mut self,
-        columns: &[GenericArray<Fr, ColumnArity>],
-    ) -> Result<(Vec<Fr>, Vec<Fr>), Error>;
+        columns: &[GenericArray<F, ColumnArity>],
+    ) -> Result<(Vec<F>, Vec<F>), Error>;
 
     fn reset(&mut self);
 }
 
-pub struct ColumnTreeBuilder<ColumnArity, TreeArity>
+pub struct ColumnTreeBuilder<F, ColumnArity, TreeArity>
 where
-    ColumnArity: Arity<Fr>,
-    TreeArity: Arity<Fr>,
+    F: PrimeField,
+    ColumnArity: Arity<F>,
+    TreeArity: Arity<F>,
 {
     pub leaf_count: usize,
-    data: Vec<Fr>,
+    data: Vec<F>,
     /// Index of the first unfilled datum.
     fill_index: usize,
-    column_constants: PoseidonConstants<Fr, ColumnArity>,
-    pub column_batcher: Option<Batcher<ColumnArity>>,
-    tree_builder: TreeBuilder<TreeArity>,
+    column_constants: PoseidonConstants<F, ColumnArity>,
+    pub column_batcher: Option<Batcher<F, ColumnArity>>,
+    tree_builder: TreeBuilder<F, TreeArity>,
 }
 
-impl<ColumnArity, TreeArity> ColumnTreeBuilderTrait<ColumnArity, TreeArity>
-    for ColumnTreeBuilder<ColumnArity, TreeArity>
+impl<F, ColumnArity, TreeArity> ColumnTreeBuilderTrait<F, ColumnArity, TreeArity>
+    for ColumnTreeBuilder<F, ColumnArity, TreeArity>
 where
-    ColumnArity: Arity<Fr>,
-    TreeArity: Arity<Fr>,
+    F: PrimeField,
+    ColumnArity: Arity<F>,
+    TreeArity: Arity<F>,
 {
-    fn add_columns(&mut self, columns: &[GenericArray<Fr, ColumnArity>]) -> Result<(), Error> {
+    fn add_columns(&mut self, columns: &[GenericArray<F, ColumnArity>]) -> Result<(), Error> {
         let start = self.fill_index;
         let column_count = columns.len();
         let end = start + column_count;
@@ -67,8 +69,8 @@ where
 
     fn add_final_columns(
         &mut self,
-        columns: &[GenericArray<Fr, ColumnArity>],
-    ) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
+        columns: &[GenericArray<F, ColumnArity>],
+    ) -> Result<(Vec<F>, Vec<F>), Error> {
         self.add_columns(columns)?;
 
         let (base, tree) = self.tree_builder.add_final_leaves(&self.data)?;
@@ -79,44 +81,45 @@ where
 
     fn reset(&mut self) {
         self.fill_index = 0;
-        self.data.iter_mut().for_each(|place| *place = Fr::zero());
+        self.data.iter_mut().for_each(|place| *place = F::zero());
     }
 }
-fn as_generic_arrays<A: Arity<Fr>>(vec: &[Fr]) -> &[GenericArray<Fr, A>] {
+fn as_generic_arrays<A: Arity<F>, F: PrimeField>(vec: &[F]) -> &[GenericArray<F, A>] {
     // It is a programmer error to call `as_generic_arrays` on a vector whose underlying data cannot be divided
     // into an even number of `GenericArray<Fr, Arity>`.
     assert_eq!(
         0,
-        (vec.len() * std::mem::size_of::<Fr>()) % std::mem::size_of::<GenericArray<Fr, A>>()
+        (vec.len() * std::mem::size_of::<F>()) % std::mem::size_of::<GenericArray<F, A>>()
     );
 
     // This block does not affect the underlying `Fr`s. It just groups them into `GenericArray`s of length `Arity`.
     // We know by the assertion above that `vec` can be evenly divided into these units.
     unsafe {
         std::slice::from_raw_parts(
-            vec.as_ptr() as *const () as *const GenericArray<Fr, A>,
+            vec.as_ptr() as *const () as *const GenericArray<F, A>,
             vec.len() / A::to_usize(),
         )
     }
 }
 
-impl<ColumnArity, TreeArity> ColumnTreeBuilder<ColumnArity, TreeArity>
+impl<F, ColumnArity, TreeArity> ColumnTreeBuilder<F, ColumnArity, TreeArity>
 where
-    ColumnArity: Arity<Fr>,
-    TreeArity: Arity<Fr>,
+    F: PrimeField,
+    ColumnArity: Arity<F>,
+    TreeArity: Arity<F>,
 {
     pub fn new(
-        column_batcher: Option<Batcher<ColumnArity>>,
-        tree_batcher: Option<Batcher<TreeArity>>,
+        column_batcher: Option<Batcher<F, ColumnArity>>,
+        tree_batcher: Option<Batcher<F, TreeArity>>,
         leaf_count: usize,
     ) -> Result<Self, Error> {
-        let tree_builder = TreeBuilder::<TreeArity>::new(tree_batcher, leaf_count, 0)?;
+        let tree_builder = TreeBuilder::<F, TreeArity>::new(tree_batcher, leaf_count, 0)?;
 
         let builder = Self {
             leaf_count,
-            data: vec![Fr::zero(); leaf_count],
+            data: vec![F::zero(); leaf_count],
             fill_index: 0,
-            column_constants: PoseidonConstants::<Fr, ColumnArity>::new(),
+            column_constants: PoseidonConstants::<F, ColumnArity>::new(),
             column_batcher,
             tree_builder,
         };
@@ -132,8 +135,8 @@ where
     // without the cost of generating a full column tree.
     pub fn compute_uniform_tree_root(
         &mut self,
-        column: GenericArray<Fr, ColumnArity>,
-    ) -> Result<Fr, Error> {
+        column: GenericArray<F, ColumnArity>,
+    ) -> Result<F, Error> {
         // All the leaves will be the same.
         let element = Poseidon::new_with_preimage(&column, &self.column_constants).hash();
 
@@ -172,15 +175,15 @@ mod tests {
     }
 
     fn test_column_tree_builder_aux(
-        column_batcher: Option<Batcher<U11>>,
-        tree_batcher: Option<Batcher<U8>>,
+        column_batcher: Option<Batcher<Fr, U11>>,
+        tree_batcher: Option<Batcher<Fr, U8>>,
         leaves: usize,
         num_batches: usize,
     ) {
         let batch_size = leaves / num_batches;
 
         let mut builder =
-            ColumnTreeBuilder::<U11, U8>::new(column_batcher, tree_batcher, leaves).unwrap();
+            ColumnTreeBuilder::<Fr, U11, U8>::new(column_batcher, tree_batcher, leaves).unwrap();
 
         // Simplify computing the expected root.
         let constant_element = Fr::zero();

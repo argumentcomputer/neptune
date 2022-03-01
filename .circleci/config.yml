@@ -47,7 +47,7 @@ commands:
           no_output_timeout: 5m
       - run:
           name: Test (opencl) (<< parameters.target >>)
-          command: TARGET=<< parameters.target >> cargo test --release --features opencl,arity2,arity4,arity8,arity11,arity16,arity24,arity36 -- --test-threads=1
+          command: TARGET=<< parameters.target >> cargo test --release --features opencl,bls,pasta,arity2,arity4,arity8,arity11,arity16,arity24,arity36 -- --test-threads=1
           no_output_timeout: 30m
       # Darwin CI doesn't support CUDA
       - when:
@@ -57,11 +57,11 @@ commands:
           steps:
             - run:
                 name: Test (cuda) (<< parameters.target >>)
-                command: TARGET=<< parameters.target >> cargo test --release --features cuda,arity2,arity4,arity8,arity11,arity16,arity24,arity36 -- --test-threads=1
+                command: TARGET=<< parameters.target >> cargo test --release --features cuda,bls,pasta,arity2,arity4,arity8,arity11,arity16,arity24,arity36 -- --test-threads=1
                 no_output_timeout: 30m
             - run:
                 name: Test (cuda,opencl) (<< parameters.target >>)
-                command: TARGET=<< parameters.target >> cargo test --release --features cuda,opencl,arity2,arity4,arity8,arity11,arity16,arity24,arity36 -- --test-threads=1
+                command: TARGET=<< parameters.target >> cargo test --release --features cuda,opencl,bls,pasta,arity2,arity4,arity8,arity11,arity16,arity24,arity36 -- --test-threads=1
                 no_output_timeout: 30m
 
 jobs:
@@ -153,13 +153,13 @@ jobs:
           command: cargo clippy --all-targets -- -D warnings
       - run:
           name: Run cargo clippy (opencl)
-          command: cargo clippy --workspace --all-targets --no-default-features --features opencl,arity2 -- -D warnings
+          command: cargo clippy --workspace --all-targets --no-default-features --features opencl,bls,pasta,arity2 -- -D warnings
       - run:
           name: Run cargo clippy (cuda)
-          command: cargo clippy --workspace --all-targets --no-default-features --features cuda,arity2 -- -D warnings
+          command: cargo clippy --workspace --all-targets --no-default-features --features cuda,bls,pasta,arity2 -- -D warnings
       - run:
           name: Run cargo clippy (cuda,opencl)
-          command: cargo clippy --workspace --all-targets --no-default-features --features cuda,opencl,arity2 -- -D warnings
+          command: cargo clippy --workspace --all-targets --no-default-features --features cuda,bls,pasta,opencl,arity2 -- -D warnings
 
 workflows:
   version: 2.1
