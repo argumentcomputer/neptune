@@ -14,13 +14,13 @@ use structopt::StructOpt;
 
 fn bench_column_building(
     log_prefix: &str,
-    column_batcher: Batcher<U11>,
-    tree_batcher: Batcher<U8>,
+    column_batcher: Batcher<Fr, U11>,
+    tree_batcher: Batcher<Fr, U8>,
     leaves: usize,
 ) -> Fr {
     info!("{}: Creating ColumnTreeBuilder", log_prefix);
     let mut builder =
-        ColumnTreeBuilder::<U11, U8>::new(Some(column_batcher), Some(tree_batcher), leaves)
+        ColumnTreeBuilder::<Fr, U11, U8>::new(Some(column_batcher), Some(tree_batcher), leaves)
             .unwrap();
     info!("{}: ColumnTreeBuilder created", log_prefix);
 

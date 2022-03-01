@@ -4,7 +4,7 @@ use crate::error::{ClError, Error};
 use crate::hash_type::HashType;
 use crate::poseidon::PoseidonConstants;
 use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
-use blstrs::Scalar as Fr;
+use ec_gpu::GpuField;
 use ff::{Field, PrimeField};
 use generic_array::{typenum, ArrayLength, GenericArray};
 use log::info;
@@ -50,24 +50,27 @@ impl<T> opencl::KernelArgument for Buffer<T> {
 }
 
 #[derive(Debug)]
-struct GpuConstants<A>(PoseidonConstants<Fr, A>)
+struct GpuConstants<F, A>(PoseidonConstants<F, A>)
 where
-    A: Arity<Fr>;
+    F: PrimeField,
+    A: Arity<F>;
 
-pub struct ClBatchHasher<A>
+pub struct ClBatchHasher<F, A>
 where
-    A: Arity<Fr>,
+    F: PrimeField,
+    A: Arity<F>,
 {
     device: Device,
-    constants: GpuConstants<A>,
-    constants_buffer: Buffer<Fr>,
+    constants: GpuConstants<F, A>,
+    constants_buffer: Buffer<F>,
     max_batch_size: usize,
     program: Program,
 }
 
-impl<A> GpuConstants<A>
+impl<F, A> GpuConstants<F, A>
 where
-    A: Arity<Fr>,
+    F: PrimeField,
+    A: Arity<F>,
 {
     fn strength(&self) -> Strength {
         self.0.strength
@@ -77,7 +80,7 @@ where
         DerivedConstants::new(self.0.arity(), self.0.full_rounds, self.0.partial_rounds)
     }
 
-    fn to_vec(&self) -> Vec<Fr> {
+    fn to_vec(&self) -> Vec<F> {
         let constants_elements = self.derived_constants().constants_elements;
 
         let constants = &self.0;
@@ -94,9 +97,10 @@ where
     }
 }
 
-impl<A> ClBatchHasher<A>
+impl<F, A> ClBatchHasher<F, A>
 where
-    A: Arity<Fr>,
+    F: PrimeField + GpuField,
+    A: Arity<F>,
 {
     /// Create a new `GPUBatchHasher` and initialize it with state corresponding with its `A`.
     pub(crate) fn new(device: &Device, max_batch_size: usize) -> Result<Self, Error> {
@@ -108,14 +112,14 @@ where
         strength: Strength,
         max_batch_size: usize,
     ) -> Result<Self, Error> {
-        let constants = GpuConstants(PoseidonConstants::<Fr, A>::new_with_strength(strength));
-        let program = program::program::<Fr>(device)?;
+        let constants = GpuConstants(PoseidonConstants::<F, A>::new_with_strength(strength));
+        let program = program::program::<F>(device)?;
 
         // Allocate the buffer only once and re-use it in the hashing steps
         let constants_buffer = match program {
             #[cfg(feature = "cuda")]
             Program::Cuda(ref cuda_program) => cuda_program.run(
-                |prog, _| -> Result<Buffer<Fr>, Error> {
+                |prog, _| -> Result<Buffer<F>, Error> {
                     let buffer = prog.create_buffer_from_slice(&constants.to_vec())?;
                     Ok(Buffer::Cuda(buffer))
                 },
@@ -123,7 +127,7 @@ where
             )?,
             #[cfg(feature = "opencl")]
             Program::Opencl(ref opencl_program) => opencl_program.run(
-                |prog, _| -> Result<Buffer<Fr>, Error> {
+                |prog, _| -> Result<Buffer<F>, Error> {
                     let buffer = prog.create_buffer_from_slice(&constants.to_vec())?;
                     Ok(Buffer::OpenCl(buffer))
                 },
@@ -146,11 +150,12 @@ where
 }
 
 const LOCAL_WORK_SIZE: usize = 256;
-impl<A> BatchHasher<A> for ClBatchHasher<A>
+impl<F, A> BatchHasher<F, A> for ClBatchHasher<F, A>
 where
-    A: Arity<Fr>,
+    F: PrimeField,
+    A: Arity<F>,
 {
-    fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
+    fn hash(&mut self, preimages: &[GenericArray<F, A>]) -> Result<Vec<F>, Error> {
         let local_work_size = LOCAL_WORK_SIZE;
         let max_batch_size = self.max_batch_size;
         let batch_size = preimages.len();
@@ -191,10 +196,10 @@ where
             (arity, strength) => return Err(Error::GpuError(format!("No kernel for arity {} and strength {:?} available. Try to enable the `arity{}` feature flag.", arity, strength, arity))),
         };
 
-        let closures = program_closures!(|program, _args| -> Result<Vec<Fr>, Error> {
+        let closures = program_closures!(|program, _args| -> Result<Vec<F>, Error> {
             let kernel = program.create_kernel(kernel_name, global_work_size, local_work_size)?;
             let preimages_buffer = program.create_buffer_from_slice(preimages)?;
-            let result_buffer = unsafe { program.create_buffer::<Fr>(num_hashes)? };
+            let result_buffer = unsafe { program.create_buffer::<F>(num_hashes)? };
 
             kernel
                 .arg(&self.constants_buffer)
@@ -203,7 +208,7 @@ where
                 .arg(&(preimages.len() as i32))
                 .run()?;
 
-            let mut frs = vec![<Fr as Field>::zero(); num_hashes];
+            let mut frs = vec![F::zero(); num_hashes];
             program.read_into_buffer(&result_buffer, &mut frs)?;
             Ok(frs.to_vec())
         });
@@ -228,6 +233,7 @@ fn calc_global_work_size(batch_size: usize, local_work_size: usize) -> usize {
 mod test {
     use super::*;
     use crate::poseidon::{Poseidon, SimplePoseidonBatchHasher};
+    use blstrs::Scalar as Fr;
     use generic_array::sequence::GenericSequence;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
@@ -241,9 +247,10 @@ mod test {
         let batch_size = 1025;
 
         let mut cl_hasher =
-            ClBatchHasher::<U2>::new_with_strength(device, Strength::Standard, batch_size).unwrap();
+            ClBatchHasher::<Fr, U2>::new_with_strength(device, Strength::Standard, batch_size)
+                .unwrap();
         let mut simple_hasher =
-            SimplePoseidonBatchHasher::<U2>::new_with_strength(Strength::Standard, batch_size);
+            SimplePoseidonBatchHasher::<Fr, U2>::new_with_strength(Strength::Standard, batch_size);
 
         let preimages = (0..batch_size)
             .map(|_| GenericArray::<Fr, U2>::generate(|_| Fr::random(&mut rng)))

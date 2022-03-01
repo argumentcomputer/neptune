@@ -125,17 +125,17 @@ fn poseidon_source(field: &str, strength: &str, derived_constants: &DerivedConst
 /// The constants can be generated based on the the arity and the strength. The `derived_constants`
 /// parameter is a list of tuples, where the first element contains the standard strength
 /// parameters, the second element is the strengthed one.
-fn generate_program_from_constants<Fr, L>(
+fn generate_program_from_constants<F, L>(
     derived_constants: &[(DerivedConstants, DerivedConstants)],
 ) -> String
 where
-    Fr: GpuField,
+    F: GpuField,
     L: Limb,
 {
     let mut source = vec![
         ec_gpu_gen::common(),
         config(),
-        ec_gpu_gen::field::<Fr, L>("Fr"),
+        ec_gpu_gen::field::<F, L>("Fr"),
         shared("Fr"),
     ];
     for (standard, _strengthened) in derived_constants {
@@ -161,9 +161,9 @@ fn derive_constants(arity: usize) -> (DerivedConstants, DerivedConstants) {
 /// Returns the kernels source based on the set feature flags.
 ///
 /// Kernels for certain arities are enabled by feature flags.
-pub fn generate_program<Fr, L>() -> String
+pub fn generate_program<F, L>() -> String
 where
-    Fr: GpuField,
+    F: GpuField,
     L: Limb,
 {
     let derived_constants = vec![
@@ -182,5 +182,5 @@ where
         #[cfg(feature = "arity36")]
         derive_constants(36),
     ];
-    generate_program_from_constants::<Fr, L>(&derived_constants)
+    generate_program_from_constants::<F, L>(&derived_constants)
 }

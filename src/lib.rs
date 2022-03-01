@@ -6,6 +6,7 @@ extern crate lazy_static;
 pub use crate::poseidon::{Arity, Poseidon};
 use crate::round_constants::generate_constants;
 use crate::round_numbers::{round_numbers_base, round_numbers_strengthened};
+#[cfg(test)]
 use blstrs::Scalar as Fr;
 pub use error::Error;
 use ff::PrimeField;
@@ -74,18 +75,19 @@ pub enum Strength {
 
 pub(crate) const DEFAULT_STRENGTH: Strength = Strength::Standard;
 
-pub trait BatchHasher<A>
+pub trait BatchHasher<F, A>
 where
-    A: Arity<Fr>,
+    F: PrimeField,
+    A: Arity<F>,
 {
     // type State;
 
-    fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error>;
+    fn hash(&mut self, preimages: &[GenericArray<F, A>]) -> Result<Vec<F>, Error>;
 
     fn hash_into_slice(
         &mut self,
-        target_slice: &mut [Fr],
-        preimages: &[GenericArray<Fr, A>],
+        target_slice: &mut [F],
+        preimages: &[GenericArray<F, A>],
     ) -> Result<(), Error> {
         assert_eq!(target_slice.len(), preimages.len());
         // FIXME: Account for max batch size.
