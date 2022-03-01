@@ -60,11 +60,15 @@ The CUDA/OpenCL kernel (enabled with the `cuda/opencl` feature) is generated wit
 
 When using the `cuda` feature, the kernel is generated at compile-time. The more arities are used, the longer is the compile time. Hence, by default there are no specific arities enabled. You need to set at least one yourself.
 
+### Fields
+
+The CUDA/OpenCL kernel (enabled with the `cuda/opencl` feature) is generated for specific fields. Those fields need to be specified at compile-time via Rust feature flags. Available features are `bls` for BLS12-381 and `pasta` for the Pallas and Vesta curves.
+
 ## Running the tests
 
 As the compile-time of the kernel depends on how many arities are used, there are no arities enabled by default. In order to run the test, all arities need to explicitly be enabled. To run all tests on e.g. the CUDA implementation, run:
 
-    cargo test --no-default-features --features blst,cuda,arity2,arity4,arity8,arity11,arity16,arity24,arity36
+    cargo test --no-default-features --features cuda,bls,pasta,arity2,arity4,arity8,arity11,arity16,arity24,arity36
 
 ## Benchmarking Poseidon by Field and Preimage Length
 

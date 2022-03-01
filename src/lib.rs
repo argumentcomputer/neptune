@@ -6,10 +6,12 @@ extern crate lazy_static;
 pub use crate::poseidon::{Arity, Poseidon};
 use crate::round_constants::generate_constants;
 use crate::round_numbers::{round_numbers_base, round_numbers_strengthened};
+#[cfg(test)]
 use blstrs::Scalar as Fr;
 pub use error::Error;
 use ff::PrimeField;
 use generic_array::GenericArray;
+use std::fmt;
 
 #[cfg(all(
     any(feature = "cuda", feature = "opencl"),
@@ -30,6 +32,12 @@ compile_error!("The `cuda` and `opencl` features need at least one arity feature
     not(any(feature = "cuda", feature = "opencl"))
 ))]
 compile_error!("The `strengthened` feature needs the `cuda` and/or `opencl` feature to be set");
+
+#[cfg(all(
+    any(feature = "cuda", feature = "opencl"),
+    not(any(feature = "bls", feature = "pasta",))
+))]
+compile_error!("The `cuda` and `opencl` features need the `bls` and/or `pasta` feature to be set");
 
 /// Poseidon circuit
 pub mod circuit;
@@ -72,20 +80,30 @@ pub enum Strength {
     Strengthened,
 }
 
+impl fmt::Display for Strength {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Standard => write!(f, "standard"),
+            Self::Strengthened => write!(f, "strengthened"),
+        }
+    }
+}
+
 pub(crate) const DEFAULT_STRENGTH: Strength = Strength::Standard;
 
-pub trait BatchHasher<A>
+pub trait BatchHasher<F, A>
 where
-    A: Arity<Fr>,
+    F: PrimeField,
+    A: Arity<F>,
 {
     // type State;
 
-    fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error>;
+    fn hash(&mut self, preimages: &[GenericArray<F, A>]) -> Result<Vec<F>, Error>;
 
     fn hash_into_slice(
         &mut self,
-        target_slice: &mut [Fr],
-        preimages: &[GenericArray<Fr, A>],
+        target_slice: &mut [F],
+        preimages: &[GenericArray<F, A>],
     ) -> Result<(), Error> {
         assert_eq!(target_slice.len(), preimages.len());
         // FIXME: Account for max batch size.
