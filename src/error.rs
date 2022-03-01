@@ -1,3 +1,4 @@
+use crate::encryption::Crypt;
 #[cfg(feature = "futhark")]
 use crate::triton::cl;
 use std::{error, fmt};
@@ -55,6 +56,8 @@ pub enum Error {
     #[cfg(feature = "futhark")]
     TritonError(String),
     DecodingError,
+    TagMismatch,
+    UnsupportedCryptOp,
     Other(String),
 }
 
@@ -95,6 +98,10 @@ impl fmt::Display for Error {
             #[cfg(feature = "futhark")]
             Error::TritonError(e) => write!(f, "Neptune-triton Error: {}", e),
             Error::DecodingError => write!(f, "PrimeFieldDecodingError"),
+            Error::TagMismatch => write!(f, "Tag mismatch"),
+            Error::UnsupportedCryptOp => {
+                write!(f, "Crypt operation is unsupported for type")
+            }
             Error::Other(s) => write!(f, "{}", s),
         }
     }

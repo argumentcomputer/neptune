@@ -48,7 +48,7 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
                 x_pow2::<F>(*length as u64, 64)
             }
             // 2^32 or (2^32 + 2^32 = 2^33) with strength tag
-            HashType::Encryption => pow2::<F>(32),
+            HashType::Encryption => self.base_encryption_domain_tag(0, 0),
             // identifier * 2^40
             // identifier must be in range [1..=256]
             // If identifier == 0 then the strengthened version collides with Encryption with standard strength.
@@ -56,6 +56,36 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
             // we make identifier a multiple of 2^40 rather than 2^32.
             HashType::Custom(ref ctype) => ctype.domain_tag(),
         })
+    }
+
+    pub fn encryption_domain_tag(
+        &self,
+        strength: &Strength,
+        key_length: usize,
+        message_length: usize,
+    ) -> F {
+        let with_strength = |x: F| {
+            let mut tmp = x;
+            tmp.add_assign(&Self::strength_tag_component(strength));
+            tmp
+        };
+
+        with_strength(self.base_encryption_domain_tag(key_length, message_length))
+    }
+
+    pub fn base_encryption_domain_tag(&self, key_length: usize, message_length: usize) -> F {
+        match self {
+            Self::Encryption => {
+                assert!(key_length <= u64::MAX as usize);
+                assert!(message_length <= u64::MAX as usize);
+
+                let mut tag: F = pow2::<F>(32);
+                tag += x_pow2::<F>(key_length as u64, 34);
+                tag += x_pow2::<F>(message_length as u64, 98);
+                tag
+            }
+            _ => panic!("cannot set encryption domain tag"),
+        }
     }
 
     fn strength_tag_component(strength: &Strength) -> F {
@@ -214,6 +244,17 @@ mod tests {
         ]);
         assert_eq!(expected_encryption_standard, encryption_standard,);
 
+        let encryption_standard_km =
+            HashType::Encryption::<Fr, U8>.encryption_domain_tag(&Strength::Standard, 1, 3);
+
+        let expected_encryption_standard_km = scalar_from_u64s([
+            0x0000000500000000,
+            0x0000000c00000000,
+            0x0000000000000000,
+            0x0000000000000000,
+        ]);
+        assert_eq!(expected_encryption_standard_km, encryption_standard_km,);
+
         let encryption_strengthened =
             HashType::Encryption::<Fr, U8>.domain_tag(&Strength::Strengthened);
         let expected_encryption_strengthened = scalar_from_u64s([
@@ -223,6 +264,20 @@ mod tests {
             0x0000000000000000,
         ]);
         assert_eq!(expected_encryption_strengthened, encryption_strengthened);
+
+        let encryption_strengthened_km =
+            HashType::Encryption::<Fr, U8>.encryption_domain_tag(&Strength::Strengthened, 1, 3);
+
+        let expected_encryption_strengthened_km = scalar_from_u64s([
+            0x0000000600000000,
+            0x0000000c00000000,
+            0x0000000000000000,
+            0x0000000000000000,
+        ]);
+        assert_eq!(
+            expected_encryption_strengthened_km,
+            encryption_strengthened_km,
+        );
 
         for index in 1..=256 {
             let custom = HashType::Custom::<Fr, U8>(CType::Arbitrary(index as u64));

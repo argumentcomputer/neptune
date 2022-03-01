@@ -92,7 +92,7 @@ where
     pub(crate) current_round: usize, // Used in static optimization only for now.
     /// the elements to permute
     pub elements: GenericArray<F, A::ConstantsSize>,
-    pos: usize,
+    pub(crate) pos: usize,
     pub(crate) constants: &'a PoseidonConstants<F, A>,
     _f: PhantomData<F>,
 }
@@ -315,18 +315,20 @@ where
     /// Panics if the provided slice is bigger than the arity.
     pub fn set_preimage(&mut self, preimage: &[F]) {
         self.reset();
-        self.elements[1..].copy_from_slice(&preimage);
+        self.elements[1..].copy_from_slice(preimage);
         self.pos = self.elements.len();
     }
 
     /// Restore the initial state
     pub fn reset(&mut self) {
+        self.reset_offsets();
+        self.elements[1..].iter_mut().for_each(|l| *l = F::zero());
+        self.elements[0] = self.constants.domain_tag;
+    }
+
+    pub(crate) fn reset_offsets(&mut self) {
         self.constants_offset = 0;
         self.current_round = 0;
-        self.elements[1..]
-            .iter_mut()
-            .for_each(|l| *l = F::from(0u64));
-        self.elements[0] = self.constants.domain_tag;
         self.pos = 1;
     }
 
@@ -343,7 +345,6 @@ where
 
         Ok(self.pos - 1)
     }
-
     pub fn hash_in_mode(&mut self, mode: HashMode) -> F {
         self.apply_padding();
         match mode {
@@ -367,9 +368,20 @@ where
                 // There is nothing to do here, but only because the state elements were
                 // initialized to zero, and that is what we need to pad with.
             }
+            HashType::Encryption => {
+                // We don't need to add padding because we will always know the exact length,
+                // since plaintext and ciphertext are the same size.
+                // Actual key and message lengths must be stored in the domain tag
+                // so no state is ever shared between (key, message) pairs.
+            }
             HashType::VariableLength => todo!(),
             _ => (),
         }
+    }
+
+    #[inline]
+    pub fn extract_output(&self) -> F {
+        self.elements[1]
     }
 
     pub fn hash_optimized_static(&mut self) -> F {
@@ -398,7 +410,7 @@ where
             self.constants.compressed_round_constants.len()
         );
 
-        self.elements[1]
+        self.extract_output()
     }
 
     fn full_round(&mut self, last_round: bool) {
@@ -483,7 +495,7 @@ where
                 let index = self.current_round - sparse_offset - 1;
                 let sparse_matrix = &self.constants.sparse_matrixes[index];
 
-                self.product_mds_with_sparse_matrix(&sparse_matrix);
+                self.product_mds_with_sparse_matrix(sparse_matrix);
             } else {
                 self.product_mds();
             }
@@ -540,7 +552,7 @@ where
         let _ = std::mem::replace(&mut self.elements, result);
     }
 
-    fn debug(&self, msg: &str) {
+    pub(crate) fn debug(&self, msg: &str) {
         dbg!(msg, &self.constants_offset, &self.elements);
     }
 }
@@ -576,7 +588,7 @@ where
     fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
         Ok(preimages
             .iter()
-            .map(|preimage| Poseidon::new_with_preimage(&preimage, &self.constants).hash())
+            .map(|preimage| Poseidon::new_with_preimage(preimage, &self.constants).hash())
             .collect())
     }
 

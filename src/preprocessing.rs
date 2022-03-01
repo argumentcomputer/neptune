@@ -66,7 +66,7 @@ pub(crate) fn compress_round_constants<F: PrimeField>(
             partial_keys.push(inverted[0]);
             inverted[0] = F::zero();
 
-            vec_add(&previous_round_keys, &inverted)
+            vec_add(previous_round_keys, &inverted)
         });
 
     // Everything in here is dev-driven testing.
@@ -95,7 +95,7 @@ pub(crate) fn compress_round_constants<F: PrimeField>(
         inv[0] = F::zero();
 
         // (M^-1(T) - pk) - I
-        let result_key = vec_add(&initial_round_keys, &inv);
+        let result_key = vec_add(initial_round_keys, &inv);
 
         assert_eq!(&result_key, &round_acc, "Acc assumption failed.");
         assert_eq!(pk, partial_keys[0], "Partial-key assumption failed.");
@@ -144,7 +144,7 @@ pub(crate) fn compress_round_constants<F: PrimeField>(
 
         quintic_s_box(&mut p_state[0], None, Some(&pk));
 
-        let preprocessed_result = apply_matrix(&mds_matrix, &p_state);
+        let preprocessed_result = apply_matrix(mds_matrix, &p_state);
 
         assert_eq!(
             plain_result, preprocessed_result,

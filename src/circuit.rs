@@ -274,7 +274,7 @@ where
                 let index = self.current_round - sparse_offset - 1;
                 let sparse_matrix = &self.constants.sparse_matrixes[index];
 
-                self.product_mds_with_sparse_matrix::<CS>(&sparse_matrix)?;
+                self.product_mds_with_sparse_matrix::<CS>(sparse_matrix)?;
             } else {
                 self.product_mds_m::<CS>()?;
             }

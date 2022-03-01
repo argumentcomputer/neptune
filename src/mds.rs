@@ -64,7 +64,7 @@ impl<F: PrimeField> SparseMatrix<F> {
     }
 
     pub fn is_sparse_matrix(m: &Matrix<F>) -> bool {
-        is_square(&m) && is_identity(&minor(&m, 0, 0))
+        is_square(m) && is_identity(&minor(m, 0, 0))
     }
 
     pub fn size(&self) -> usize {
