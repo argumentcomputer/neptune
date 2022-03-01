@@ -1,7 +1,7 @@
 //! This module contains the 'correct' and 'dynamic' versions of Poseidon hashing.
 //! These are tested (in `poseidon::test`) to be equivalent to the 'static optimized' version
 //! used for actual hashing by the neptune library.
-use crate::poseidon::{Arity, Poseidon};
+use crate::poseidon::Poseidon;
 use crate::{matrix, quintic_s_box};
 use ff::PrimeField;
 
@@ -11,11 +11,9 @@ use ff::PrimeField;
 /// This code path implements a naive and evidently correct poseidon hash.
 
 /// The returned element is the second poseidon element, the first is the arity tag.
-pub fn hash_correct<F, A>(p: &mut Poseidon<F, A>) -> F
-where
-    F: PrimeField,
-    A: Arity<F>,
-{
+pub fn hash_correct<F: PrimeField, const ARITY: usize, const WIDTH: usize>(
+    p: &mut Poseidon<F, ARITY, WIDTH>,
+) -> F {
     // This counter is incremented when a round constants is read. Therefore, the round constants never repeat.
     // The first full round should use the initial constants.
     full_round(p);
@@ -37,11 +35,9 @@ where
     p.elements[1]
 }
 
-pub fn full_round<F, A>(p: &mut Poseidon<F, A>)
-where
-    F: PrimeField,
-    A: Arity<F>,
-{
+pub fn full_round<F: PrimeField, const ARITY: usize, const WIDTH: usize>(
+    p: &mut Poseidon<F, ARITY, WIDTH>,
+) {
     // Apply the quintic S-Box to all elements, after adding the round key.
     // Round keys are added in the S-box to match circuits (where the addition is free)
     // and in preparation for the shift to adding round keys after (rather than before) applying the S-box.
@@ -68,11 +64,9 @@ where
 }
 
 /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
-pub fn partial_round<F, A>(p: &mut Poseidon<F, A>)
-where
-    F: PrimeField,
-    A: Arity<F>,
-{
+pub fn partial_round<F: PrimeField, const ARITY: usize, const WIDTH: usize>(
+    p: &mut Poseidon<F, ARITY, WIDTH>,
+) {
     // Every element of the hash buffer is incremented by the round constants
     add_round_constants(p);
 
@@ -91,11 +85,9 @@ where
 /// Comments reference notation also expanded in matrix.rs and help clarify the relationship between
 /// our optimizations and those described in the paper.
 
-pub fn hash_optimized_dynamic<F, A>(p: &mut Poseidon<F, A>) -> F
-where
-    F: PrimeField,
-    A: Arity<F>,
-{
+pub fn hash_optimized_dynamic<F: PrimeField, const ARITY: usize, const WIDTH: usize>(
+    p: &mut Poseidon<F, ARITY, WIDTH>,
+) -> F {
     // The first full round should use the initial constants.
     full_round_dynamic(p, true, true);
 
@@ -116,14 +108,11 @@ where
     p.elements[1]
 }
 
-pub fn full_round_dynamic<F, A>(
-    p: &mut Poseidon<F, A>,
+pub fn full_round_dynamic<F: PrimeField, const ARITY: usize, const WIDTH: usize>(
+    p: &mut Poseidon<F, ARITY, WIDTH>,
     add_current_round_keys: bool,
     absorb_next_round_keys: bool,
-) where
-    F: PrimeField,
-    A: Arity<F>,
-{
+) {
     // NOTE: decrease in performance is expected when using this pathway.
     // We seek to preserve correctness while transforming the algorithm to an eventually more performant one.
 
@@ -208,11 +197,9 @@ pub fn full_round_dynamic<F, A>(
     p.product_mds();
 }
 
-pub fn partial_round_dynamic<F, A>(p: &mut Poseidon<F, A>)
-where
-    F: PrimeField,
-    A: Arity<F>,
-{
+pub fn partial_round_dynamic<F: PrimeField, const ARITY: usize, const WIDTH: usize>(
+    p: &mut Poseidon<F, ARITY, WIDTH>,
+) {
     // Apply the quintic S-Box to the first element
     quintic_s_box(&mut p.elements[0], None, None);
 
@@ -222,11 +209,9 @@ where
 
 /// For every leaf, add the round constants with index defined by the constants offset, and increment the
 /// offset.
-fn add_round_constants<F, A>(p: &mut Poseidon<F, A>)
-where
-    F: PrimeField,
-    A: Arity<F>,
-{
+fn add_round_constants<F: PrimeField, const ARITY: usize, const WIDTH: usize>(
+    p: &mut Poseidon<F, ARITY, WIDTH>,
+) {
     for (element, round_constant) in p
         .elements
         .iter_mut()

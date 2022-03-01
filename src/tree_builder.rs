@@ -1,37 +1,29 @@
 use crate::batch_hasher::Batcher;
 use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
-use crate::{Arity, BatchHasher};
+use crate::BatchHasher;
 use blstrs::Scalar as Fr;
 use ff::Field;
-use generic_array::GenericArray;
 
-pub trait TreeBuilderTrait<TreeArity>
-where
-    TreeArity: Arity<Fr>,
-{
+pub trait TreeBuilderTrait<const A: usize, const W: usize> {
     fn add_leaves(&mut self, leaves: &[Fr]) -> Result<(), Error>;
     fn add_final_leaves(&mut self, leaves: &[Fr]) -> Result<(Vec<Fr>, Vec<Fr>), Error>;
 
     fn reset(&mut self);
 }
 
-pub struct TreeBuilder<TreeArity>
-where
-    TreeArity: Arity<Fr>,
-{
+pub struct TreeBuilder<const ARITY: usize, const WIDTH: usize> {
     pub leaf_count: usize,
     data: Vec<Fr>,
     /// Index of the first unfilled datum.
     fill_index: usize,
-    tree_constants: PoseidonConstants<Fr, TreeArity>,
-    tree_batcher: Option<Batcher<TreeArity>>,
+    tree_constants: PoseidonConstants<Fr, ARITY, WIDTH>,
+    tree_batcher: Option<Batcher<ARITY, WIDTH>>,
     rows_to_discard: usize,
 }
 
-impl<TreeArity> TreeBuilderTrait<TreeArity> for TreeBuilder<TreeArity>
-where
-    TreeArity: Arity<Fr>,
+impl<const ARITY: usize, const WIDTH: usize> TreeBuilderTrait<ARITY, WIDTH>
+    for TreeBuilder<ARITY, WIDTH>
 {
     fn add_leaves(&mut self, leaves: &[Fr]) -> Result<(), Error> {
         let start = self.fill_index;
@@ -63,30 +55,24 @@ where
     }
 }
 
-fn as_generic_arrays<A: Arity<Fr>>(vec: &[Fr]) -> &[GenericArray<Fr, A>] {
+fn as_generic_arrays<const A: usize>(vec: &[Fr]) -> &[[Fr; A]] {
     // It is a programmer error to call `as_generic_arrays` on a vector whose underlying data cannot be divided
-    // into an even number of `GenericArray<Fr, Arity>`.
+    // into an even number of `[Fr; A]`.
     assert_eq!(
         0,
-        (vec.len() * std::mem::size_of::<Fr>()) % std::mem::size_of::<GenericArray<Fr, A>>()
+        (vec.len() * std::mem::size_of::<Fr>()) % std::mem::size_of::<[Fr; A]>()
     );
 
     // This block does not affect the underlying `Fr`s. It just groups them into `GenericArray`s of length `Arity`.
     // We know by the assertion above that `vec` can be evenly divided into these units.
     unsafe {
-        std::slice::from_raw_parts(
-            vec.as_ptr() as *const () as *const GenericArray<Fr, A>,
-            vec.len() / A::to_usize(),
-        )
+        std::slice::from_raw_parts(vec.as_ptr() as *const () as *const [Fr; A], vec.len() / A)
     }
 }
 
-impl<TreeArity> TreeBuilder<TreeArity>
-where
-    TreeArity: Arity<Fr>,
-{
+impl<const ARITY: usize, const WIDTH: usize> TreeBuilder<ARITY, WIDTH> {
     pub fn new(
-        tree_batcher: Option<Batcher<TreeArity>>,
+        tree_batcher: Option<Batcher<ARITY, WIDTH>>,
         leaf_count: usize,
         rows_to_discard: usize,
     ) -> Result<Self, Error> {
@@ -94,7 +80,7 @@ where
             leaf_count,
             data: vec![Fr::zero(); leaf_count],
             fill_index: 0,
-            tree_constants: PoseidonConstants::<Fr, TreeArity>::new(),
+            tree_constants: PoseidonConstants::<Fr, ARITY, WIDTH>::new(),
             tree_batcher,
             rows_to_discard,
         };
@@ -112,13 +98,12 @@ where
     pub fn build_tree(&mut self, rows_to_discard: usize) -> Result<(Vec<Fr>, Vec<Fr>), Error> {
         let final_tree_size = self.tree_size(rows_to_discard);
         let intermediate_tree_size = self.tree_size(0) + self.leaf_count;
-        let arity = TreeArity::to_usize();
 
         let mut tree_data = vec![Fr::zero(); intermediate_tree_size];
 
         tree_data[0..self.leaf_count].copy_from_slice(&self.data);
 
-        let (mut start, mut end) = (0, arity);
+        let (mut start, mut end) = (0, ARITY);
 
         match &mut self.tree_batcher {
             Some(batcher) => {
@@ -127,17 +112,17 @@ where
                 let (mut row_start, mut row_end) = (0, self.leaf_count);
                 while row_end < intermediate_tree_size {
                     let row_size = row_end - row_start;
-                    assert_eq!(0, row_size % arity);
-                    let new_row_size = row_size / arity;
+                    assert_eq!(0, row_size % ARITY);
+                    let new_row_size = row_size / ARITY;
                     let (new_row_start, new_row_end) = (row_end, row_end + new_row_size);
 
                     let mut total_hashed = 0;
                     let mut batch_start = row_start;
                     while total_hashed < new_row_size {
-                        let batch_end = usize::min(batch_start + (max_batch_size * arity), row_end);
-                        let batch_size = (batch_end - batch_start) / arity;
+                        let batch_end = usize::min(batch_start + (max_batch_size * ARITY), row_end);
+                        let batch_size = (batch_end - batch_start) / ARITY;
                         let preimages =
-                            as_generic_arrays::<TreeArity>(&tree_data[batch_start..batch_end]);
+                            as_generic_arrays::<ARITY>(&tree_data[batch_start..batch_end]);
                         let hashed = batcher.hash(&preimages)?;
 
                         #[allow(clippy::drop_ref)]
@@ -158,8 +143,8 @@ where
                     tree_data[i] =
                         Poseidon::new_with_preimage(&tree_data[start..end], &self.tree_constants)
                             .hash();
-                    start += arity;
-                    end += arity;
+                    start += ARITY;
+                    end += ARITY;
                 }
             }
         }
@@ -172,8 +157,6 @@ where
     /// `tree_size` returns the number of nodes in the tree to cache.
     /// This excludes the base row and the following `rows_to_discard` rows.
     pub fn tree_size(&self, rows_to_discard: usize) -> usize {
-        let arity = TreeArity::to_usize();
-
         let mut tree_size = 0;
         let mut current_row_size = self.leaf_count;
 
@@ -189,21 +172,19 @@ where
             if current_row_size != 1 {
                 assert_eq!(
                     0,
-                    current_row_size % arity,
-                    "Tree leaf count {} is not a power of arity {}.",
+                    current_row_size % ARITY,
+                    "Tree leaf count {} is not a power of ARITY {}.",
                     self.leaf_count,
-                    arity
+                    ARITY
                 )
             }
-            current_row_size /= arity;
+            current_row_size /= ARITY;
         }
 
         tree_size
     }
 
     pub fn tree_height(&self) -> usize {
-        let arity = TreeArity::to_usize();
-
         let mut tree_height = 0;
         let mut current_row_size = self.leaf_count;
 
@@ -213,24 +194,23 @@ where
                 tree_height += 1;
                 assert_eq!(
                     0,
-                    current_row_size % arity,
+                    current_row_size % ARITY,
                     "Tree leaf count {} is not a power of arity {}.",
                     self.leaf_count,
-                    arity
+                    ARITY
                 );
             }
-            current_row_size /= arity;
+            current_row_size /= ARITY;
         }
         tree_height
     }
 
-    // Compute root of tree composed of all identical columns. For use in checking correctness of GPU tree-building
-    // without the cost of generating a full tree.
+    /// Compute root of tree composed of all identical columns. For use in checking correctness of GPU tree-building
+    /// without the cost of generating a full tree.
     pub fn compute_uniform_tree_root(&mut self, leaf: Fr) -> Result<Fr, Error> {
-        let arity = TreeArity::to_usize();
         let mut element = leaf;
         for _ in 0..self.tree_height() {
-            let preimage = vec![element; arity];
+            let preimage = [element; ARITY];
             // Each row is the hash of the identical elements in the previous row.
             element = Poseidon::new_with_preimage(&preimage, &self.tree_constants).hash();
         }
@@ -249,7 +229,6 @@ mod tests {
     use super::*;
     use blstrs::Scalar as Fr;
     use ff::Field;
-    use generic_array::typenum::U8;
 
     enum BatcherType {
         None,
@@ -279,7 +258,7 @@ mod tests {
                 BatcherType::Cpu => Some(Batcher::new_cpu(512)),
                 BatcherType::Gpu => Some(Batcher::pick_gpu(512).unwrap()),
             };
-            let mut builder = TreeBuilder::<U8>::new(batcher, leaves, rows_to_discard).unwrap();
+            let mut builder = TreeBuilder::<9, 10>::new(batcher, leaves, rows_to_discard).unwrap();
 
             // Simplify computing the expected root.
             let constant_element = Fr::zero();

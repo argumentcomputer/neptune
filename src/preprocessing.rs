@@ -6,8 +6,7 @@ use ff::PrimeField;
 // - Compress constants by pushing them back through linear layers and through the identity components of partial layers.
 // - As a result, constants need only be added after each S-box.
 #[allow(clippy::ptr_arg)]
-pub(crate) fn compress_round_constants<F: PrimeField>(
-    width: usize,
+pub(crate) fn compress_round_constants<F: PrimeField, const WIDTH: usize>(
     full_rounds: usize,
     partial_rounds: usize,
     round_constants: &Vec<F>,
@@ -19,7 +18,7 @@ pub(crate) fn compress_round_constants<F: PrimeField>(
 
     let mut res = Vec::new();
 
-    let round_keys = |r: usize| &round_constants[r * width..(r + 1) * width];
+    let round_keys = |r: usize| &round_constants[r * WIDTH..(r + 1) * WIDTH];
 
     let half_full_rounds = full_rounds / 2; // Not half-full rounds; half full-rounds.
 
@@ -108,7 +107,7 @@ pub(crate) fn compress_round_constants<F: PrimeField>(
         ////////////////////////////////////////////////////////////////////////////////
         // Shared between branches, arbitrary initial state representing the output of a previous round's S-Box layer.
         // X
-        let initial_state = vec![F::one(); width];
+        let initial_state = [F::one(); WIDTH];
 
         ////////////////////////////////////////////////////////////////////////////////
         // Compute one step with the given (unpreprocessed) constants.

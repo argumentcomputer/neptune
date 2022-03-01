@@ -8,9 +8,8 @@ use crate::poseidon::SimplePoseidonBatchHasher;
 use crate::proteus::gpu::ClBatchHasher;
 #[cfg(feature = "futhark")]
 use crate::triton::{cl, gpu::GpuBatchHasher};
-use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
+use crate::{BatchHasher, Strength, DEFAULT_STRENGTH};
 use blstrs::Scalar as Fr;
-use generic_array::GenericArray;
 #[cfg(feature = "futhark")]
 use rust_gpu_tools::opencl;
 use rust_gpu_tools::Device;
@@ -18,21 +17,15 @@ use rust_gpu_tools::Device;
 #[cfg(feature = "futhark")]
 use triton::FutharkContext;
 
-pub enum Batcher<A>
-where
-    A: Arity<Fr>,
-{
-    Cpu(SimplePoseidonBatchHasher<A>),
+pub enum Batcher<const ARITY: usize, const WIDTH: usize> {
+    Cpu(SimplePoseidonBatchHasher<ARITY, WIDTH>),
     #[cfg(feature = "futhark")]
-    OpenCl(GpuBatchHasher<A>),
+    OpenCl(GpuBatchHasher<ARITY, WIDTH>),
     #[cfg(any(feature = "cuda", feature = "opencl"))]
-    OpenCl(ClBatchHasher<A>),
+    OpenCl(ClBatchHasher<ARITY, WIDTH>),
 }
 
-impl<A> Batcher<A>
-where
-    A: Arity<Fr>,
-{
+impl<const ARITY: usize, const WIDTH: usize> Batcher<ARITY, WIDTH> {
     /// Create a new CPU batcher.
     pub fn new_cpu(max_batch_size: usize) -> Self {
         Self::with_strength_cpu(DEFAULT_STRENGTH, max_batch_size)
@@ -40,7 +33,7 @@ where
 
     /// Create a new CPU batcher with a specified strength.
     pub fn with_strength_cpu(strength: Strength, max_batch_size: usize) -> Self {
-        Self::Cpu(SimplePoseidonBatchHasher::<A>::new_with_strength(
+        Self::Cpu(SimplePoseidonBatchHasher::new_with_strength(
             strength,
             max_batch_size,
         ))
@@ -50,7 +43,7 @@ where
     #[cfg(feature = "futhark")]
     pub fn pick_gpu(max_batch_size: usize) -> Result<Self, Error> {
         let futhark_context = cl::default_futhark_context()?;
-        Ok(Self::OpenCl(GpuBatchHasher::<A>::new_with_strength(
+        Ok(Self::OpenCl(GpuBatchHasher::new_with_strength(
             futhark_context,
             DEFAULT_STRENGTH,
             max_batch_size,
@@ -103,7 +96,7 @@ where
         strength: Strength,
         max_batch_size: usize,
     ) -> Result<Self, Error> {
-        Ok(Self::OpenCl(ClBatchHasher::<A>::new_with_strength(
+        Ok(Self::OpenCl(ClBatchHasher::new_with_strength(
             device,
             strength,
             max_batch_size,
@@ -111,11 +104,8 @@ where
     }
 }
 
-impl<A> BatchHasher<A> for Batcher<A>
-where
-    A: Arity<Fr>,
-{
-    fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
+impl<const ARITY: usize, const WIDTH: usize> BatchHasher<ARITY, WIDTH> for Batcher<ARITY, WIDTH> {
+    fn hash(&mut self, preimages: &[[Fr; ARITY]]) -> Result<Vec<Fr>, Error> {
         match self {
             Batcher::Cpu(batcher) => batcher.hash(preimages),
             #[cfg(any(feature = "futhark", feature = "cuda", feature = "opencl"))]
