@@ -1,12 +1,14 @@
 use blstrs::Scalar as Fr;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use ff::PrimeField;
+use ff::{Field, PrimeField};
 use generic_array::typenum;
 use neptune::poseidon::{HashMode, PoseidonConstants};
 use neptune::*;
+use pasta_curves::{Fp, Fq as Fv};
 use rand::rngs::OsRng;
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256, Sha512};
+use typenum::{U11, U2, U4, U8};
 
 fn bench_hash_bls<A>(c: &mut Criterion)
 where
@@ -140,4 +142,41 @@ criterion_group! {
     bench_hash_bls::<typenum::U8>, bench_hash_bls::<typenum::U11>
 }
 
-criterion_main!(hash_bls);
+fn bench_bls_and_pasta_fields_for_arity<A>(c: &mut Criterion)
+where
+    A: Arity<Fr> + Arity<Fp> + Arity<Fv>,
+{
+    let arity = A::to_usize();
+
+    let mut group = c.benchmark_group(format!("arity-{}", arity));
+
+    let preimage = vec![Fr::one(); arity];
+    let consts = PoseidonConstants::<Fr, A>::new();
+    group.bench_function("bls", |b| {
+        b.iter(|| Poseidon::new_with_preimage(&preimage, &consts).hash())
+    });
+
+    let preimage = vec![Fp::one(); arity];
+    let consts = PoseidonConstants::<Fp, A>::new();
+    group.bench_function("pallas", |b| {
+        b.iter(|| Poseidon::new_with_preimage(&preimage, &consts).hash())
+    });
+
+    let preimage = vec![Fv::one(); arity];
+    let consts = PoseidonConstants::<Fv, A>::new();
+    group.bench_function("vesta", |b| {
+        b.iter(|| Poseidon::new_with_preimage(&preimage, &consts).hash())
+    });
+}
+
+criterion_group!(
+    name = bench_all_fields_for_common_arities;
+
+    config = Criterion::default();
+
+    targets = bench_bls_and_pasta_fields_for_arity::<U2>,
+    bench_bls_and_pasta_fields_for_arity::<U4>, bench_bls_and_pasta_fields_for_arity::<U8>,
+    bench_bls_and_pasta_fields_for_arity::<U11>,
+);
+
+criterion_main!(hash_bls, bench_all_fields_for_common_arities);
