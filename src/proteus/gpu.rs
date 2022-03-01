@@ -193,7 +193,7 @@ where
 
         let closures = program_closures!(|program, _args| -> Result<Vec<Fr>, Error> {
             let kernel = program.create_kernel(kernel_name, global_work_size, local_work_size)?;
-            let preimages_buffer = program.create_buffer_from_slice(&preimages)?;
+            let preimages_buffer = program.create_buffer_from_slice(preimages)?;
             let result_buffer = unsafe { program.create_buffer::<Fr>(num_hashes)? };
 
             kernel

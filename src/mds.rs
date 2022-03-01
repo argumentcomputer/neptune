@@ -316,7 +316,7 @@ mod tests {
             initial.clone(),
             |mut acc, (m, rk)| {
                 acc = apply_matrix(&m, &acc);
-                quintic_s_box(&mut acc[0], None, Some(&rk));
+                quintic_s_box(&mut acc[0], None, Some(rk));
                 acc
             },
         );
@@ -326,8 +326,8 @@ mod tests {
             .iter()
             .zip(&round_keys)
             .fold(initial, |mut acc, (m, rk)| {
-                acc = apply_matrix(&m, &acc);
-                quintic_s_box(&mut acc[0], None, Some(&rk));
+                acc = apply_matrix(m, &acc);
+                quintic_s_box(&mut acc[0], None, Some(rk));
                 acc
             });
         assert_eq!(expected, actual);

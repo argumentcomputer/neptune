@@ -209,7 +209,7 @@ mod tests {
         let input = File::open(path).unwrap();
         let buffered = BufReader::new(input);
         let line = buffered.lines().nth(8).unwrap().unwrap();
-        let replaced = line.replace("'", "\"");
+        let replaced = line.replace('\'', "\"");
         let parsed: Vec<Value> = serde_json::from_str(&replaced).unwrap();
 
         let expected = parsed.iter().map(|x| {

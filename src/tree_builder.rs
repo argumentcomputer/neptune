@@ -138,7 +138,7 @@ where
                         let batch_size = (batch_end - batch_start) / arity;
                         let preimages =
                             as_generic_arrays::<TreeArity>(&tree_data[batch_start..batch_end]);
-                        let hashed = batcher.hash(&preimages)?;
+                        let hashed = batcher.hash(preimages)?;
 
                         #[allow(clippy::drop_ref)]
                         drop(preimages); // make sure we don't reference tree_data anymore

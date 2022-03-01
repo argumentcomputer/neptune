@@ -46,10 +46,6 @@ commands:
           command: TARGET=<< parameters.target >> cargo test --release
           no_output_timeout: 5m
       - run:
-          name: Test (futhark) (<< parameters.target >>)
-          command: TARGET=<< parameters.target >> cargo test --release --features futhark -- --test-threads=1
-          no_output_timeout: 30m
-      - run:
           name: Test (opencl) (<< parameters.target >>)
           command: TARGET=<< parameters.target >> cargo test --release --features opencl,arity2,arity4,arity8,arity11,arity16,arity24,arity36 -- --test-threads=1
           no_output_timeout: 30m
@@ -156,11 +152,7 @@ jobs:
           name: Run cargo clippy, without gbench
           command: cargo clippy --all-targets -- -D warnings
       - run:
-          name: Run cargo clippy (futhark)
-          command: cargo clippy --workspace --all-targets --no-default-features --features futhark -- -D warnings
-      - run:
           name: Run cargo clippy (opencl)
-          # gbench enables `futhark` by default, disable it using `--no-default-features`.
           command: cargo clippy --workspace --all-targets --no-default-features --features opencl,arity2 -- -D warnings
       - run:
           name: Run cargo clippy (cuda)
