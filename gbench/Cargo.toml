@@ -21,7 +21,6 @@ structopt = { version = "0.3", default-features = false }
 blstrs = "0.4.0"
 
 [features]
-default = ["futhark"]
+default = ["opencl"]
 cuda = ["neptune/cuda", "rust-gpu-tools/cuda"]
-futhark = ["neptune/futhark", "rust-gpu-tools/opencl"]
 opencl = ["neptune/opencl", "rust-gpu-tools/opencl"]
