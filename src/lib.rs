@@ -11,9 +11,6 @@ pub use error::Error;
 use ff::PrimeField;
 use generic_array::GenericArray;
 
-#[cfg(all(feature = "futhark", any(feature = "cuda", feature = "opencl")))]
-compile_error!("`futhark` and `cuda/opencl` features are mutually exclusive");
-
 #[cfg(all(
     any(feature = "cuda", feature = "opencl"),
     not(any(
@@ -51,18 +48,15 @@ mod round_numbers;
 pub mod hash_type;
 
 /// Tree Builder
-#[cfg(any(feature = "futhark", feature = "cuda", feature = "opencl"))]
+#[cfg(any(feature = "cuda", feature = "opencl"))]
 pub mod tree_builder;
 
 /// Column Tree Builder
-#[cfg(any(feature = "futhark", feature = "cuda", feature = "opencl"))]
+#[cfg(any(feature = "cuda", feature = "opencl"))]
 pub mod column_tree_builder;
 
-#[cfg(feature = "futhark")]
-pub mod triton;
-
 /// Batch Hasher
-#[cfg(any(feature = "futhark", feature = "cuda", feature = "opencl"))]
+#[cfg(any(feature = "cuda", feature = "opencl"))]
 pub mod batch_hasher;
 
 #[cfg(any(feature = "cuda", feature = "opencl"))]

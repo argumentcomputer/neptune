@@ -50,16 +50,9 @@ By default the CUDA kernel is compiled for several architectures, which may take
 
 ## Rust feature flags
 
-Neptune also supports batch hashing and tree building, which can be performed on a GPU. The underlying GPU
-implementation, [neptune-triton](https://github.com/filecoin-project/neptune-triton) is implemented in the [Futhark
-Programming Language](https://futhark-lang.org/). To use `neptune-triton` GPU batch hashing, compile `neptune` with the
-`futhark` feature.
+Neptune also supports batch hashing and tree building, which can be performed on a GPU. GPU batch hashing is implemented in pure CUDA/OpenCL. The pure CUDA/OpenCL batch hashing is provided by the internal `proteus` module. To use `proteus`, compile `neptune` with the `opencl` and/or `cuda` feature.
 
-Neptune now implements GPU batch hashing in pure CUDA/OpenCL. The initial implementation is a bit less than 2x faster than
-the Futhark implementation, so once stabilized this will likely be the preferred option. The pure CUDA/OpenCL batch hashing
-is provided by the internal `proteus` module. To use `proteus`, compile `neptune` with the `opencl` and/or `cuda` feature.
-
-The `futhark` and `cuda/opencl` features are mutually exclusive. The `cuda` and `opencl` feature can be used independently or together. If both `cuda` and `opencl` are used, you can also select which implementation to use via the `NEPTUNE_GPU_FRAMEWORK` environment variable.
+The `cuda` and `opencl` feature can be used independently or together. If both `cuda` and `opencl` are used, you can also select which implementation to use via the `NEPTUNE_GPU_FRAMEWORK` environment variable.
 
 ### Arities
 

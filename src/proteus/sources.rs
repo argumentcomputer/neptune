@@ -139,7 +139,7 @@ where
         shared("Fr"),
     ];
     for (standard, _strengthened) in derived_constants {
-        source.push(poseidon_source("Fr", "standard", &standard));
+        source.push(poseidon_source("Fr", "standard", standard));
         #[cfg(feature = "strengthened")]
         source.push(poseidon_source("Fr", "strengthened", &_strengthened));
     }

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+- Remove neptune-triton (Futhark) support.
+
 ## 5.1.0 - 2021-10-21
 - Fix, test, and enable custom domain tags. (https://github.com/filecoin-project/neptune/pull/116)
 - Update bellperson to v0.18.0 (https://github.com/filecoin-project/neptune/pull/115)
