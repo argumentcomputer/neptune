@@ -10,9 +10,9 @@ resolver = "2"
 
 [dependencies]
 lazy_static = "1.4.0"
-bellperson = "0.19.0"
+bellperson = { git = "https://github.com/lurk-lang/bellperson", branch = "acs/wasm-support", version = "0.19.0", default-features = false, optional = true }
 blake2s_simd = "0.5"
-blstrs = "0.4.0"
+blstrs = "0.4.2"
 byteorder = "1"
 ec-gpu = { version = "0.1.0", optional = true }
 ec-gpu-gen = { version = "0.1.0", optional = true }
