@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 lazy_static = "1.4.0"
-bellperson = "0.18.0"
+bellperson = { git = "https://github.com/lurk-lang/bellperson", branch = "acs/wasm-support", version = "0.18.0", default-features = false, optional = true }
 blake2s_simd = "0.5"
 byteorder = "1"
 env_logger = "0.7.1"
