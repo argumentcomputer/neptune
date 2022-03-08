@@ -18,7 +18,10 @@ log = "0.4.8"
 neptune = { path = "../", default-features = false, features = ["arity8", "arity11"] }
 rust-gpu-tools = { version = "0.5.0", default-features = false, optional = true }
 structopt = { version = "0.3", default-features = false }
-blstrs = "0.4.0"
+blstrs = { version = "0.4.0", features = ["gpu"] }
+#pasta_curves = "0.3.0"
+pasta_curves = { git = "https://github.com/vmx/pasta_curves", branch = "ec-gpu", features = ["gpu"] }
+ec-gpu = "0.1.0"
 
 [features]
 default = ["opencl"]

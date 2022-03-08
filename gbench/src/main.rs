@@ -1,32 +1,38 @@
 use blstrs::Scalar as Fr;
-use ff::Field;
+use ec_gpu::GpuField;
+use ff::PrimeField;
 use generic_array::sequence::GenericSequence;
 use generic_array::typenum::{U11, U8};
 use generic_array::GenericArray;
 use log::info;
 use neptune::column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait};
 use neptune::{batch_hasher::Batcher, BatchHasher};
+use pasta_curves::{Fp, Fq as Fv};
 use rust_gpu_tools::{Device, UniqueId};
 use std::convert::TryFrom;
+use std::str::FromStr;
 use std::thread;
 use std::time::Instant;
 use structopt::StructOpt;
 
-fn bench_column_building(
+fn bench_column_building<F: PrimeField + GpuField>(
+    device: &Device,
     log_prefix: &str,
-    column_batcher: Batcher<Fr, U11>,
-    tree_batcher: Batcher<Fr, U8>,
+    max_column_batch_size: usize,
+    max_tree_batch_size: usize,
     leaves: usize,
-) -> Fr {
+) -> F {
+    let column_batcher = Batcher::<F, U11>::new(device, max_column_batch_size).unwrap();
+    let tree_batcher = Batcher::<F, U8>::new(device, max_tree_batch_size).unwrap();
     info!("{}: Creating ColumnTreeBuilder", log_prefix);
     let mut builder =
-        ColumnTreeBuilder::<Fr, U11, U8>::new(Some(column_batcher), Some(tree_batcher), leaves)
+        ColumnTreeBuilder::<F, U11, U8>::new(Some(column_batcher), Some(tree_batcher), leaves)
             .unwrap();
     info!("{}: ColumnTreeBuilder created", log_prefix);
 
     // Simplify computing the expected root.
-    let constant_element = Fr::zero();
-    let constant_column = GenericArray::<Fr, U11>::generate(|_| constant_element);
+    let constant_element = F::zero();
+    let constant_column = GenericArray::<F, U11>::generate(|_| constant_element);
 
     let max_batch_size = if let Some(batcher) = &builder.column_batcher {
         batcher.max_batch_size()
@@ -46,7 +52,7 @@ fn bench_column_building(
     let mut total_columns = 0;
     while total_columns + effective_batch_size < leaves {
         print!(".");
-        let columns: Vec<GenericArray<Fr, U11>> =
+        let columns: Vec<GenericArray<F, U11>> =
             (0..effective_batch_size).map(|_| constant_column).collect();
 
         let _ = builder.add_columns(columns.as_slice()).unwrap();
@@ -55,7 +61,7 @@ fn bench_column_building(
     println!();
 
     let final_columns: Vec<_> = (0..leaves - total_columns)
-        .map(|_| GenericArray::<Fr, U11>::generate(|_| constant_element))
+        .map(|_| GenericArray::<F, U11>::generate(|_| constant_element))
         .collect();
 
     info!(
@@ -90,13 +96,34 @@ fn bench_column_building(
     res[res.len() - 1]
 }
 
-#[derive(Debug, StructOpt, Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
+enum Field {
+    Bls,
+    Pallas,
+    Vesta,
+}
+
+impl FromStr for Field {
+    type Err = &'static str;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        match input {
+            "bls" => Ok(Self::Bls),
+            "pallas" => Ok(Self::Pallas),
+            "vesta" => Ok(Self::Vesta),
+            _ => Err("Unknown field, use `bls`, `pallas` or `vesta`."),
+        }
+    }
+}
+#[derive(Debug, StructOpt, Clone)]
 #[structopt(name = "Neptune gbench", about = "Neptune benchmarking program")]
 struct Opts {
     #[structopt(long = "max-tree-batch-size", default_value = "700000")]
     max_tree_batch_size: usize,
     #[structopt(long = "max-column-batch-size", default_value = "400000")]
     max_column_batch_size: usize,
+    #[structopt(long = "field", default_value = "bls", possible_values = &["bls", "pallas", "vesta"])]
+    field: Field,
 }
 
 fn main() {
@@ -106,6 +133,7 @@ fn main() {
 
     let opts = Opts::from_args();
 
+    let field = opts.field;
     let kib = 1024 * 1024 * 4; // 4GiB
                                // let kib = 1024 * 512; // 512MiB
     let bytes = kib * 1024;
@@ -113,6 +141,7 @@ fn main() {
     let max_column_batch_size = opts.max_column_batch_size;
     let max_tree_batch_size = opts.max_tree_batch_size;
 
+    info!("field: {:?}", field);
     info!("KiB: {}", kib);
     info!("leaves: {}", leaves);
     info!("max column batch size: {}", max_column_batch_size);
@@ -141,9 +170,35 @@ fn main() {
             let log_prefix = format!("GPU[{:?}]", device);
             for i in 0..3 {
                 info!("{} --> Run {}", log_prefix, i);
-                let column_batcher = Batcher::new(device, max_column_batch_size).unwrap();
-                let tree_batcher = Batcher::new(device, max_tree_batch_size).unwrap();
-                bench_column_building(&log_prefix, column_batcher, tree_batcher, leaves);
+                match field {
+                    Field::Bls => {
+                        bench_column_building::<Fr>(
+                            device,
+                            &log_prefix,
+                            max_column_batch_size,
+                            max_tree_batch_size,
+                            leaves,
+                        );
+                    }
+                    Field::Pallas => {
+                        bench_column_building::<Fp>(
+                            device,
+                            &log_prefix,
+                            max_column_batch_size,
+                            max_tree_batch_size,
+                            leaves,
+                        );
+                    }
+                    Field::Vesta => {
+                        bench_column_building::<Fv>(
+                            device,
+                            &log_prefix,
+                            max_column_batch_size,
+                            max_tree_batch_size,
+                            leaves,
+                        );
+                    }
+                }
             }
         }));
     }
