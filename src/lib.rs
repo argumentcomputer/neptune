@@ -32,6 +32,15 @@ compile_error!("The `cuda` and `opencl` features need at least one arity feature
 ))]
 compile_error!("The `strengthened` feature needs the `cuda` and/or `opencl` feature to be set");
 
+#[cfg(all(
+    any(feature = "cuda", feature = "opencl"),
+    not(any(
+        feature = "bls",
+        feature = "pasta",
+    ))
+))]
+compile_error!("The `cuda` and `opencl` features need the `bls` and/or `pasta` feature to be set");
+
 /// Poseidon circuit
 pub mod circuit;
 pub mod error;

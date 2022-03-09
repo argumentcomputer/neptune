@@ -4,6 +4,10 @@ mod round_numbers;
 
 use ec_gpu::GpuField;
 use ec_gpu_gen::Limb;
+#[cfg(feature = "bls")]
+use blstrs::Scalar as Fr;
+#[cfg(feature = "pasta")]
+use pasta_curves::{Fp, Fq as Fv};
 
 use round_numbers::{round_numbers_base, round_numbers_strengthened};
 
@@ -72,10 +76,6 @@ impl DerivedConstants {
     }
 }
 
-fn config() -> String {
-    "".to_string()
-}
-
 /// Code that is the same, independent of the arity.
 fn shared(field: &str) -> String {
     format!(include_str!("cl/shared.cl"), field = field)
@@ -126,6 +126,7 @@ fn poseidon_source(field: &str, strength: &str, derived_constants: &DerivedConst
 /// parameter is a list of tuples, where the first element contains the standard strength
 /// parameters, the second element is the strengthed one.
 fn generate_program_from_constants<F, L>(
+    field_name: &str,
     derived_constants: &[(DerivedConstants, DerivedConstants)],
 ) -> String
 where
@@ -133,15 +134,13 @@ where
     L: Limb,
 {
     let mut source = vec![
-        ec_gpu_gen::common(),
-        config(),
-        ec_gpu_gen::field::<F, L>("Fr"),
-        shared("Fr"),
+        ec_gpu_gen::field::<F, L>(field_name),
+        shared(field_name),
     ];
     for (standard, _strengthened) in derived_constants {
-        source.push(poseidon_source("Fr", "standard", standard));
+        source.push(poseidon_source(field_name, "standard", standard));
         #[cfg(feature = "strengthened")]
-        source.push(poseidon_source("Fr", "strengthened", &_strengthened));
+        source.push(poseidon_source(field_name, "strengthened", &_strengthened));
     }
     source.join("\n")
 }
@@ -161,11 +160,11 @@ fn derive_constants(arity: usize) -> (DerivedConstants, DerivedConstants) {
 /// Returns the kernels source based on the set feature flags.
 ///
 /// Kernels for certain arities are enabled by feature flags.
-pub fn generate_program<F, L>() -> String
+pub fn generate_program<L>() -> String
 where
-    F: GpuField,
     L: Limb,
 {
+    #[cfg(any(feature = "bls", feature = "pasta"))]
     let derived_constants = vec![
         #[cfg(feature = "arity2")]
         derive_constants(2),
@@ -182,5 +181,15 @@ where
         #[cfg(feature = "arity36")]
         derive_constants(36),
     ];
-    generate_program_from_constants::<F, L>(&derived_constants)
+
+    let source = vec![
+        ec_gpu_gen::common(),
+        #[cfg(feature = "bls")]
+        generate_program_from_constants::<Fr, L>("Fr", &derived_constants),
+        #[cfg(feature = "pasta")]
+        generate_program_from_constants::<Fp, L>("Fp", &derived_constants),
+        #[cfg(feature = "pasta")]
+        generate_program_from_constants::<Fv, L>("Fv", &derived_constants),
+    ];
+    source.join("\n")
 }

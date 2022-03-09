@@ -12,6 +12,7 @@ resolver = "2"
 lazy_static = "1.4.0"
 bellperson = "0.18.0"
 blake2s_simd = "0.5"
+blstrs = { version = "0.4.0", optional = true }
 byteorder = "1"
 ec-gpu = { version = "0.1.0", optional = true }
 ec-gpu-gen = { version = "0.1.0", optional = true }
@@ -19,6 +20,7 @@ ff = "0.11.0"
 generic-array = "0.14.4"
 itertools = { version = "0.8.0" }
 log = "0.4.8"
+pasta_curves = { git = "https://github.com/vmx/pasta_curves", branch = "ec-gpu", optional = true }
 rust-gpu-tools = { version = "0.5.0", default-features = false, optional = true }
 
 [dev-dependencies]
@@ -29,14 +31,14 @@ sha2 = "0.9"
 tempdir = "0.3"
 rand_xorshift = "0.3.0"
 serde_json = "1.0.53"
-pasta_curves = "0.2.1"
 
 [build-dependencies]
-blstrs = "0.4.0"
+blstrs = { version = "0.4.0", optional = true }
 ec-gpu = { version = "0.1.0", optional = true }
 ec-gpu-gen = { version = "0.1.0", optional = true }
 execute = "0.2.9"
 hex = "0.4"
+pasta_curves = { git = "https://github.com/vmx/pasta_curves", branch = "ec-gpu", optional = true }
 sha2 = "0.9"
 
 [[bench]]
@@ -53,8 +55,8 @@ codegen-units = 1
 
 [features]
 default = []
-cuda = ["rust-gpu-tools/cuda", "blstrs/gpu", "ec-gpu-gen", "ec-gpu"]
-opencl = ["rust-gpu-tools/opencl", "blstrs/gpu", "ec-gpu-gen", "ec-gpu"]
+cuda = ["rust-gpu-tools/cuda", "ec-gpu-gen", "ec-gpu"]
+opencl = ["rust-gpu-tools/opencl", "ec-gpu-gen", "ec-gpu"]
 # The supported arities for Poseidon running on the GPU are specified at compile-time.
 arity2 = []
 arity4 = []
@@ -65,6 +67,9 @@ arity24 = []
 arity36 = []
 # With this feature set, also the strengthened version of the kernel will be compiled.
 strengthened = []
+# The supported fields for Poseidon runnong on the GPU are specified at compile-time.
+bls = ["blstrs/gpu"]
+pasta = ["pasta_curves/gpu"]
 
 [workspace]
 members = [
