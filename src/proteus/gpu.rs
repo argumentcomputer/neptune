@@ -57,12 +57,12 @@ impl<T> opencl::KernelArgument for Buffer<T> {
 #[derive(Debug)]
 struct GpuConstants<F, A>(PoseidonConstants<F, A>)
 where
-    F: PrimeField + Fieldname,
+    F: PrimeField,
     A: Arity<F>;
 
 pub struct ClBatchHasher<F, A>
 where
-    F: PrimeField + Fieldname,
+    F: PrimeField,
     A: Arity<F>,
 {
     device: Device,
@@ -74,7 +74,7 @@ where
 
 impl<F, A> GpuConstants<F, A>
 where
-    F: PrimeField + Fieldname,
+    F: PrimeField,
     A: Arity<F>,
 {
     fn strength(&self) -> Strength {
@@ -102,9 +102,7 @@ where
     }
 
     /// Returns the name of the kernel that can be be called with those contants
-    //fn kernel_name(&self, field_name: &str) -> String {
-    fn kernel_name(&self) -> String {
-        let field_name = F::name();
+    fn kernel_name(&self, field_name: &str) -> String {
         let arity = A::to_usize();
         let strength = self.strength();
         format!("hash_preimages_{}_{}_{}", field_name, arity, strength)
@@ -113,7 +111,7 @@ where
 
 impl<F, A> ClBatchHasher<F, A>
 where
-    F: PrimeField + GpuField + Fieldname,
+    F: PrimeField + GpuField,
     A: Arity<F>,
 {
     /// Create a new `GPUBatchHasher` and initialize it with state corresponding with its `A`.
@@ -163,35 +161,10 @@ where
     }
 }
 
-pub trait Fieldname {
-    fn name() -> String;
-}
-
-#[cfg(feature = "bls")]
-impl Fieldname for Fr {
-    fn name() -> String {
-        "Fr".to_string()
-    }
-}
-
-#[cfg(feature = "pasta")]
-impl Fieldname for Fp {
-    fn name() -> String {
-        "Fp".to_string()
-    }
-}
-
-#[cfg(feature = "pasta")]
-impl Fieldname for Fv {
-    fn name() -> String {
-        "Fv".to_string()
-    }
-}
-
 const LOCAL_WORK_SIZE: usize = 256;
 impl<F, A> BatchHasher<F, A> for ClBatchHasher<F, A>
 where
-    F: PrimeField + Fieldname,
+    F: PrimeField,
     A: Arity<F>,
 {
     fn hash(&mut self, preimages: &[GenericArray<F, A>]) -> Result<Vec<F>, Error> {
@@ -206,15 +179,47 @@ where
         let num_hashes = preimages.len();
 
         //let kernel_name = self.constants.kernel_name(F::name());
-        let kernel_name = self.constants.kernel_name();
-        //let kernel_name = if TypeId::of::<F>() == Fr {
-        //    self.constants.kernel_name("Fr")
-        //} else if TypeId::of::<F>() == Fp {
-        //    self.constants.kernel_name("Fp")
-        //} else if TypeId::of::<F>() == Fv {
-        //    self.constants.kernel_name("Fv")
+        //let kernel_name = self.constants.kernel_name();
+        //let kernel_name = if TypeId::of::<F>() == TypeId::of::<Fr>() {
+        //   self.constants.kernel_name("Fr")
+        //} else if TypeId::of::<F>() == TypeId::of::<Fp>() {
+        //   self.constants.kernel_name("Fp")
+        //}
+        //else if TypeId::of::<F>() == TypeId::of::<Fv>() {
+        //   self.constants.kernel_name("Fv")
         //} else {
-        //    return Err(Error::GpuError("No kernel found for the given field."))
+        //   return Err(Error::GpuError("No kernel found for the given field.".to_string()))
+        //};
+        let mut maybe_kernel_name = None;
+        #[cfg(feature = "bls")]
+        if TypeId::of::<F>() == TypeId::of::<Fr>() {
+            maybe_kernel_name = Some(self.constants.kernel_name("Fr"));
+        }
+        #[cfg(feature = "pasta")]
+        if TypeId::of::<F>() == TypeId::of::<Fp>() {
+            maybe_kernel_name = Some(self.constants.kernel_name("Fp"));
+        }
+        #[cfg(feature = "pasta")]
+        if TypeId::of::<F>() == TypeId::of::<Fv>() {
+            maybe_kernel_name = Some(self.constants.kernel_name("Fv"));
+        }
+        let kernel_name = match maybe_kernel_name {
+            Some(name) => name,
+            None => {
+                return Err(Error::GpuError(
+                    "No kernel found for the given field.".to_string(),
+                ))
+            }
+        };
+        //let kernel_name = maybe_kernel_name.ok_or(Error::GpuError(
+        //    "No kernel found for the given field.".to_string(),
+        //))?;
+        //let kernel_name = match TypeId::of::<F>() {
+        //    TypeId::of::<Fr>() => self.constants.kernel_name("Fr"),
+        //    TypeId::of::<Fp>() => self.constants.kernel_name("Fp"),
+        //    TypeId::of::<Fv>() => self.constants.kernel_name("Fv"),
+        //    _ =>
+        //        return Err(Error::GpuError("No kernel found for the given field.".to_string()))
         //};
 
         //let kernel_name = match (A::to_usize(), TypeId::of::<F>(), self.constants.strength()) {

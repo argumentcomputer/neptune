@@ -7,7 +7,6 @@ use generic_array::GenericArray;
 use log::info;
 use neptune::column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait};
 use neptune::{batch_hasher::Batcher, BatchHasher};
-use neptune::proteus::gpu::Fieldname;
 use pasta_curves::{Fp, Fq as Fv};
 use rust_gpu_tools::{Device, UniqueId};
 use std::convert::TryFrom;
@@ -16,7 +15,7 @@ use std::thread;
 use std::time::Instant;
 use structopt::StructOpt;
 
-fn bench_column_building<F: PrimeField + GpuField + Fieldname>(
+fn bench_column_building<F: PrimeField + GpuField>(
     device: &Device,
     log_prefix: &str,
     max_column_batch_size: usize,

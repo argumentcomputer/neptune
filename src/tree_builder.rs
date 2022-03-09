@@ -1,8 +1,6 @@
 use crate::batch_hasher::Batcher;
 use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
-#[cfg(any(feature = "cuda", feature = "opencl"))]
-use crate::proteus::gpu::Fieldname;
 use crate::{Arity, BatchHasher};
 use ff::{Field, PrimeField};
 use generic_array::GenericArray;
@@ -18,15 +16,11 @@ where
     fn reset(&mut self);
 }
 
-//pub struct TreeBuilder<Field, TreeArity>
-//where
-//    Field: PrimeField,
-//    TreeArity: Arity<Field>,
-pub struct TreeBuilder<
-    #[cfg(not(any(feature = "cuda", feature = "opencl")))] Field: PrimeField,
-    #[cfg(any(feature = "cuda", feature = "opencl"))] Field: PrimeField + Fieldname,
+pub struct TreeBuilder<Field, TreeArity>
+where
+    Field: PrimeField,
     TreeArity: Arity<Field>,
-> {
+{
     pub leaf_count: usize,
     data: Vec<Field>,
     /// Index of the first unfilled datum.
@@ -36,15 +30,10 @@ pub struct TreeBuilder<
     rows_to_discard: usize,
 }
 
-//impl<Field, TreeArity> TreeBuilderTrait<Field, TreeArity> for TreeBuilder<Field, TreeArity>
-//where
-//    Field: PrimeField,
-//    TreeArity: Arity<Field>,
-impl<
-        #[cfg(not(any(feature = "cuda", feature = "opencl")))] Field: PrimeField,
-        #[cfg(any(feature = "cuda", feature = "opencl"))] Field: PrimeField + Fieldname,
-        TreeArity: Arity<Field>,
-    > TreeBuilderTrait<Field, TreeArity> for TreeBuilder<Field, TreeArity>
+impl<Field, TreeArity> TreeBuilderTrait<Field, TreeArity> for TreeBuilder<Field, TreeArity>
+where
+    Field: PrimeField,
+    TreeArity: Arity<Field>,
 {
     fn add_leaves(&mut self, leaves: &[Field]) -> Result<(), Error> {
         let start = self.fill_index;
@@ -96,15 +85,10 @@ fn as_generic_arrays<A: Arity<F>, F: PrimeField>(vec: &[F]) -> &[GenericArray<F,
     }
 }
 
-//impl<Field, TreeArity> TreeBuilder<Field, TreeArity>
-//where
-//    Field: PrimeField,
-//    TreeArity: Arity<Field>,
-impl<
-        #[cfg(not(any(feature = "cuda", feature = "opencl")))] Field: PrimeField,
-        #[cfg(any(feature = "cuda", feature = "opencl"))] Field: PrimeField + Fieldname,
-        TreeArity: Arity<Field>,
-    > TreeBuilder<Field, TreeArity>
+impl<Field, TreeArity> TreeBuilder<Field, TreeArity>
+where
+    Field: PrimeField,
+    TreeArity: Arity<Field>,
 {
     pub fn new(
         tree_batcher: Option<Batcher<Field, TreeArity>>,
