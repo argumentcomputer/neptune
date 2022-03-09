@@ -1,6 +1,8 @@
 use crate::batch_hasher::Batcher;
 use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
+#[cfg(any(feature = "cuda", feature = "opencl"))]
+use crate::proteus::gpu::Fieldname;
 use crate::tree_builder::{TreeBuilder, TreeBuilderTrait};
 use crate::{Arity, BatchHasher};
 use ff::{Field, PrimeField};
@@ -21,12 +23,17 @@ where
     fn reset(&mut self);
 }
 
-pub struct ColumnTreeBuilder<Field, ColumnArity, TreeArity>
-where
-    Field: PrimeField,
+//pub struct ColumnTreeBuilder<Field, ColumnArity, TreeArity>
+//where
+//    Field: PrimeField,
+//    ColumnArity: Arity<Field>,
+//    TreeArity: Arity<Field>,
+pub struct ColumnTreeBuilder<
+    #[cfg(not(any(feature = "cuda", feature = "opencl")))] Field: PrimeField,
+    #[cfg(any(feature = "cuda", feature = "opencl"))] Field: PrimeField + Fieldname,
     ColumnArity: Arity<Field>,
     TreeArity: Arity<Field>,
-{
+> {
     pub leaf_count: usize,
     data: Vec<Field>,
     /// Index of the first unfilled datum.
@@ -36,12 +43,20 @@ where
     tree_builder: TreeBuilder<Field, TreeArity>,
 }
 
-impl<Field, ColumnArity, TreeArity> ColumnTreeBuilderTrait<Field, ColumnArity, TreeArity>
-    for ColumnTreeBuilder<Field, ColumnArity, TreeArity>
-where
-    Field: PrimeField,
+//impl<Field, ColumnArity, TreeArity> ColumnTreeBuilderTrait<Field, ColumnArity, TreeArity>
+//    for ColumnTreeBuilder<Field, ColumnArity, TreeArity>
+//where
+//    Field: PrimeField,
+//    ColumnArity: Arity<Field>,
+//    TreeArity: Arity<Field>,
+impl<
+    #[cfg(not(any(feature = "cuda", feature = "opencl")))] Field: PrimeField,
+    #[cfg(any(feature = "cuda", feature = "opencl"))] Field: PrimeField + Fieldname,
     ColumnArity: Arity<Field>,
     TreeArity: Arity<Field>,
+
+> ColumnTreeBuilderTrait<Field, ColumnArity, TreeArity>
+    for ColumnTreeBuilder<Field, ColumnArity, TreeArity>
 {
     fn add_columns(&mut self, columns: &[GenericArray<Field, ColumnArity>]) -> Result<(), Error> {
         let start = self.fill_index;
@@ -104,11 +119,18 @@ fn as_generic_arrays<A: Arity<F>, F: PrimeField>(vec: &[F]) -> &[GenericArray<F,
     }
 }
 
-impl<Field, ColumnArity, TreeArity> ColumnTreeBuilder<Field, ColumnArity, TreeArity>
-where
-    Field: PrimeField,
+//impl<Field, ColumnArity, TreeArity> ColumnTreeBuilder<Field, ColumnArity, TreeArity>
+//where
+//    Field: PrimeField,
+//    ColumnArity: Arity<Field>,
+//    TreeArity: Arity<Field>,
+impl<
+    #[cfg(not(any(feature = "cuda", feature = "opencl")))] Field: PrimeField,
+    #[cfg(any(feature = "cuda", feature = "opencl"))] Field: PrimeField + Fieldname,
     ColumnArity: Arity<Field>,
     TreeArity: Arity<Field>,
+
+> ColumnTreeBuilder<Field, ColumnArity, TreeArity>
 {
     pub fn new(
         column_batcher: Option<Batcher<Field, ColumnArity>>,

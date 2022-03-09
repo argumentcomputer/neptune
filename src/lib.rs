@@ -11,6 +11,7 @@ use blstrs::Scalar as Fr;
 pub use error::Error;
 use ff::PrimeField;
 use generic_array::GenericArray;
+use std::fmt;
 
 #[cfg(all(
     any(feature = "cuda", feature = "opencl"),
@@ -34,10 +35,7 @@ compile_error!("The `strengthened` feature needs the `cuda` and/or `opencl` feat
 
 #[cfg(all(
     any(feature = "cuda", feature = "opencl"),
-    not(any(
-        feature = "bls",
-        feature = "pasta",
-    ))
+    not(any(feature = "bls", feature = "pasta",))
 ))]
 compile_error!("The `cuda` and `opencl` features need the `bls` and/or `pasta` feature to be set");
 
@@ -80,6 +78,15 @@ pub(crate) const TEST_SEED: [u8; 16] = [
 pub enum Strength {
     Standard,
     Strengthened,
+}
+
+impl fmt::Display for Strength {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Standard => write!(f, "standard"),
+            Self::Strengthened => write!(f, "strengthened"),
+        }
+    }
 }
 
 pub(crate) const DEFAULT_STRENGTH: Strength = Strength::Standard;

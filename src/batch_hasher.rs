@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use crate::error::{ClError, Error};
 use crate::poseidon::SimplePoseidonBatchHasher;
 #[cfg(any(feature = "cuda", feature = "opencl"))]
-use crate::proteus::gpu::ClBatchHasher;
+use crate::proteus::gpu::{ClBatchHasher, Fieldname};
 use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
 #[cfg(any(feature = "cuda", feature = "opencl"))]
 use ec_gpu::GpuField;
@@ -13,11 +13,16 @@ use ff::PrimeField;
 use generic_array::GenericArray;
 use rust_gpu_tools::Device;
 
-pub enum Batcher<F, A>
-where
-    F: PrimeField,
+//pub enum Batcher<F, A>
+//where
+//    F: PrimeField,
+//    A: Arity<F>,
+//{
+pub enum Batcher<
+    #[cfg(not(any(feature = "cuda", feature = "opencl")))] F: PrimeField,
+    #[cfg(any(feature = "cuda", feature = "opencl"))] F: PrimeField + Fieldname,
     A: Arity<F>,
-{
+> {
     Cpu(SimplePoseidonBatchHasher<F, A>),
     #[cfg(any(feature = "cuda", feature = "opencl"))]
     OpenCl(ClBatchHasher<F, A>),
@@ -25,7 +30,7 @@ where
 
 impl<
         #[cfg(not(any(feature = "cuda", feature = "opencl")))] F: PrimeField,
-        #[cfg(any(feature = "cuda", feature = "opencl"))] F: PrimeField + GpuField,
+        #[cfg(any(feature = "cuda", feature = "opencl"))] F: PrimeField + GpuField + Fieldname,
         A: Arity<F>,
     > Batcher<F, A>
 {
@@ -72,10 +77,15 @@ impl<
     }
 }
 
-impl<F, A> BatchHasher<F, A> for Batcher<F, A>
-where
-    F: PrimeField,
+//impl<F, A> BatchHasher<F, A> for Batcher<F, A>
+//where
+//    F: PrimeField,
+//    A: Arity<F>,
+impl<
+    #[cfg(not(any(feature = "cuda", feature = "opencl")))] F: PrimeField,
+    #[cfg(any(feature = "cuda", feature = "opencl"))] F: PrimeField + Fieldname,
     A: Arity<F>,
+> BatchHasher<F, A> for Batcher<F, A>
 {
     fn hash(&mut self, preimages: &[GenericArray<F, A>]) -> Result<Vec<F>, Error> {
         match self {

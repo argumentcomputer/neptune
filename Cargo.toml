@@ -22,6 +22,7 @@ itertools = { version = "0.8.0" }
 log = "0.4.8"
 pasta_curves = { git = "https://github.com/vmx/pasta_curves", branch = "ec-gpu", optional = true }
 rust-gpu-tools = { version = "0.5.0", default-features = false, optional = true }
+typemap = "0.3.3"
 
 [dev-dependencies]
 blstrs = "0.4.0"

@@ -13,6 +13,11 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use typenum::{U11, U2, U8};
 
+#[cfg(feature = "bls")]
+use blstrs::Scalar as Fr;
+#[cfg(feature = "pasta")]
+use pasta_curves::{Fp, Fq as Fv};
+
 #[cfg(feature = "cuda")]
 use rust_gpu_tools::cuda;
 #[cfg(feature = "opencl")]
@@ -52,12 +57,12 @@ impl<T> opencl::KernelArgument for Buffer<T> {
 #[derive(Debug)]
 struct GpuConstants<F, A>(PoseidonConstants<F, A>)
 where
-    F: PrimeField,
+    F: PrimeField + Fieldname,
     A: Arity<F>;
 
 pub struct ClBatchHasher<F, A>
 where
-    F: PrimeField,
+    F: PrimeField + Fieldname,
     A: Arity<F>,
 {
     device: Device,
@@ -69,7 +74,7 @@ where
 
 impl<F, A> GpuConstants<F, A>
 where
-    F: PrimeField,
+    F: PrimeField + Fieldname,
     A: Arity<F>,
 {
     fn strength(&self) -> Strength {
@@ -95,11 +100,20 @@ where
         }
         data
     }
+
+    /// Returns the name of the kernel that can be be called with those contants
+    //fn kernel_name(&self, field_name: &str) -> String {
+    fn kernel_name(&self) -> String {
+        let field_name = F::name();
+        let arity = A::to_usize();
+        let strength = self.strength();
+        format!("hash_preimages_{}_{}_{}", field_name, arity, strength)
+    }
 }
 
 impl<F, A> ClBatchHasher<F, A>
 where
-    F: PrimeField + GpuField,
+    F: PrimeField + GpuField + Fieldname,
     A: Arity<F>,
 {
     /// Create a new `GPUBatchHasher` and initialize it with state corresponding with its `A`.
@@ -149,13 +163,40 @@ where
     }
 }
 
+pub trait Fieldname {
+    fn name() -> String;
+}
+
+#[cfg(feature = "bls")]
+impl Fieldname for Fr {
+    fn name() -> String {
+        "Fr".to_string()
+    }
+}
+
+#[cfg(feature = "pasta")]
+impl Fieldname for Fp {
+    fn name() -> String {
+        "Fp".to_string()
+    }
+}
+
+#[cfg(feature = "pasta")]
+impl Fieldname for Fv {
+    fn name() -> String {
+        "Fv".to_string()
+    }
+}
+
 const LOCAL_WORK_SIZE: usize = 256;
 impl<F, A> BatchHasher<F, A> for ClBatchHasher<F, A>
 where
-    F: PrimeField,
+    F: PrimeField + Fieldname,
     A: Arity<F>,
 {
     fn hash(&mut self, preimages: &[GenericArray<F, A>]) -> Result<Vec<F>, Error> {
+        use std::any::TypeId;
+
         let local_work_size = LOCAL_WORK_SIZE;
         let max_batch_size = self.max_batch_size;
         let batch_size = preimages.len();
@@ -164,40 +205,52 @@ where
         let global_work_size = calc_global_work_size(batch_size, local_work_size);
         let num_hashes = preimages.len();
 
-        let kernel_name = match (A::to_usize(), self.constants.strength()) {
-            #[cfg(feature = "arity2")]
-            (2, Strength::Standard) => "hash_preimages_Fr_2_standard",
-            #[cfg(all(feature = "arity2", feature = "strengthened"))]
-            (2, Strength::Strengthened) => "hash_preimages_Fr_2_strengthened",
-            #[cfg(feature = "arity4")]
-            (4, Strength::Standard) => "hash_preimages_Fr_4_standard",
-            #[cfg(all(feature = "arity4", feature = "strengthened"))]
-            (4, Strength::Strengthened) => "hash_preimages_Fr_4_strengthened",
-            #[cfg(feature = "arity8")]
-            (8, Strength::Standard) => "hash_preimages_Fr_8_standard",
-            #[cfg(all(feature = "arity8", feature = "strengthened"))]
-            (8, Strength::Strengthened) => "hash_preimages_Fr_8_strengthened",
-            #[cfg(feature = "arity11")]
-            (11, Strength::Standard) => "hash_preimages_Fr_11_standard",
-            #[cfg(all(feature = "arity11", feature = "strengthened"))]
-            (11, Strength::Strengthened) => "hash_preimages_Fr_11_strengthened",
-            #[cfg(feature = "arity16")]
-            (16, Strength::Standard) => "hash_preimages_Fr_16_standard",
-            #[cfg(all(feature = "arity16", feature = "strengthened"))]
-            (16, Strength::Strengthened) => "hash_preimages_Fr_16_strengthened",
-            #[cfg(feature = "arity24")]
-            (24, Strength::Standard) => "hash_preimages_Fr_24_standard",
-            #[cfg(all(feature = "arity24", feature = "strengthened"))]
-            (24, Strength::Strengthened) => "hash_preimages_Fr_24_strengthened",
-            #[cfg(feature = "arity36")]
-            (36, Strength::Standard) => "hash_preimages_Fr_36_standard",
-            #[cfg(all(feature = "arity36", feature = "strengthened"))]
-            (36, Strength::Strengthened) => "hash_preimages_Fr_36_strengthened",
-            (arity, strength) => return Err(Error::GpuError(format!("No kernel for arity {} and strength {:?} available. Try to enable the `arity{}` feature flag.", arity, strength, arity))),
-        };
+        //let kernel_name = self.constants.kernel_name(F::name());
+        let kernel_name = self.constants.kernel_name();
+        //let kernel_name = if TypeId::of::<F>() == Fr {
+        //    self.constants.kernel_name("Fr")
+        //} else if TypeId::of::<F>() == Fp {
+        //    self.constants.kernel_name("Fp")
+        //} else if TypeId::of::<F>() == Fv {
+        //    self.constants.kernel_name("Fv")
+        //} else {
+        //    return Err(Error::GpuError("No kernel found for the given field."))
+        //};
+
+        //let kernel_name = match (A::to_usize(), TypeId::of::<F>(), self.constants.strength()) {
+        //    #[cfg(feature = "arity2")]
+        //    (2, Fr, Strength::Standard) => "hash_preimages_Fr_2_standard",
+        //    #[cfg(all(feature = "arity2", feature = "strengthened"))]
+        //    (2, Fr, Strength::Strengthened) => "hash_preimages_Fr_2_strengthened",
+        //#[cfg(feature = "arity4")]
+        //(4, Strength::Standard) => "hash_preimages_Fr_4_standard",
+        //#[cfg(all(feature = "arity4", feature = "strengthened"))]
+        //(4, Strength::Strengthened) => "hash_preimages_Fr_4_strengthened",
+        //#[cfg(feature = "arity8")]
+        //(8, Strength::Standard) => "hash_preimages_Fr_8_standard",
+        //#[cfg(all(feature = "arity8", feature = "strengthened"))]
+        //(8, Strength::Strengthened) => "hash_preimages_Fr_8_strengthened",
+        //#[cfg(feature = "arity11")]
+        //(11, Strength::Standard) => "hash_preimages_Fr_11_standard",
+        //#[cfg(all(feature = "arity11", feature = "strengthened"))]
+        //(11, Strength::Strengthened) => "hash_preimages_Fr_11_strengthened",
+        //#[cfg(feature = "arity16")]
+        //(16, Strength::Standard) => "hash_preimages_Fr_16_standard",
+        //#[cfg(all(feature = "arity16", feature = "strengthened"))]
+        //(16, Strength::Strengthened) => "hash_preimages_Fr_16_strengthened",
+        //#[cfg(feature = "arity24")]
+        //(24, Strength::Standard) => "hash_preimages_Fr_24_standard",
+        //#[cfg(all(feature = "arity24", feature = "strengthened"))]
+        //(24, Strength::Strengthened) => "hash_preimages_Fr_24_strengthened",
+        //#[cfg(feature = "arity36")]
+        //(36, Strength::Standard) => "hash_preimages_Fr_36_standard",
+        //#[cfg(all(feature = "arity36", feature = "strengthened"))]
+        //(36, Strength::Strengthened) => "hash_preimages_Fr_36_strengthened",
+        //(arity, field, strength) => return Err(Error::GpuError(format!("No kernel for arity {} and strength {:?} available. Try to enable the `arity{}` feature flag.", arity, strength, arity))),
+        //};
 
         let closures = program_closures!(|program, _args| -> Result<Vec<F>, Error> {
-            let kernel = program.create_kernel(kernel_name, global_work_size, local_work_size)?;
+            let kernel = program.create_kernel(&kernel_name, global_work_size, local_work_size)?;
             let preimages_buffer = program.create_buffer_from_slice(preimages)?;
             let result_buffer = unsafe { program.create_buffer::<F>(num_hashes)? };
 

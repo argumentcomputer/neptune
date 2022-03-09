@@ -2,10 +2,10 @@
 #[path = "../round_numbers.rs"]
 mod round_numbers;
 
-use ec_gpu::GpuField;
-use ec_gpu_gen::Limb;
 #[cfg(feature = "bls")]
 use blstrs::Scalar as Fr;
+use ec_gpu::GpuField;
+use ec_gpu_gen::Limb;
 #[cfg(feature = "pasta")]
 use pasta_curves::{Fp, Fq as Fv};
 
@@ -133,10 +133,7 @@ where
     F: GpuField,
     L: Limb,
 {
-    let mut source = vec![
-        ec_gpu_gen::field::<F, L>(field_name),
-        shared(field_name),
-    ];
+    let mut source = vec![ec_gpu_gen::field::<F, L>(field_name), shared(field_name)];
     for (standard, _strengthened) in derived_constants {
         source.push(poseidon_source(field_name, "standard", standard));
         #[cfg(feature = "strengthened")]
@@ -193,3 +190,63 @@ where
     ];
     source.join("\n")
 }
+
+// // Used as the key to lookup kernel names for a field `F` and arity `A`.
+//pub struct FieldArity<F, A>(PhantomData<(F, A)>)
+//where
+//    F: GpuField,
+//    A: Arity<F>;
+//
+//impl<F, A> typemap::Key for FieldArity<F, A>
+//where
+//    F: GpuField,
+//    A: Arity<F>,
+//{
+//    type Value = &'static str;
+//}
+
+//pub struct Fieldname<F>(PhantomData<(F)>)
+//where
+//   F: GpuField;
+//
+//impl<F> typemap::Key for Fieldname<F>
+//where
+//   F: GpuField,
+//{
+//   type Value = &'static str;
+//}
+//
+///// Returns the available kernles by name.
+/////
+///// The available kernels depend on compile-time options.
+//pub fn kernel_names() -> Vec<String> {
+//    use typemap::ShareMap;
+//
+//
+//
+//    //pub static ref POSEIDON_CONSTANTS: ShareMap = {
+//        let mut kernels = ShareMap::custom();
+//
+//        //kernels.insert::<FieldArity<Fr, U2>>("hash_preimages_Fr_2");
+//        kernels.insert::<Fieldname<Fr>>("Fr");
+//        //#[cfg(feature = "strengthened")]
+//        //kernels.insert::<FieldArity<Fr, U2>>("hash_preimages_Fr_2_strengthened");
+//
+//    use typemap::{TypeMap, Key};
+//
+//    struct KeyType;
+//
+//    #[derive(Debug, PartialEq)]
+//    struct Value(i32);
+//
+//impl Key for KeyType { type Value = Value; }
+//
+//#[test] fn test_pairing() {
+//    let mut map = TypeMap::new();
+//    map.insert::<KeyType>(Value(42));
+//    assert_eq!(*map.get::<KeyType>().unwrap(), Value(42));
+//}
+//
+//
+//
+//}

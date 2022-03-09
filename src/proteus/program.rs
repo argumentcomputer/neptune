@@ -15,8 +15,7 @@ use crate::proteus::sources;
 ///
 /// If the device supports CUDA, then CUDA is used, else OpenCL. You can force a selection with
 /// the environment variable `NEPTUNE_GPU_FRAMEWORK`, which can be set either to `cuda` or `opencl`.
-pub fn program(device: &Device) -> Result<Program, Error>
-{
+pub fn program(device: &Device) -> Result<Program, Error> {
     let framework = match env::var("NEPTUNE_GPU_FRAMEWORK") {
         Ok(env) => match env.as_ref() {
             "cuda" => {
@@ -45,8 +44,7 @@ pub fn program(device: &Device) -> Result<Program, Error>
 }
 
 /// Returns the program for the specified [`rust_gpu_tools::device::Framework`].
-pub fn program_use_framework(device: &Device, framework: &Framework) -> Result<Program, Error>
-{
+pub fn program_use_framework(device: &Device, framework: &Framework) -> Result<Program, Error> {
     match framework {
         #[cfg(feature = "cuda")]
         Framework::Cuda => {
