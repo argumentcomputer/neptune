@@ -27,7 +27,7 @@ DEVICE state_{field}_{arity}_{strength} apply_matrix_{field}_{arity}_{strength} 
 DEVICE state_{field}_{arity}_{strength} apply_sparse_matrix_{field}_{arity}_{strength} (CONSTANT {field} sm[{sparse_matrix_size}], state_{field}_{arity}_{strength} s) {{
     {field} first_elt = s.elements[0];
 
-    s.elements[0] = scalar_product(sm + {w_hat_offset}, s.elements, {width});
+    s.elements[0] = scalar_product_{field}(sm + {w_hat_offset}, s.elements, {width});
 
     for (int i = 1; i < {width}; ++i) {{
         {field} val = {field}_mul((sm + {v_rest_offset})[i-1], first_elt);
@@ -67,7 +67,7 @@ DEVICE state_{field}_{arity}_{strength} add_partial_round_key_{field}_{arity}_{s
 
 DEVICE state_{field}_{arity}_{strength} full_round_{field}_{arity}_{strength} (CONSTANT {field} constants[{constants_elements}], state_{field}_{arity}_{strength} s) {{
     for (int i = 0; i < {width}; ++i) {{
-        s.elements[i] = quintic_s_box(s.elements[i], {field}_ZERO, (constants + {round_keys_offset})[s.rk_offset + i]);
+        s.elements[i] = quintic_s_box_{field}(s.elements[i], {field}_ZERO, (constants + {round_keys_offset})[s.rk_offset + i]);
       }}
     s.rk_offset += {width};
     s = apply_round_matrix_{field}_{arity}_{strength}(constants, s);
@@ -77,14 +77,14 @@ DEVICE state_{field}_{arity}_{strength} full_round_{field}_{arity}_{strength} (C
 
 DEVICE state_{field}_{arity}_{strength} last_full_round_{field}_{arity}_{strength} (CONSTANT {field} constants[{constants_elements}], state_{field}_{arity}_{strength} s) {{
     for (int i = 0; i < {width}; ++i) {{
-        s.elements[i] = quintic_s_box(s.elements[i], {field}_ZERO, {field}_ZERO);
+        s.elements[i] = quintic_s_box_{field}(s.elements[i], {field}_ZERO, {field}_ZERO);
       }}
     s = apply_round_matrix_{field}_{arity}_{strength}(constants, s);
     return s;
 }}
 
 DEVICE state_{field}_{arity}_{strength} partial_round_{field}_{arity}_{strength} (CONSTANT {field} constants[{constants_elements}], state_{field}_{arity}_{strength} s) {{
-    s.elements[0] = quintic_s_box(s.elements[0], {field}_ZERO, (constants + {round_keys_offset})[s.rk_offset]);
+    s.elements[0] = quintic_s_box_{field}(s.elements[0], {field}_ZERO, (constants + {round_keys_offset})[s.rk_offset]);
     s.rk_offset += 1;
     s = apply_round_matrix_{field}_{arity}_{strength}(constants, s);
     s.current_round += 1;
