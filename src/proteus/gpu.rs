@@ -161,33 +161,33 @@ where
 
         let kernel_name = match (A::to_usize(), self.constants.strength()) {
             #[cfg(feature = "arity2")]
-            (2, Strength::Standard) => "hash_preimages_2_standard",
+            (2, Strength::Standard) => "hash_preimages_Fr_2_standard",
             #[cfg(all(feature = "arity2", feature = "strengthened"))]
-            (2, Strength::Strengthened) => "hash_preimages_2_strengthened",
+            (2, Strength::Strengthened) => "hash_preimages_Fr_2_strengthened",
             #[cfg(feature = "arity4")]
-            (4, Strength::Standard) => "hash_preimages_4_standard",
+            (4, Strength::Standard) => "hash_preimages_Fr_4_standard",
             #[cfg(all(feature = "arity4", feature = "strengthened"))]
-            (4, Strength::Strengthened) => "hash_preimages_4_strengthened",
+            (4, Strength::Strengthened) => "hash_preimages_Fr_4_strengthened",
             #[cfg(feature = "arity8")]
-            (8, Strength::Standard) => "hash_preimages_8_standard",
+            (8, Strength::Standard) => "hash_preimages_Fr_8_standard",
             #[cfg(all(feature = "arity8", feature = "strengthened"))]
-            (8, Strength::Strengthened) => "hash_preimages_8_strengthened",
+            (8, Strength::Strengthened) => "hash_preimages_Fr_8_strengthened",
             #[cfg(feature = "arity11")]
-            (11, Strength::Standard) => "hash_preimages_11_standard",
+            (11, Strength::Standard) => "hash_preimages_Fr_11_standard",
             #[cfg(all(feature = "arity11", feature = "strengthened"))]
-            (11, Strength::Strengthened) => "hash_preimages_11_strengthened",
+            (11, Strength::Strengthened) => "hash_preimages_Fr_11_strengthened",
             #[cfg(feature = "arity16")]
-            (16, Strength::Standard) => "hash_preimages_16_standard",
+            (16, Strength::Standard) => "hash_preimages_Fr_16_standard",
             #[cfg(all(feature = "arity16", feature = "strengthened"))]
-            (16, Strength::Strengthened) => "hash_preimages_16_strengthened",
+            (16, Strength::Strengthened) => "hash_preimages_Fr_16_strengthened",
             #[cfg(feature = "arity24")]
-            (24, Strength::Standard) => "hash_preimages_24_standard",
+            (24, Strength::Standard) => "hash_preimages_Fr_24_standard",
             #[cfg(all(feature = "arity24", feature = "strengthened"))]
-            (24, Strength::Strengthened) => "hash_preimages_24_strengthened",
+            (24, Strength::Strengthened) => "hash_preimages_Fr_24_strengthened",
             #[cfg(feature = "arity36")]
-            (36, Strength::Standard) => "hash_preimages_36_standard",
+            (36, Strength::Standard) => "hash_preimages_Fr_36_standard",
             #[cfg(all(feature = "arity36", feature = "strengthened"))]
-            (36, Strength::Strengthened) => "hash_preimages_36_strengthened",
+            (36, Strength::Strengthened) => "hash_preimages_Fr_36_strengthened",
             (arity, strength) => return Err(Error::GpuError(format!("No kernel for arity {} and strength {:?} available. Try to enable the `arity{}` feature flag.", arity, strength, arity))),
         };
 
