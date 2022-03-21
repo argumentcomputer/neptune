@@ -33,8 +33,8 @@ compile_error!("The `strengthened` feature needs the `cuda` and/or `opencl` feat
 
 /// Poseidon circuit
 pub mod circuit;
-pub mod halo2_circuit;
 pub mod error;
+pub mod halo2_poseidon;
 mod matrix;
 mod mds;
 
