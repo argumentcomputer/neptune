@@ -41,50 +41,14 @@ impl Spec<Fp, 3, 2> for MySpec<3, 2> {
     }
 }
 
-impl Spec<Fp, 9, 8> for MySpec<9, 8> {
-    fn full_rounds() -> usize {
-        8
-    }
-
-    fn partial_rounds() -> usize {
-        56
-    }
-
-    fn sbox(val: Fp) -> Fp {
-        val.pow_vartime(&[5])
-    }
-
-    fn secure_mds() -> usize {
-        0
-    }
-}
-
-impl Spec<Fp, 12, 11> for MySpec<12, 11> {
-    fn full_rounds() -> usize {
-        8
-    }
-
-    fn partial_rounds() -> usize {
-        56
-    }
-
-    fn sbox(val: Fp) -> Fp {
-        val.pow_vartime(&[5])
-    }
-
-    fn secure_mds() -> usize {
-        0
-    }
-}
-
 const K: u32 = 6;
 
 #[derive(Clone, Copy)]
-struct HashCircuit<S, const WIDTH: usize, const RATE: usize, const L: usize>
+struct HashCircuit<S, const WIDTH: usize, const RATE: usize, L: Unsigned>
 where
     S: Spec<Fp, WIDTH, RATE> + Clone + Copy,
 {
-    message: Option<[Fp; L]>,
+    message: Option<[Fp; L::to_usize()]>,
     // For the purpose of this test, witness the result.
     // TODO: Move this into an instance column.
     output: Option<Fp>,
@@ -92,12 +56,12 @@ where
 }
 
 #[derive(Debug, Clone)]
-struct MyConfig<const WIDTH: usize, const RATE: usize, const L: usize> {
-    input: [Column<Advice>; L],
+struct MyConfig<const WIDTH: usize, const RATE: usize, L: Unsigned> {
+    input: [Column<Advice>; L::to_usize()],
     poseidon_config: Pow5Config<Fp, WIDTH, RATE>,
 }
 
-impl<S, const WIDTH: usize, const RATE: usize, const L: usize> Circuit<Fp>
+impl<S, const WIDTH: usize, const RATE: usize, L: Unsigned> Circuit<Fp>
     for HashCircuit<S, WIDTH, RATE, L>
 where
     S: Spec<Fp, WIDTH, RATE> + Copy + Clone,
@@ -154,7 +118,7 @@ where
                     )
                 };
 
-                let message: Result<Vec<_>, Error> = (0..L).map(message_word).collect();
+                let message: Result<Vec<_>, Error> = (0..L::to_usize()).map(message_word).collect();
                 Ok(message?.try_into().unwrap())
             },
         )?;
@@ -180,12 +144,16 @@ where
     }
 }
 
+use generic_array::typenum;
+use typenum::marker_traits::Unsigned;
+use typenum::*;
+
 #[test]
 fn poseidon_halo2_gadget_test() {
-    run_poseidon_test::<MySpec<3, 2>, 3, 2, 2>();
+    run_poseidon_test::<MySpec<3, 2>, 3, 2, U2>();
 }
 
-fn run_poseidon_test<S, const WIDTH: usize, const RATE: usize, const L: usize>()
+fn run_poseidon_test<S, const WIDTH: usize, const RATE: usize, L: Unsigned>()
 where
     S: Spec<Fp, WIDTH, RATE> + Copy + Clone,
 {
@@ -202,7 +170,7 @@ where
     let pk = keygen_pk(&params, vk, &empty_circuit).expect("keygen_pk should not fail");
 
     let mut rng = OsRng;
-    let message = (0..L)
+    let message = (0..L::to_usize())
         .map(|_| pallas::Base::random(rng))
         .collect::<Vec<_>>()
         .try_into()
