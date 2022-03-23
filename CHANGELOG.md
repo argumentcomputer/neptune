@@ -7,9 +7,20 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
-- Remove neptune-triton (Futhark) support.
+## 6.0.0 - 2022-3-22
+
+- Use bellperson v0.19.0. (https://github.com/filecoin-project/neptune/pull/141)
+- refactor: use field name as part of the function names (https://github.com/filecoin-project/neptune/pull/136)
+- chore: update to Rust 1.56.0 (https://github.com/filecoin-project/neptune/pull/138)
+- chore: use Rust 1.51.0 (https://github.com/filecoin-project/neptune/pull/134)
+- Remove neptune-triton (Futhark) support. (https://github.com/filecoin-project/neptune/pull/132)
+- feat: add vanilla Poseidon benchmarks for Pasta scalar field (https://github.com/filecoin-project/neptune/pull/124)
+- Update README. (https://github.com/filecoin-project/neptune/pull/129)
+- fix: fix warning when compiling with OpenCL (https://github.com/filecoin-project/neptune/pull/123)
+- Fixes gaussian elimination for matrices with 0 entries (https://github.com/filecoin-project/neptune/pull/122)
 
 ## 5.1.0 - 2021-10-21
+- Cleanup domain tags (https://github.com/filecoin-project/neptune/pull/121)
 - Fix, test, and enable custom domain tags. (https://github.com/filecoin-project/neptune/pull/116)
 - Update bellperson to v0.18.0 (https://github.com/filecoin-project/neptune/pull/115)
 - Fix spec's sparse factorization w vector (https://github.com/filecoin-project/neptune/pull/114)
