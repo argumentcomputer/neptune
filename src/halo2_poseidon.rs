@@ -41,14 +41,16 @@ impl Spec<Fp, 3, 2> for MySpec<3, 2> {
     }
 }
 
+
 const K: u32 = 6;
 
 #[derive(Clone, Copy)]
-struct HashCircuit<S, const WIDTH: usize, const RATE: usize, L: Unsigned>
+struct HashCircuit<S, const WIDTH: usize, const RATE: usize, L: ArrayLength<Fp>>
 where
     S: Spec<Fp, WIDTH, RATE> + Clone + Copy,
+    L::ArrayType: Copy,
 {
-    message: Option<[Fp; L::to_usize()]>,
+    message: Option<GenericArray<Fp, L>>,
     // For the purpose of this test, witness the result.
     // TODO: Move this into an instance column.
     output: Option<Fp>,
@@ -56,8 +58,8 @@ where
 }
 
 #[derive(Debug, Clone)]
-struct MyConfig<const WIDTH: usize, const RATE: usize, L: Unsigned> {
-    input: [Column<Advice>; L::to_usize()],
+struct MyConfig<const WIDTH: usize, const RATE: usize, L: ArrayLength<Column<Advice>>> {
+    input: GenericArray<Column<Advice>, L>,
     poseidon_config: Pow5Config<Fp, WIDTH, RATE>,
 }
 
@@ -65,6 +67,7 @@ impl<S, const WIDTH: usize, const RATE: usize, L: Unsigned> Circuit<Fp>
     for HashCircuit<S, WIDTH, RATE, L>
 where
     S: Spec<Fp, WIDTH, RATE> + Copy + Clone,
+    L: generic_array::ArrayLength<pasta_curves::Fp>, <L as ArrayLength<Fp>>::ArrayType: Copy
 {
     type Config = MyConfig<WIDTH, RATE, L>;
     type FloorPlanner = SimpleFloorPlanner;
@@ -144,16 +147,14 @@ where
     }
 }
 
-use generic_array::typenum;
-use typenum::marker_traits::Unsigned;
-use typenum::*;
+use generic_array::{self, ArrayLength, typenum::{self, Unsigned, U2}, GenericArray};
 
 #[test]
 fn poseidon_halo2_gadget_test() {
     run_poseidon_test::<MySpec<3, 2>, 3, 2, U2>();
 }
 
-fn run_poseidon_test<S, const WIDTH: usize, const RATE: usize, L: Unsigned>()
+fn run_poseidon_test<S, const WIDTH: usize, const RATE: usize, L: ArrayLength<Fp>>()
 where
     S: Spec<Fp, WIDTH, RATE> + Copy + Clone,
 {
