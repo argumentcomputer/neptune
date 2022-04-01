@@ -5,7 +5,7 @@ extern crate lazy_static;
 
 pub use crate::poseidon::{Arity, Poseidon};
 use crate::round_constants::generate_constants;
-use crate::round_numbers::{round_numbers_base, round_numbers_strengthened};
+use crate::round_numbers::{round_numbers_base, round_numbers_halo, round_numbers_strengthened};
 use blstrs::Scalar as Fr;
 pub use error::Error;
 use ff::PrimeField;
@@ -31,11 +31,14 @@ compile_error!("The `cuda` and `opencl` features need at least one arity feature
 ))]
 compile_error!("The `strengthened` feature needs the `cuda` and/or `opencl` feature to be set");
 
-/// Poseidon circuit
+/// Poseidon Groth16 circuit
 pub mod circuit;
 pub mod error;
 mod matrix;
 mod mds;
+
+/// Poseidon Halo2 circuit
+pub mod halo2_circuit;
 
 /// Poseidon hash
 pub mod poseidon;
@@ -70,6 +73,7 @@ pub(crate) const TEST_SEED: [u8; 16] = [
 pub enum Strength {
     Standard,
     Strengthened,
+    Halo,
 }
 
 pub(crate) const DEFAULT_STRENGTH: Strength = Strength::Standard;
@@ -107,6 +111,7 @@ pub fn round_numbers(arity: usize, strength: &Strength) -> (usize, usize) {
     match strength {
         Strength::Standard => round_numbers_base(arity),
         Strength::Strengthened => round_numbers_strengthened(arity),
+        Strength::Halo => round_numbers_halo(arity),
     }
 }
 

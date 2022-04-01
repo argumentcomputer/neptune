@@ -785,6 +785,8 @@ mod tests {
                     }
                 }
             }
+            // TODO: add test vectors for Halo2.
+            Strength::Halo => unimplemented!("test not implemented for Halo2"),
         };
         dbg!(test_arity);
         assert_eq!(expected, digest);

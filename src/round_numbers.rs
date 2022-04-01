@@ -42,6 +42,18 @@ pub(crate) fn round_numbers_strengthened(arity: usize) -> (usize, usize) {
     (full_round, strengthened_partial_rounds)
 }
 
+// Halo2 circuits must use an even number of full and partial rounds.
+pub(crate) fn round_numbers_halo(arity: usize) -> (usize, usize) {
+    let (mut full_rounds, mut partial_rounds) = round_numbers_base(arity);
+    if full_rounds & 1 == 1 {
+        full_rounds += 1;
+    }
+    if partial_rounds & 1 == 1 {
+        partial_rounds += 1;
+    }
+    (full_rounds, partial_rounds)
+}
+
 // Returns the round numbers for a given width `t`. Here, the `security_margin` parameter does not
 // indicate that we are calculating `R_F` and `R_P` for the "strengthened" round numbers, done in
 // the function `round_numbers_strengthened()`.

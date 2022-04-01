@@ -61,7 +61,7 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
     fn strength_tag_component(strength: &Strength) -> F {
         let id = match strength {
             // Standard strength doesn't affect the base tag.
-            Strength::Standard => 0,
+            Strength::Standard | Strength::Halo => 0,
             Strength::Strengthened => 1,
         };
 
