@@ -18,8 +18,12 @@ use halo2_gadgets::{
 use std::convert::TryInto;
 use std::marker::PhantomData;
 
+use generic_array::{
+    self, arr,
+    typenum::{self, Unsigned, U2, U3},
+    ArrayLength, GenericArray,
+};
 use rand::rngs::OsRng;
-use generic_array::{self, arr, ArrayLength, typenum::{self, Unsigned, U2}, GenericArray};
 
 #[derive(Debug, Clone, Copy)]
 struct MySpec<const WIDTH: usize, const RATE: usize>;
@@ -42,47 +46,45 @@ impl Spec<Fp, 3, 2> for MySpec<3, 2> {
     }
 }
 
-
 const K: u32 = 6;
 
 #[derive(Clone, Copy)]
-struct HashCircuit<S, const WIDTH: usize, const RATE: usize, L: ArrayLength<Fp>>
+struct HashCircuit<L: ArrayLength<Fp>, const WIDTH: usize, const RATE: usize>
 where
-    S: Spec<Fp, WIDTH, RATE> + Clone + Copy,
     L::ArrayType: Copy,
 {
     message: Option<GenericArray<Fp, L>>,
     // For the purpose of this test, witness the result.
     // TODO: Move this into an instance column.
     output: Option<Fp>,
-    _spec: PhantomData<S>,
 }
 
 #[derive(Debug, Clone)]
-struct MyConfig<const WIDTH: usize, const RATE: usize, L: ArrayLength<Column<Advice>>> {
+struct MyConfig<L: ArrayLength<Column<Advice>>, const WIDTH: usize, const RATE: usize> {
     input: GenericArray<Column<Advice>, L>,
     poseidon_config: Pow5Config<Fp, WIDTH, RATE>,
 }
 
-impl<S, const WIDTH: usize, const RATE: usize, L: Unsigned> Circuit<Fp>
-    for HashCircuit<S, WIDTH, RATE, L>
+impl<L: Unsigned, const WIDTH: usize, const RATE: usize> Circuit<Fp> for HashCircuit<L, WIDTH, RATE>
 where
-    S: Spec<Fp, WIDTH, RATE> + Copy + Clone,
-    L: ArrayLength<Fp> + ArrayLength<Column<Advice>>, <L as ArrayLength<Fp>>::ArrayType: Copy,
+    L: ArrayLength<Fp> + ArrayLength<Column<Advice>>,
+    <L as ArrayLength<Fp>>::ArrayType: Copy,
+    MySpec<WIDTH, RATE>: Spec<Fp, WIDTH, RATE>,
 {
-    type Config = MyConfig<WIDTH, RATE, L>;
+    type Config = MyConfig<L, WIDTH, RATE>;
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
         Self {
             message: None,
             output: None,
-            _spec: PhantomData,
         }
     }
 
     fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
-        let gen_state = (0..WIDTH).map(|_| meta.advice_column()).collect::<GenericArray<_, _>>();
+        let gen_state = (0..WIDTH)
+            .map(|_| meta.advice_column())
+            .collect::<GenericArray<_, _>>();
         let partial_sbox = meta.advice_column();
 
         let rc_a = (0..WIDTH).map(|_| meta.fixed_column()).collect::<Vec<_>>();
@@ -102,7 +104,7 @@ where
 
         Self::Config {
             input: gen_state,
-            poseidon_config: Pow5Chip::configure::<S>(
+            poseidon_config: Pow5Chip::configure::<MySpec<WIDTH, RATE>>(
                 meta,
                 state_array,
                 partial_sbox,
@@ -137,7 +139,7 @@ where
             },
         )?;
 
-        let hasher = Hash::<_, _, S, ConstantLength<2>, WIDTH, RATE>::init(
+        let hasher = Hash::<_, _, MySpec<WIDTH, RATE>, ConstantLength<2>, WIDTH, RATE>::init(
             chip,
             layouter.namespace(|| "init"),
         )?;
@@ -158,22 +160,23 @@ where
     }
 }
 
-
 #[test]
 fn poseidon_halo2_gadget_test() {
-    run_poseidon_test::<MySpec<3, 2>, 3, 2, U2>();
+    run_poseidon_test::<U2, 3, 2>();
 }
 
-fn run_poseidon_test<S, const WIDTH: usize, const RATE: usize, L: ArrayLength<Fp>>()
+fn run_poseidon_test<L: ArrayLength<Fp>, const WIDTH: usize, const RATE: usize>()
 where
-    S: Spec<Fp, WIDTH, RATE> + Copy + Clone, <L as ArrayLength<Fp>>::ArrayType: Copy, L: ArrayLength<Column<Advice>>, GenericArray<Fp, L>: From<[Fp; 2]>
+    MySpec<WIDTH, RATE>: Spec<Fp, WIDTH, RATE>,
+    <L as ArrayLength<Fp>>::ArrayType: Copy,
+    L: ArrayLength<Column<Advice>>,
+    GenericArray<Fp, L>: From<[Fp; 2]>,
 {
     let params: Params<vesta::Affine> = Params::new(K);
 
-    let empty_circuit = HashCircuit::<S, WIDTH, RATE, L> {
+    let empty_circuit = HashCircuit::<L, WIDTH, RATE> {
         message: None,
         output: None,
-        _spec: PhantomData,
     };
 
     // Initialize the proving key
@@ -186,12 +189,12 @@ where
         .collect::<Vec<_>>()
         .try_into()
         .unwrap();
-    let output = poseidon::Hash::<_, S, ConstantLength<2>, WIDTH, RATE>::init().hash(message);
+    let output = poseidon::Hash::<_, MySpec<WIDTH, RATE>, ConstantLength<2>, WIDTH, RATE>::init()
+        .hash(message);
 
-    let circuit = HashCircuit::<S, WIDTH, RATE, L> {
+    let circuit = HashCircuit::<L, WIDTH, RATE> {
         message: Some(message.into()),
         output: Some(output),
-        _spec: PhantomData,
     };
 
     // Create a proof
