@@ -19,6 +19,7 @@ use std::convert::TryInto;
 use std::marker::PhantomData;
 
 use rand::rngs::OsRng;
+use generic_array::{self, arr, ArrayLength, typenum::{self, Unsigned, U2}, GenericArray};
 
 #[derive(Debug, Clone, Copy)]
 struct MySpec<const WIDTH: usize, const RATE: usize>;
@@ -67,7 +68,7 @@ impl<S, const WIDTH: usize, const RATE: usize, L: Unsigned> Circuit<Fp>
     for HashCircuit<S, WIDTH, RATE, L>
 where
     S: Spec<Fp, WIDTH, RATE> + Copy + Clone,
-    L: generic_array::ArrayLength<pasta_curves::Fp>, <L as ArrayLength<Fp>>::ArrayType: Copy
+    L: ArrayLength<Fp> + ArrayLength<Column<Advice>>, <L as ArrayLength<Fp>>::ArrayType: Copy,
 {
     type Config = MyConfig<WIDTH, RATE, L>;
     type FloorPlanner = SimpleFloorPlanner;
@@ -81,7 +82,7 @@ where
     }
 
     fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
-        let state = (0..WIDTH).map(|_| meta.advice_column()).collect::<Vec<_>>();
+        let gen_state = (0..WIDTH).map(|_| meta.advice_column()).collect::<GenericArray<_, _>>();
         let partial_sbox = meta.advice_column();
 
         let rc_a = (0..WIDTH).map(|_| meta.fixed_column()).collect::<Vec<_>>();
@@ -89,11 +90,21 @@ where
 
         meta.enable_constant(rc_b[0]);
 
+        let mut state = Vec::new();
+        for i in 0..gen_state.len() {
+            state.push(gen_state[i]);
+        }
+
+        // TODO: fix ugly things, use idiomatic way to convert when it is working
+        let mut state_array: [Column<Advice>; WIDTH] = [gen_state[0]; WIDTH];
+
+        state_array[0..state.len()].copy_from_slice(&state);
+
         Self::Config {
-            input: state[..RATE].try_into().unwrap(),
+            input: gen_state,
             poseidon_config: Pow5Chip::configure::<S>(
                 meta,
-                state.try_into().unwrap(),
+                state_array,
                 partial_sbox,
                 rc_a.try_into().unwrap(),
                 rc_b.try_into().unwrap(),
@@ -126,7 +137,7 @@ where
             },
         )?;
 
-        let hasher = Hash::<_, _, S, ConstantLength<L>, WIDTH, RATE>::init(
+        let hasher = Hash::<_, _, S, ConstantLength<2>, WIDTH, RATE>::init(
             chip,
             layouter.namespace(|| "init"),
         )?;
@@ -147,7 +158,6 @@ where
     }
 }
 
-use generic_array::{self, ArrayLength, typenum::{self, Unsigned, U2}, GenericArray};
 
 #[test]
 fn poseidon_halo2_gadget_test() {
@@ -156,7 +166,7 @@ fn poseidon_halo2_gadget_test() {
 
 fn run_poseidon_test<S, const WIDTH: usize, const RATE: usize, L: ArrayLength<Fp>>()
 where
-    S: Spec<Fp, WIDTH, RATE> + Copy + Clone,
+    S: Spec<Fp, WIDTH, RATE> + Copy + Clone, <L as ArrayLength<Fp>>::ArrayType: Copy, L: ArrayLength<Column<Advice>>, GenericArray<Fp, L>: From<[Fp; 2]>
 {
     let params: Params<vesta::Affine> = Params::new(K);
 
@@ -176,10 +186,10 @@ where
         .collect::<Vec<_>>()
         .try_into()
         .unwrap();
-    let output = poseidon::Hash::<_, S, ConstantLength<L>, WIDTH, RATE>::init().hash(message);
+    let output = poseidon::Hash::<_, S, ConstantLength<2>, WIDTH, RATE>::init().hash(message);
 
     let circuit = HashCircuit::<S, WIDTH, RATE, L> {
-        message: Some(message),
+        message: Some(message.into()),
         output: Some(output),
         _spec: PhantomData,
     };
