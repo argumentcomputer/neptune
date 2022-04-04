@@ -82,9 +82,7 @@ where
     }
 
     fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
-        let gen_state = (0..WIDTH)
-            .map(|_| meta.advice_column())
-            .collect::<GenericArray<_, _>>();
+        let gen_state = (0..WIDTH).map(|_| meta.advice_column()).collect::<Vec<_>>();
         let partial_sbox = meta.advice_column();
 
         let rc_a = (0..WIDTH).map(|_| meta.fixed_column()).collect::<Vec<_>>();
@@ -97,10 +95,8 @@ where
             state.push(gen_state[i]);
         }
 
-        // TODO: fix ugly things, use idiomatic way to convert when it is working
-        let mut state_array: [Column<Advice>; WIDTH] = [gen_state[0]; WIDTH];
-
-        state_array[0..state.len()].copy_from_slice(&state);
+        let state_array: [Column<Advice>; WIDTH] = gen_state.clone().try_into().unwrap();
+        let gen_state = gen_state.into_iter().take(RATE).collect();
 
         Self::Config {
             input: gen_state,
@@ -189,8 +185,7 @@ where
         .collect::<Vec<_>>()
         .try_into()
         .unwrap();
-    let output = poseidon::Hash::<_, MySpec<WIDTH, RATE>, ConstantLength<2>, WIDTH, RATE>::init()
-        .hash(message);
+    let output = poseidon::Hash::<_, MySpec<WIDTH, RATE>, _, WIDTH, RATE>::init().hash(message);
 
     let circuit = HashCircuit::<L, WIDTH, RATE> {
         message: Some(message.into()),
