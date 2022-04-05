@@ -26,9 +26,9 @@ use generic_array::{
 use rand::rngs::OsRng;
 
 #[derive(Debug, Clone, Copy)]
-struct MySpec<const WIDTH: usize, const RATE: usize>;
+struct Halo2PoseidonSpec<const WIDTH: usize, const RATE: usize>;
 
-impl Spec<Fp, 3, 2> for MySpec<3, 2> {
+impl Spec<Fp, 3, 2> for Halo2PoseidonSpec<3, 2> {
     fn full_rounds() -> usize {
         8
     }
@@ -49,7 +49,7 @@ impl Spec<Fp, 3, 2> for MySpec<3, 2> {
 const K: u32 = 6;
 
 #[derive(Clone, Copy)]
-struct HashCircuit<L: ArrayLength<Fp>, const WIDTH: usize, const RATE: usize>
+struct Halo2PoseidonCircuit<L: ArrayLength<Fp>, const WIDTH: usize, const RATE: usize>
 where
     L::ArrayType: Copy,
 {
@@ -60,18 +60,18 @@ where
 }
 
 #[derive(Debug, Clone)]
-struct MyConfig<L: ArrayLength<Column<Advice>>, const WIDTH: usize, const RATE: usize> {
+struct Halo2PoseidonConfig<L: ArrayLength<Column<Advice>>, const WIDTH: usize, const RATE: usize> {
     input: GenericArray<Column<Advice>, L>,
     poseidon_config: Pow5Config<Fp, WIDTH, RATE>,
 }
 
-impl<L: Unsigned, const WIDTH: usize, const RATE: usize> Circuit<Fp> for HashCircuit<L, WIDTH, RATE>
+impl<L: Unsigned, const WIDTH: usize, const RATE: usize> Circuit<Fp> for Halo2PoseidonCircuit<L, WIDTH, RATE>
 where
     L: ArrayLength<Fp> + ArrayLength<Column<Advice>>,
     <L as ArrayLength<Fp>>::ArrayType: Copy,
-    MySpec<WIDTH, RATE>: Spec<Fp, WIDTH, RATE>,
+    Halo2PoseidonSpec<WIDTH, RATE>: Spec<Fp, WIDTH, RATE>,
 {
-    type Config = MyConfig<L, WIDTH, RATE>;
+    type Config = Halo2PoseidonConfig<L, WIDTH, RATE>;
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
@@ -82,7 +82,7 @@ where
     }
 
     fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
-        let gen_state = (0..WIDTH).map(|_| meta.advice_column()).collect::<Vec<_>>();
+        let state = (0..WIDTH).map(|_| meta.advice_column()).collect::<Vec<_>>();
         let partial_sbox = meta.advice_column();
 
         let rc_a = (0..WIDTH).map(|_| meta.fixed_column()).collect::<Vec<_>>();
@@ -90,17 +90,12 @@ where
 
         meta.enable_constant(rc_b[0]);
 
-        let mut state = Vec::new();
-        for i in 0..gen_state.len() {
-            state.push(gen_state[i]);
-        }
-
-        let state_array: [Column<Advice>; WIDTH] = gen_state.clone().try_into().unwrap();
-        let gen_state = gen_state.into_iter().take(RATE).collect();
+        let state_array: [Column<Advice>; WIDTH] = state.clone().try_into().unwrap();
+        let state = state.into_iter().take(RATE).collect();
 
         Self::Config {
-            input: gen_state,
-            poseidon_config: Pow5Chip::configure::<MySpec<WIDTH, RATE>>(
+            input: state,
+            poseidon_config: Pow5Chip::configure::<Halo2PoseidonSpec<WIDTH, RATE>>(
                 meta,
                 state_array,
                 partial_sbox,
@@ -135,7 +130,7 @@ where
             },
         )?;
 
-        let hasher = Hash::<_, _, MySpec<WIDTH, RATE>, ConstantLength<2>, WIDTH, RATE>::init(
+        let hasher = Hash::<_, _, Halo2PoseidonSpec<WIDTH, RATE>, ConstantLength<2>, WIDTH, RATE>::init(
             chip,
             layouter.namespace(|| "init"),
         )?;
@@ -163,14 +158,14 @@ fn poseidon_halo2_gadget_test() {
 
 fn run_poseidon_test<L: ArrayLength<Fp>, const WIDTH: usize, const RATE: usize>()
 where
-    MySpec<WIDTH, RATE>: Spec<Fp, WIDTH, RATE>,
+    Halo2PoseidonSpec<WIDTH, RATE>: Spec<Fp, WIDTH, RATE>,
     <L as ArrayLength<Fp>>::ArrayType: Copy,
     L: ArrayLength<Column<Advice>>,
     GenericArray<Fp, L>: From<[Fp; 2]>,
 {
     let params: Params<vesta::Affine> = Params::new(K);
 
-    let empty_circuit = HashCircuit::<L, WIDTH, RATE> {
+    let empty_circuit = Halo2PoseidonCircuit::<L, WIDTH, RATE> {
         message: None,
         output: None,
     };
@@ -185,9 +180,9 @@ where
         .collect::<Vec<_>>()
         .try_into()
         .unwrap();
-    let output = poseidon::Hash::<_, MySpec<WIDTH, RATE>, _, WIDTH, RATE>::init().hash(message);
+    let output = poseidon::Hash::<_, Halo2PoseidonSpec<WIDTH, RATE>, _, WIDTH, RATE>::init().hash(message);
 
-    let circuit = HashCircuit::<L, WIDTH, RATE> {
+    let circuit = Halo2PoseidonCircuit::<L, WIDTH, RATE> {
         message: Some(message.into()),
         output: Some(output),
     };
