@@ -43,6 +43,7 @@ compile_error!("The `cuda` and `opencl` features need the `bls` and/or `pasta` f
 pub mod circuit;
 pub mod circuit2;
 pub mod error;
+pub mod halo2_circuit;
 mod matrix;
 mod mds;
 
