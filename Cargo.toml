@@ -23,6 +23,7 @@ log = "0.4.8"
 pasta_curves = { version = "0.5.1", features = ["serde"], package = "fil_pasta_curves" }
 trait-set = "0.3.0"
 serde = { version = "1.0", features = ["derive"] }
+halo2_proofs = "0.2.0"
 
 [dev-dependencies]
 blstrs = "0.6.1"
