@@ -58,7 +58,6 @@ codegen-units = 1
 [features]
 default = [ "bellperson/default" ]
 cuda = ["rust-gpu-tools/cuda", "blstrs/gpu", "ec-gpu-gen", "ec-gpu"]
-futhark = ["triton", "ec-gpu-gen/opencl"]
 opencl = ["rust-gpu-tools/opencl", "blstrs/gpu", "ec-gpu-gen", "ec-gpu"]
 # The supported arities for Poseidon running on the GPU are specified at compile-time.
 arity2 = []
