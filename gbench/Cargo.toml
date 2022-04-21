@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 lazy_static = "1.4.0"
-bellperson = { git = "https://github.com/lurk-lang/bellperson", branch = "acs/wasm-support", version = "0.19", default-features = false }
+bellperson = { version = "0.20", default-features = false }
 blake2s_simd = "0.5"
 byteorder = "1"
 env_logger = "0.7.1"
@@ -16,7 +16,7 @@ ff = "0.11.0"
 generic-array = "0.14.4"
 log = "0.4.8"
 neptune = { path = "../", default-features = false, features = ["arity8", "arity11"] }
-ec-gpu-gen = { git = "https://github.com/lurk-lang/ec-gpu", branch = "jcb/nix", version = "0.2.1", optional = true }
+ec-gpu-gen = { version = "0.2.1", optional = true }
 rust-gpu-tools = { version = "0.5.0", default-features = true, optional = true }
 structopt = { version = "0.3", default-features = false }
 
