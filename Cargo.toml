@@ -23,7 +23,6 @@ generic-array = "0.14.4"
 itertools = { version = "0.8.0" }
 log = "0.4.8"
 rust-gpu-tools = { version = "0.5.0", default-features = false, optional = true }
-triton = { version = "2.1.0", package = "neptune-triton", default-features = false, features = ["opencl"], optional = true }
 
 [dev-dependencies]
 criterion = "0.3"
