@@ -22,5 +22,5 @@ blstrs = "0.4.0"
 
 [features]
 default = ["opencl"]
-cuda = ["neptune/cuda", "rust-gpu-tools/cuda"]
-opencl = ["neptune/opencl", "rust-gpu-tools/opencl"]
+cuda = ["neptune/cuda", "bellperson/cuda", "rust-gpu-tools/cuda"]
+opencl = ["neptune/opencl", "bellperson/opencl", "rust-gpu-tools/opencl"]
