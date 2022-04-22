@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 lazy_static = "1.4.0"
-bellperson = "0.18.0"
+bellperson = { version = "0.20.0", default-features = false }
 blake2s_simd = "0.5"
 byteorder = "1"
 env_logger = "0.7.1"
@@ -22,5 +22,5 @@ blstrs = "0.4.0"
 
 [features]
 default = ["opencl"]
-cuda = ["neptune/cuda", "rust-gpu-tools/cuda"]
-opencl = ["neptune/opencl", "rust-gpu-tools/opencl"]
+cuda = ["neptune/cuda", "bellperson/cuda", "rust-gpu-tools/cuda"]
+opencl = ["neptune/opencl", "bellperson/opencl", "rust-gpu-tools/opencl"]
