@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 6.1.0 - 2022-4-22
+- Wasm support (https://github.com/filecoin-project/neptune/pull/139)
+
 ## 6.0.0 - 2022-3-22
 
 - Use bellperson v0.19.0. (https://github.com/filecoin-project/neptune/pull/141)
