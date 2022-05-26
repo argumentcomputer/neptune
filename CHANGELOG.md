@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 6.1.1 - 2022-5-26
+- Implement Arity for U1 (https://github.com/filecoin-project/neptune/pull/145)
+
 ## 6.1.0 - 2022-4-22
 - Wasm support (https://github.com/filecoin-project/neptune/pull/139)
 
