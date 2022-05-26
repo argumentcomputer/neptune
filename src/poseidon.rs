@@ -44,6 +44,7 @@ impl<F: PrimeField> Arity<F> for U0 {
 }
 
 impl_arity!(
+    U1 => U2,
     U2 => U3,
     U3 => U4,
     U4 => U5,
