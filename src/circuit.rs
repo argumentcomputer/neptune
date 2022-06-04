@@ -16,7 +16,7 @@ use std::marker::PhantomData;
 /// In this way, all intermediate calculations are accounted for, with the restriction that we can only
 /// accumulate linear (not polynomial) constraints. The set of operations provided here ensure this invariant is maintained.
 #[derive(Clone)]
-enum Elt<Scalar: PrimeField> {
+pub enum Elt<Scalar: PrimeField> {
     Allocated(AllocatedNum<Scalar>),
     Num(num::Num<Scalar>),
 }
@@ -94,6 +94,29 @@ impl<Scalar: PrimeField> Elt<Scalar> {
         match self {
             Elt::Num(num) => Ok(Elt::Num(num.scale(scalar))),
             Elt::Allocated(a) => Elt::Num(a.into()).scale::<CS>(scalar),
+        }
+    }
+
+    /// Square
+    fn square<CS: ConstraintSystem<Scalar>>(
+        &self,
+        mut cs: CS,
+    ) -> Result<AllocatedNum<Scalar>, SynthesisError> {
+        match self {
+            Elt::Num(num) => {
+                let mut tmp = num.get_value().ok_or(SynthesisError::AssignmentMissing)?;
+                tmp = tmp * tmp;
+                let allocated =
+                    AllocatedNum::alloc(&mut cs.namespace(|| "squared num"), || Ok(tmp))?;
+                cs.enforce(
+                    || "squaring constraint",
+                    |_| num.lc(Scalar::one()),
+                    |_| num.lc(Scalar::one()),
+                    |lc| lc + allocated.get_variable(),
+                );
+                Ok(allocated)
+            }
+            Elt::Allocated(a) => a.square(cs),
         }
     }
 }
@@ -376,18 +399,16 @@ where
 /// Compute l^5 and enforce constraint. If round_key is supplied, add it to result.
 fn quintic_s_box<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
     mut cs: CS,
-    e: &Elt<Scalar>,
+    l: &Elt<Scalar>,
     post_round_key: Option<Scalar>,
 ) -> Result<Elt<Scalar>, SynthesisError> {
-    let l = e.ensure_allocated(&mut cs.namespace(|| "S-box input"), true)?;
-
     // If round_key was supplied, add it after all exponentiation.
     let l2 = l.square(cs.namespace(|| "l^2"))?;
     let l4 = l2.square(cs.namespace(|| "l^4"))?;
     let l5 = mul_sum(
         cs.namespace(|| "(l4 * l) + rk)"),
         &l4,
-        &l,
+        l,
         None,
         post_round_key,
         true,
@@ -399,20 +420,18 @@ fn quintic_s_box<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
 /// Compute l^5 and enforce constraint. If round_key is supplied, add it to l first.
 fn quintic_s_box_pre_add<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
     mut cs: CS,
-    e: &Elt<Scalar>,
+    l: &Elt<Scalar>,
     pre_round_key: Option<Scalar>,
     post_round_key: Option<Scalar>,
 ) -> Result<Elt<Scalar>, SynthesisError> {
     if let (Some(pre_round_key), Some(post_round_key)) = (pre_round_key, post_round_key) {
-        let l = e.ensure_allocated(&mut cs.namespace(|| "S-box input"), true)?;
-
         // If round_key was supplied, add it to l before squaring.
-        let l2 = square_sum(cs.namespace(|| "(l+rk)^2"), pre_round_key, &l, true)?;
+        let l2 = square_sum(cs.namespace(|| "(l+rk)^2"), pre_round_key, l, true)?;
         let l4 = l2.square(cs.namespace(|| "l^4"))?;
         let l5 = mul_sum(
             cs.namespace(|| "l4 * (l + rk)"),
             &l4,
-            &l,
+            l,
             Some(pre_round_key),
             Some(post_round_key),
             true,
@@ -443,14 +462,14 @@ fn constant_quintic_s_box_pre_add_tag<CS: ConstraintSystem<Scalar>, Scalar: Prim
 pub fn square_sum<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
     mut cs: CS,
     to_add: Scalar,
-    num: &AllocatedNum<Scalar>,
+    elt: &Elt<Scalar>,
     enforce: bool,
 ) -> Result<AllocatedNum<Scalar>, SynthesisError>
 where
     CS: ConstraintSystem<Scalar>,
 {
     let res = AllocatedNum::alloc(cs.namespace(|| "squared sum"), || {
-        let mut tmp = num.get_value().ok_or(SynthesisError::AssignmentMissing)?;
+        let mut tmp = elt.val().ok_or(SynthesisError::AssignmentMissing)?;
         tmp.add_assign(&to_add);
         tmp = tmp.square();
 
@@ -460,8 +479,8 @@ where
     if enforce {
         cs.enforce(
             || "squared sum constraint",
-            |lc| lc + num.get_variable() + (to_add, CS::one()),
-            |lc| lc + num.get_variable() + (to_add, CS::one()),
+            |_| elt.lc() + (to_add, CS::one()),
+            |_| elt.lc() + (to_add, CS::one()),
             |lc| lc + res.get_variable(),
         );
     }
@@ -473,7 +492,7 @@ where
 pub fn mul_sum<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
     mut cs: CS,
     a: &AllocatedNum<Scalar>,
-    b: &AllocatedNum<Scalar>,
+    b: &Elt<Scalar>,
     pre_add: Option<Scalar>,
     post_add: Option<Scalar>,
     enforce: bool,
@@ -482,7 +501,7 @@ where
     CS: ConstraintSystem<Scalar>,
 {
     let res = AllocatedNum::alloc(cs.namespace(|| "mul_sum"), || {
-        let mut tmp = b.get_value().ok_or(SynthesisError::AssignmentMissing)?;
+        let mut tmp = b.val().ok_or(SynthesisError::AssignmentMissing)?;
         if let Some(x) = pre_add {
             tmp.add_assign(&x);
         }
@@ -501,14 +520,14 @@ where
             if let Some(pre) = pre_add {
                 cs.enforce(
                     || "mul sum constraint pre-post-add",
-                    |lc| lc + b.get_variable() + (pre, CS::one()),
+                    |_| b.lc() + (pre, CS::one()),
                     |lc| lc + a.get_variable(),
                     |lc| lc + res.get_variable() + (neg, CS::one()),
                 );
             } else {
                 cs.enforce(
                     || "mul sum constraint post-add",
-                    |lc| lc + b.get_variable(),
+                    |_| b.lc(),
                     |lc| lc + a.get_variable(),
                     |lc| lc + res.get_variable() + (neg, CS::one()),
                 );
@@ -517,14 +536,14 @@ where
             if let Some(pre) = pre_add {
                 cs.enforce(
                     || "mul sum constraint pre-add",
-                    |lc| lc + b.get_variable() + (pre, CS::one()),
+                    |_| b.lc() + (pre, CS::one()),
                     |lc| lc + a.get_variable(),
                     |lc| lc + res.get_variable(),
                 );
             } else {
                 cs.enforce(
                     || "mul sum constraint",
-                    |lc| lc + b.get_variable(),
+                    |_| b.lc(),
                     |lc| lc + a.get_variable(),
                     |lc| lc + res.get_variable(),
                 );
@@ -600,21 +619,21 @@ mod tests {
 
     #[test]
     fn test_poseidon_hash() {
-        test_poseidon_hash_aux::<typenum::U2>(Strength::Standard, 311, false);
-        test_poseidon_hash_aux::<typenum::U4>(Strength::Standard, 377, false);
-        test_poseidon_hash_aux::<typenum::U8>(Strength::Standard, 505, false);
-        test_poseidon_hash_aux::<typenum::U16>(Strength::Standard, 761, false);
-        test_poseidon_hash_aux::<typenum::U24>(Strength::Standard, 1009, false);
-        test_poseidon_hash_aux::<typenum::U36>(Strength::Standard, 1385, false);
+        test_poseidon_hash_aux::<typenum::U2>(Strength::Standard, 235, false);
+        test_poseidon_hash_aux::<typenum::U4>(Strength::Standard, 286, false);
+        test_poseidon_hash_aux::<typenum::U8>(Strength::Standard, 385, false);
+        test_poseidon_hash_aux::<typenum::U16>(Strength::Standard, 583, false);
+        test_poseidon_hash_aux::<typenum::U24>(Strength::Standard, 775, false);
+        test_poseidon_hash_aux::<typenum::U32>(Strength::Standard, 970, false);
+        test_poseidon_hash_aux::<typenum::U36>(Strength::Standard, 1066, false);
 
-        test_poseidon_hash_aux::<typenum::U2>(Strength::Strengthened, 367, false);
-        test_poseidon_hash_aux::<typenum::U4>(Strength::Strengthened, 433, false);
-        test_poseidon_hash_aux::<typenum::U8>(Strength::Strengthened, 565, false);
-        test_poseidon_hash_aux::<typenum::U16>(Strength::Strengthened, 821, false);
-        test_poseidon_hash_aux::<typenum::U24>(Strength::Strengthened, 1069, false);
-        test_poseidon_hash_aux::<typenum::U36>(Strength::Strengthened, 1445, false);
-
-        test_poseidon_hash_aux::<typenum::U15>(Strength::Standard, 730, true);
+        test_poseidon_hash_aux::<typenum::U2>(Strength::Strengthened, 277, false);
+        test_poseidon_hash_aux::<typenum::U4>(Strength::Strengthened, 328, false);
+        test_poseidon_hash_aux::<typenum::U8>(Strength::Strengthened, 430, false);
+        test_poseidon_hash_aux::<typenum::U16>(Strength::Strengthened, 628, false);
+        test_poseidon_hash_aux::<typenum::U24>(Strength::Strengthened, 820, false);
+        test_poseidon_hash_aux::<typenum::U32>(Strength::Strengthened, 1015, false);
+        test_poseidon_hash_aux::<typenum::U36>(Strength::Strengthened, 1111, false);
     }
 
     fn test_poseidon_hash_aux<A>(
@@ -648,15 +667,18 @@ mod tests {
             } else {
                 constants_x.clone()
             };
+
             let expected_constraints_calculated = {
-                let arity_tag_constraints = 0;
                 let width = 1 + arity;
-                // The '- 1' term represents the first s-box for the arity tag, which is a constant and needs no constraint.
-                let s_boxes = (width * constants.full_rounds) + constants.partial_rounds - 1;
-                let s_box_constraints = 3 * s_boxes;
-                let mds_constraints =
-                    (width * constants.full_rounds) + constants.partial_rounds - arity;
-                arity_tag_constraints + s_box_constraints + mds_constraints
+                let s_box_cost = 3;
+                let final_allocation = 1;
+                let savings_from_domain_tag_sbox = s_box_cost; // The very first s-box output is constant.
+
+                let base_expected_constraints = (width * s_box_cost * constants.full_rounds)
+                    + (s_box_cost * constants.partial_rounds);
+                let adjustment = savings_from_domain_tag_sbox - final_allocation;
+
+                base_expected_constraints - adjustment
             };
             let mut i = 0;
 
@@ -712,7 +734,9 @@ mod tests {
 
         let mut cs1 = cs.namespace(|| "square_sum");
         let two = fr(2);
-        let three = AllocatedNum::alloc(cs1.namespace(|| "three"), || Ok(Fr::from(3))).unwrap();
+        let three = Elt::Allocated(
+            AllocatedNum::alloc(cs1.namespace(|| "three"), || Ok(Fr::from(3))).unwrap(),
+        );
         let res = square_sum(cs1, two, &three, true).unwrap();
 
         let twenty_five = Fr::from(25);
