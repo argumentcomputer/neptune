@@ -53,6 +53,10 @@ mod preprocessing;
 mod round_constants;
 mod round_numbers;
 
+/// Sponge
+pub mod sponge;
+pub mod sponge_circuit;
+
 /// Hash types and domain separation tags.
 pub mod hash_type;
 

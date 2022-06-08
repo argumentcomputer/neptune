@@ -41,12 +41,8 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
             // 2^64
             HashType::VariableLength => pow2::<F>(64),
             // length * 2^64
-            // length must be greater than 0 and <= arity
-            HashType::ConstantLength(length) => {
-                assert!(*length as usize <= A::to_usize());
-                assert!(*length as usize > 0);
-                x_pow2::<F>(*length as u64, 64)
-            }
+            // length of 0 denotes a duplex sponge
+            HashType::ConstantLength(length) => x_pow2::<F>(*length as u64, 64),
             // 2^32 or (2^32 + 2^32 = 2^33) with strength tag
             HashType::Encryption => pow2::<F>(32),
             // identifier * 2^40

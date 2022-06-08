@@ -13,29 +13,33 @@ use std::marker::PhantomData;
 
 /// Similar to `num::Num`, we use `Elt` to accumulate both values and linear combinations, then eventually
 /// extract into a `num::AllocatedNum`, enforcing that the linear combination corresponds to the result.
-/// In this way, all intermediate calculations are accounted for, with the restriction that we can only
-/// accumulate linear (not polynomial) constraints. The set of operations provided here ensure this invariant is maintained.
 #[derive(Clone)]
 pub enum Elt<Scalar: PrimeField> {
     Allocated(AllocatedNum<Scalar>),
     Num(num::Num<Scalar>),
 }
 
+impl<Scalar: PrimeField> From<AllocatedNum<Scalar>> for Elt<Scalar> {
+    fn from(allocated: AllocatedNum<Scalar>) -> Self {
+        Self::Allocated(allocated)
+    }
+}
+
 impl<Scalar: PrimeField> Elt<Scalar> {
-    fn is_allocated(&self) -> bool {
+    pub fn is_allocated(&self) -> bool {
         matches!(self, Self::Allocated(_))
     }
 
-    fn is_num(&self) -> bool {
+    pub fn is_num(&self) -> bool {
         matches!(self, Self::Num(_))
     }
 
-    fn num_from_fr<CS: ConstraintSystem<Scalar>>(fr: Scalar) -> Self {
+    pub fn num_from_fr<CS: ConstraintSystem<Scalar>>(fr: Scalar) -> Self {
         let num = num::Num::<Scalar>::zero();
         Self::Num(num.add_bool_with_coeff(CS::one(), &Boolean::Constant(true), fr))
     }
 
-    fn ensure_allocated<CS: ConstraintSystem<Scalar>>(
+    pub fn ensure_allocated<CS: ConstraintSystem<Scalar>>(
         &self,
         cs: &mut CS,
         enforce: bool,
@@ -60,14 +64,14 @@ impl<Scalar: PrimeField> Elt<Scalar> {
         }
     }
 
-    fn val(&self) -> Option<Scalar> {
+    pub fn val(&self) -> Option<Scalar> {
         match self {
             Self::Allocated(v) => v.get_value(),
             Self::Num(num) => num.get_value(),
         }
     }
 
-    fn lc(&self) -> LinearCombination<Scalar> {
+    pub fn lc(&self) -> LinearCombination<Scalar> {
         match self {
             Self::Num(num) => num.lc(Scalar::one()),
             Self::Allocated(v) => LinearCombination::<Scalar>::zero() + v.get_variable(),
@@ -76,18 +80,16 @@ impl<Scalar: PrimeField> Elt<Scalar> {
 
     /// Add two Nums and return a Num tracking the calculation. It is forbidden to invoke on an Allocated because the intended computation
     /// does not include that path.
-    fn add<CS: ConstraintSystem<Scalar>>(
-        self,
-        other: Elt<Scalar>,
-    ) -> Result<Elt<Scalar>, SynthesisError> {
+    #[allow(clippy::should_implement_trait)]
+    pub fn add(self, other: Elt<Scalar>) -> Result<Elt<Scalar>, SynthesisError> {
         match (self, other) {
             (Elt::Num(a), Elt::Num(b)) => Ok(Elt::Num(a.add(&b))),
-            _ => panic!("only two numbers may be added"),
+            (a, b) => Ok(Elt::Num(a.num().add(&b.num()))),
         }
     }
 
     /// Scale
-    fn scale<CS: ConstraintSystem<Scalar>>(
+    pub fn scale<CS: ConstraintSystem<Scalar>>(
         self,
         scalar: Scalar,
     ) -> Result<Elt<Scalar>, SynthesisError> {
@@ -98,7 +100,7 @@ impl<Scalar: PrimeField> Elt<Scalar> {
     }
 
     /// Square
-    fn square<CS: ConstraintSystem<Scalar>>(
+    pub fn square<CS: ConstraintSystem<Scalar>>(
         &self,
         mut cs: CS,
     ) -> Result<AllocatedNum<Scalar>, SynthesisError> {
@@ -120,7 +122,7 @@ impl<Scalar: PrimeField> Elt<Scalar> {
         }
     }
 
-    fn num(&self) -> num::Num<Scalar> {
+    pub fn num(&self) -> num::Num<Scalar> {
         match self {
             Elt::Num(num) => num.clone(),
             Elt::Allocated(a) => a.clone().into(),
@@ -136,8 +138,8 @@ where
 {
     constants_offset: usize,
     width: usize,
-    elements: Vec<Elt<Scalar>>,
-    pos: usize,
+    pub(crate) elements: Vec<Elt<Scalar>>,
+    pub(crate) pos: usize,
     current_round: usize,
     constants: &'a PoseidonConstants<Scalar, A>,
     _w: PhantomData<A>,
@@ -150,21 +152,29 @@ where
     A: Arity<Scalar>,
 {
     /// Create a new Poseidon hasher for `preimage`.
-    fn new(elements: Vec<Elt<Scalar>>, constants: &'a PoseidonConstants<Scalar, A>) -> Self {
+    pub fn new(elements: Vec<Elt<Scalar>>, constants: &'a PoseidonConstants<Scalar, A>) -> Self {
         let width = constants.width();
 
         PoseidonCircuit2 {
             constants_offset: 0,
             width,
             elements,
-            pos: width,
+            pos: 1,
             current_round: 0,
             constants,
             _w: PhantomData::<A>,
         }
     }
 
-    fn hash<CS: ConstraintSystem<Scalar>>(
+    pub fn new_empty<CS: ConstraintSystem<Scalar>>(
+        constants: &'a PoseidonConstants<Scalar, A>,
+    ) -> Self {
+        let elements = Self::initial_elements::<CS>();
+        dbg!(elements.len());
+        Self::new(elements, constants)
+    }
+
+    pub fn hash<CS: ConstraintSystem<Scalar>>(
         &mut self,
         cs: &mut CS,
     ) -> Result<Elt<Scalar>, SynthesisError> {
@@ -192,8 +202,13 @@ where
         self.full_round(cs.namespace(|| "terminal full round"), false, true)?;
 
         let elt = self.elements[1].clone();
+        self.reset_offsets();
 
         Ok(elt)
+    }
+
+    pub fn apply_padding(&mut self) {
+        // todo!()
     }
 
     fn hash_to_allocated<CS: ConstraintSystem<Scalar>>(
@@ -367,7 +382,7 @@ where
 
         for j in 1..self.width {
             result.push(
-                self.elements[j].clone().add::<CS>(
+                self.elements[j].clone().add(
                     self.elements[0]
                         .clone() // First row is dense.
                         .scale::<CS>(matrix.v_rest[j - 1])?, // Except for first row/column, diagonals are one.
@@ -378,6 +393,22 @@ where
         self.elements = result;
 
         Ok(())
+    }
+
+    fn initial_elements<CS: ConstraintSystem<Scalar>>() -> Vec<Elt<Scalar>> {
+        std::iter::repeat(Elt::num_from_fr::<CS>(Scalar::zero()))
+            .take(A::to_usize() + 1)
+            .collect()
+    }
+    pub fn reset<CS: ConstraintSystem<Scalar>>(&mut self) {
+        self.reset_offsets();
+        self.elements = Self::initial_elements::<CS>();
+    }
+
+    pub fn reset_offsets(&mut self) {
+        self.constants_offset = 0;
+        self.current_round = 0;
+        self.pos = 1;
     }
 
     fn debug(&self) {
@@ -647,7 +678,7 @@ fn scalar_product_with_add<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     to_add: Scalar,
 ) -> Result<Elt<Scalar>, SynthesisError> {
     let tmp = scalar_product::<Scalar, CS>(elts, scalars)?;
-    let tmp2 = tmp.add::<CS>(Elt::<Scalar>::num_from_fr::<CS>(to_add))?;
+    let tmp2 = tmp.add(Elt::<Scalar>::num_from_fr::<CS>(to_add))?;
 
     Ok(tmp2)
 }
@@ -659,7 +690,7 @@ fn scalar_product<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     elts.iter()
         .zip(scalars)
         .try_fold(Elt::Num(num::Num::zero()), |acc, (elt, &scalar)| {
-            acc.add::<CS>(elt.clone().scale::<CS>(scalar)?)
+            acc.add(elt.clone().scale::<CS>(scalar)?)
         })
 }
 
@@ -692,6 +723,8 @@ mod tests {
         test_poseidon_hash_aux::<typenum::U24>(Strength::Strengthened, 819, false);
         test_poseidon_hash_aux::<typenum::U32>(Strength::Strengthened, 1014, false);
         test_poseidon_hash_aux::<typenum::U36>(Strength::Strengthened, 1110, false);
+
+        test_poseidon_hash_aux::<typenum::U15>(Strength::Standard, 558, true);
     }
 
     fn test_poseidon_hash_aux<A>(

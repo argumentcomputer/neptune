@@ -1,0 +1,529 @@
+use crate::hash_type::HashType;
+use crate::poseidon::{Arity, Poseidon, PoseidonConstants};
+use crate::{Error, Strength};
+use ff::PrimeField;
+use std::collections::VecDeque;
+
+/*
+
+A sponge can be instantiated in either simplex or duplex mode. Once instantiated, a sponge's mode never changes.
+
+At any time, a sponge is operating in one of two directions: squeezing or absorbing. All sponges are initialized in the
+absorbing direction. The number of absorbed field elements is incremented each time an element is absorbed and
+decremented each time an element is squeezed. The count of currently absorbed elements can never decrease below zero, so
+only as many elements as have been absorbed can be squeezed at any time.
+
+In simplex mode, absorbing and squeezing cannot be interleaved. First all elements are absorbed, then all needed
+elements are squeezed. At most the number of elements which were absorbed can be squeezed. Elements must be absorbed in
+chunks of R (rate). After every R chunks have been absorbed, the state is permuted. After the final element has been
+absorbed, any needed padding is added, and the final permutation (or two -- if required by padding) is performed. Then
+groups of R field elements are squeezed, and the state is permuted after each group of R elements has been squeezed.
+After squeezing is complete, a simplex sponge is exhausted, and no further absorption is possible.
+
+In duplex mode, absorbing and squeezing can be interleaved. The state is permuted after every R elements have been
+absorbed. This makes R elements available to be squeezed. If elements remain to be squeezed when the state is permuted,
+remaining unsqueezed elements are queued. Otherwise they would be lost when permuting.
+
+*/
+
+pub enum SpongeMode {
+    SimplexAbsorb,
+    SimplexSqueeze,
+    DuplexAbsorb,
+    DuplexSqueeze,
+}
+
+#[derive(Clone, Copy)]
+pub enum Mode {
+    Simplex,
+    Duplex,
+}
+
+#[derive(Clone, Copy)]
+pub enum Direction {
+    Absorbing,
+    Squeezing,
+}
+
+pub struct Sponge<'a, F: PrimeField, A: Arity<F>> {
+    absorbed: usize,
+    squeezed: usize,
+    pub state: Poseidon<'a, F, A>,
+    mode: Mode,
+    direction: Direction,
+    squeeze_pos: usize,
+    queue: VecDeque<F>,
+}
+
+pub trait SpongeTrait<'a, F: PrimeField, A: Arity<F>> {
+    type Acc;
+    type Elt;
+
+    fn new_with_constants(constants: &'a PoseidonConstants<F, A>, mode: Mode) -> Self;
+
+    fn simplex_constants(size: usize) -> PoseidonConstants<F, A> {
+        PoseidonConstants::new_constant_length(size)
+    }
+
+    fn duplex_constants() -> PoseidonConstants<F, A> {
+        PoseidonConstants::new_constant_length(0)
+    }
+
+    fn mode(&self) -> Mode;
+    fn direction(&self) -> Direction;
+    fn set_direction(&mut self, direction: Direction);
+    fn absorbed(&self) -> usize;
+    fn set_absorbed(&mut self, absorbed: usize);
+    fn squeezed(&self) -> usize;
+    fn set_squeezed(&mut self, squeezed: usize);
+    fn squeeze_pos(&self) -> usize;
+    fn set_squeeze_pos(&mut self, squeeze_pos: usize);
+    fn absorb_pos(&self) -> usize;
+    fn set_absorb_pos(&mut self, pos: usize);
+
+    fn element(&self, index: usize) -> Self::Elt;
+    fn set_element(&mut self, index: usize, elt: Self::Elt);
+
+    fn is_simplex(&self) -> bool {
+        match self.mode() {
+            Mode::Simplex => true,
+            Mode::Duplex => false,
+        }
+    }
+    fn is_duplex(&self) -> bool {
+        match self.mode() {
+            Mode::Duplex => true,
+            Mode::Simplex => false,
+        }
+    }
+
+    fn is_absorbing(&self) -> bool {
+        match self.direction() {
+            Direction::Absorbing => true,
+            Direction::Squeezing => false,
+        }
+    }
+
+    fn is_squeezing(&self) -> bool {
+        match self.direction() {
+            Direction::Squeezing => true,
+            Direction::Absorbing => false,
+        }
+    }
+
+    fn available(&self) -> usize {
+        self.absorbed() - self.squeezed()
+    }
+
+    fn is_immediately_squeezble(&self) -> bool {
+        self.squeeze_pos() < self.absorb_pos()
+    }
+
+    fn rate(&self) -> usize;
+
+    fn capacity(&self) -> usize;
+
+    fn size(&self) -> usize;
+
+    fn total_size(&self) -> usize {
+        assert!(self.is_simplex());
+        match self.constants().hash_type {
+            HashType::ConstantLength(l) => l,
+            HashType::VariableLength => unimplemented!(),
+            _ => A::to_usize(),
+        }
+    }
+
+    fn constants(&self) -> &PoseidonConstants<F, A>;
+
+    fn can_squeeze_without_permuting(&self) -> bool {
+        self.squeeze_pos() < self.size()
+    }
+
+    fn is_exhausted(&self) -> bool {
+        // Exhaustion only applies to simplex.
+        self.is_simplex() && self.squeezed() >= self.total_size()
+    }
+
+    fn ensure_absorbing(&mut self);
+
+    fn permute(&mut self, acc: &mut Self::Acc) {
+        // NOTE: this will apply any needed padding in the partially-absorbed case.
+        // However, padding should only be applied when no more elements will be absorbed.
+        // A duplex sponge should never apply padding implicitly, and a simplex sponge should only do so when it is
+        // about to apply its final permutation.
+        let unpermuted = self.absorb_pos() - self.capacity();
+        let needs_padding = self.is_absorbing() && unpermuted < self.rate();
+
+        if needs_padding {
+            match self.mode() {
+                Mode::Duplex => {
+                    panic!("Duplex sponge must permute exactly `rate` absorbed elements.")
+                }
+                Mode::Simplex => {
+                    let final_permutation = self.squeezed() % self.total_size() <= self.rate();
+                    assert!(
+                        final_permutation,
+                        "Simplex sponge may only pad before final permutation"
+                    );
+                    self.pad();
+                }
+            }
+        }
+
+        self.permute_state(acc);
+        self.set_absorb_pos(self.capacity());
+        self.set_squeeze_pos(self.capacity());
+    }
+
+    fn pad(&mut self);
+
+    fn permute_state(&mut self, acc: &mut Self::Acc);
+
+    fn ensure_squeezing(&mut self, acc: &mut Self::Acc) {
+        match self.direction() {
+            Direction::Squeezing => (),
+            Direction::Absorbing => {
+                match self.mode() {
+                    Mode::Simplex => {
+                        let done_squeezing_previous = self.squeeze_pos() >= self.size();
+                        let partially_absorbed = self.absorb_pos() > self.capacity();
+
+                        if done_squeezing_previous || partially_absorbed {
+                            self.permute(acc);
+                        }
+                    }
+                    Mode::Duplex => (),
+                }
+                self.set_direction(Direction::Squeezing);
+            }
+        }
+    }
+
+    fn squeeze_aux(&mut self) -> Self::Elt;
+
+    fn absorb_aux(&mut self, elt: &Self::Elt) -> Self::Elt;
+
+    /// Absorb one field element or panic if duplex sponge is full.
+    fn absorb(&mut self, elt: &Self::Elt, acc: &mut Self::Acc) {
+        self.ensure_absorbing();
+
+        // Add input element to state and advance absorption position.
+        let tmp = self.absorb_aux(elt);
+        self.set_element(self.absorb_pos(), tmp);
+        self.set_absorb_pos(self.absorb_pos() + 1);
+
+        // When position equals size, we need to permute.
+        if self.absorb_pos() >= self.size() {
+            if self.is_duplex() {
+                // When we permute, existing unsqueezed elements will be lost. Enqueue them.
+                while self.is_immediately_squeezble() {
+                    let elt = self.squeeze_aux();
+                    self.enqueue(elt);
+                }
+            }
+
+            self.permute(acc);
+        }
+
+        self.set_absorbed(self.absorbed() + 1);
+    }
+
+    fn squeeze(&mut self, acc: &mut Self::Acc) -> Option<Self::Elt> {
+        self.ensure_squeezing(acc);
+
+        if self.available() == 0 {
+            // What has not yet been absorbed cannot be squeezed.
+            return None;
+        };
+
+        self.set_squeezed(self.squeezed() + 1);
+
+        if let Some(queued) = self.dequeue() {
+            return Some(queued);
+        }
+
+        if !self.can_squeeze_without_permuting() && self.is_simplex() {
+            self.permute(acc);
+        }
+
+        let squeezed = self.squeeze_aux();
+
+        Some(squeezed)
+    }
+
+    fn enqueue(&mut self, elt: Self::Elt);
+    fn dequeue(&mut self) -> Option<Self::Elt>;
+
+    fn absorb_elements(&mut self, elts: &[Self::Elt], acc: &mut Self::Acc) {
+        for elt in elts {
+            self.absorb(elt, acc);
+        }
+    }
+
+    fn squeeze_elements(&mut self, count: usize, acc: &mut Self::Acc) -> Vec<Self::Elt>;
+}
+
+impl<'a, F: PrimeField, A: Arity<F>> SpongeTrait<'a, F, A> for Sponge<'a, F, A> {
+    type Acc = ();
+    type Elt = F;
+
+    fn new_with_constants(constants: &'a PoseidonConstants<F, A>, mode: Mode) -> Self {
+        let poseidon = Poseidon::new(constants);
+
+        Self {
+            mode,
+            direction: Direction::Absorbing,
+            state: poseidon,
+            absorbed: 0,
+            squeezed: 0,
+            squeeze_pos: 1,
+            queue: VecDeque::with_capacity(A::to_usize()),
+        }
+    }
+
+    fn mode(&self) -> Mode {
+        self.mode
+    }
+    fn direction(&self) -> Direction {
+        self.direction
+    }
+    fn set_direction(&mut self, direction: Direction) {
+        self.direction = direction;
+    }
+    fn absorbed(&self) -> usize {
+        self.absorbed
+    }
+    fn set_absorbed(&mut self, absorbed: usize) {
+        self.absorbed = absorbed;
+    }
+    fn squeezed(&self) -> usize {
+        self.squeezed
+    }
+    fn set_squeezed(&mut self, squeezed: usize) {
+        self.squeezed = squeezed;
+    }
+    fn squeeze_pos(&self) -> usize {
+        self.squeeze_pos
+    }
+    fn set_squeeze_pos(&mut self, squeeze_pos: usize) {
+        self.squeeze_pos = squeeze_pos;
+    }
+    fn absorb_pos(&self) -> usize {
+        self.state.pos
+    }
+    fn set_absorb_pos(&mut self, pos: usize) {
+        self.state.pos = pos;
+    }
+
+    fn element(&self, index: usize) -> Self::Elt {
+        self.state.elements[index]
+    }
+    fn set_element(&mut self, index: usize, elt: Self::Elt) {
+        self.state.elements[index] = elt;
+    }
+
+    fn rate(&self) -> usize {
+        A::to_usize()
+    }
+
+    fn capacity(&self) -> usize {
+        1
+    }
+
+    fn size(&self) -> usize {
+        self.state.constants.width()
+    }
+
+    fn constants(&self) -> &PoseidonConstants<F, A> {
+        self.state.constants
+    }
+
+    fn ensure_absorbing(&mut self) {
+        match self.direction() {
+            Direction::Absorbing => (),
+            Direction::Squeezing => {
+                if self.is_simplex() {
+                    panic!("Simplex sponge cannot absorb after squeezing.");
+                } else {
+                    self.set_direction(Direction::Absorbing);
+                }
+            }
+        }
+    }
+
+    fn pad(&mut self) {
+        self.state.apply_padding();
+    }
+
+    fn permute_state(&mut self, _acc: &mut Self::Acc) {
+        self.state.hash();
+    }
+
+    fn enqueue(&mut self, elt: Self::Elt) {
+        self.queue.push_back(elt);
+    }
+    fn dequeue(&mut self) -> Option<Self::Elt> {
+        self.queue.pop_front()
+    }
+
+    fn squeeze_aux(&mut self) -> Self::Elt {
+        let squeezed = self.element(self.squeeze_pos());
+        self.set_squeeze_pos(self.squeeze_pos() + 1);
+
+        squeezed
+    }
+
+    fn absorb_aux(&mut self, elt: &Self::Elt) -> Self::Elt {
+        self.element(self.absorb_pos()) + elt
+    }
+
+    fn absorb_elements(&mut self, elts: &[F], acc: &mut Self::Acc) {
+        for elt in elts {
+            self.absorb(elt, acc);
+        }
+    }
+
+    fn squeeze_elements(&mut self, count: usize, _acc: &mut ()) -> Vec<Self::Elt> {
+        self.take(count).collect()
+    }
+}
+
+impl<F: PrimeField, A: Arity<F>> Iterator for Sponge<'_, F, A> {
+    type Item = F;
+
+    fn next(&mut self) -> Option<F> {
+        self.squeeze(&mut ())
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self.mode {
+            Mode::Duplex => (self.available(), None),
+            Mode::Simplex => (self.available(), Some(self.available())),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use blstrs::Scalar as Fr;
+    use generic_array::typenum;
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
+    use std::collections::HashSet;
+
+    #[test]
+    fn test_simplex() {
+        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
+
+        // Exercise duplex sponges with eventual size less, equal to, and greater to rate.
+        for size in 2..10 {
+            test_simplex_aux::<Fr, typenum::U4, _>(&mut rng, size);
+        }
+    }
+
+    fn test_simplex_aux<F: PrimeField, A: Arity<F>, R: Rng>(rng: &mut R, n: usize) {
+        let c = Sponge::<F, A>::simplex_constants(n);
+        let mut sponge = Sponge::new_with_constants(&c, Mode::Simplex);
+
+        let mut elements: Vec<F> = Vec::with_capacity(n);
+        for _ in 0..n {
+            elements.push(F::random(&mut *rng));
+        }
+
+        let acc = &mut ();
+
+        // Reminder: a duplex sponge should encode its length as a prefix.
+        sponge.absorb_elements(&elements, acc);
+
+        let result = sponge.squeeze_elements(n, acc);
+
+        // Simple sanity check that are all non-zero and distinct.
+        for (i, elt) in result.iter().enumerate() {
+            assert!(*elt != F::zero());
+            // This is expensive (n^2), but it's hard to put field element into a set since we can't hash or compare (except equality).
+            for (j, elt2) in result.iter().enumerate() {
+                if i != j {
+                    assert!(elt != elt2);
+                }
+            }
+        }
+
+        assert_eq!(n, elements.len());
+        assert_eq!(n, result.len());
+    }
+
+    #[test]
+    fn test_duplex_consistency() {
+        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
+
+        // Exercise duplex sponges with eventual size less, equal to, and greater to rate.
+        for size in 4..10 {
+            test_duplex_consistency_aux::<Fr, typenum::U8, _>(&mut rng, size, 20);
+        }
+
+        // Exercise duplex sponges with eventual size less, equal to, and greater than multiples of rate.
+        for _ in 0..10 {
+            let size = rng.gen_range(15..25);
+            test_duplex_consistency_aux::<Fr, typenum::U4, _>(&mut rng, size, 100);
+        }
+
+        // Use very small rate to ensure exercising edge cases.
+        for _ in 0..10 {
+            let size = rng.gen_range(15..25);
+            test_duplex_consistency_aux::<Fr, typenum::U2, _>(&mut rng, size, 100);
+        }
+    }
+
+    fn test_duplex_consistency_aux<F: PrimeField, A: Arity<F>, R: Rng>(
+        rng: &mut R,
+        n: usize,
+        trials: usize,
+    ) {
+        let mut output = None;
+        let mut signatures = HashSet::new();
+
+        for _ in 0..trials {
+            let (o, sig) = test_duplex_consistency_inner::<F, A, R>(rng, n);
+            signatures.insert(sig);
+            if let Some(output) = output {
+                assert_eq!(output, o);
+            };
+            output = Some(o);
+        }
+        // Make sure many different paths were taken.
+        assert!(trials as f64 > 0.9 * signatures.len() as f64);
+    }
+
+    fn test_duplex_consistency_inner<F: PrimeField, A: Arity<F>, R: Rng>(
+        rng: &mut R,
+        n: usize,
+    ) -> (Vec<F>, Vec<bool>) {
+        let c = Sponge::<F, A>::duplex_constants();
+        let mut sponge = Sponge::new_with_constants(&c, Mode::Duplex);
+        let acc = &mut ();
+
+        // Reminder: a duplex sponge should encode its length as a prefix.
+        sponge.absorb(&F::from(n as u64), acc);
+
+        let mut output = Vec::with_capacity(n);
+        let mut signature = Vec::with_capacity(n);
+        while output.len() < n {
+            let try_to_squeeze: bool = rng.gen();
+            signature.push(try_to_squeeze);
+
+            if try_to_squeeze {
+                if let Some(squeezed) = sponge.squeeze(acc) {
+                    output.push(squeezed);
+                }
+            } else {
+                sponge.absorb(&F::from(sponge.absorbed as u64), acc);
+            }
+        }
+
+        assert_eq!(n, output.len());
+
+        (output, signature)
+    }
+}
