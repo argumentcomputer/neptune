@@ -5,8 +5,7 @@ use crate::matrix::Matrix;
 use crate::mds::SparseMatrix;
 use crate::poseidon::{Arity, PoseidonConstants};
 use bellperson::gadgets::boolean::Boolean;
-use bellperson::gadgets::num;
-use bellperson::gadgets::num::AllocatedNum;
+use bellperson::gadgets::num::{self, AllocatedNum};
 use bellperson::{ConstraintSystem, LinearCombination, SynthesisError};
 use ff::{Field, PrimeField};
 use std::marker::PhantomData;
@@ -16,7 +15,7 @@ use std::marker::PhantomData;
 /// In this way, all intermediate calculations are accounted for, with the restriction that we can only
 /// accumulate linear (not polynomial) constraints. The set of operations provided here ensure this invariant is maintained.
 #[derive(Clone)]
-enum Elt<Scalar: PrimeField> {
+pub enum Elt<Scalar: PrimeField> {
     Allocated(AllocatedNum<Scalar>),
     Num(num::Num<Scalar>),
 }
@@ -96,10 +95,42 @@ impl<Scalar: PrimeField> Elt<Scalar> {
             Elt::Allocated(a) => Elt::Num(a.into()).scale::<CS>(scalar),
         }
     }
+
+    /// Square
+    fn square<CS: ConstraintSystem<Scalar>>(
+        &self,
+        mut cs: CS,
+    ) -> Result<AllocatedNum<Scalar>, SynthesisError> {
+        match self {
+            Elt::Num(num) => {
+                let mut tmp = num.get_value().ok_or(SynthesisError::AssignmentMissing)?;
+                tmp = tmp * tmp;
+                let allocated =
+                    AllocatedNum::alloc(&mut cs.namespace(|| "squared num"), || Ok(tmp))?;
+                cs.enforce(
+                    || "squaring constraint",
+                    |_| num.lc(Scalar::one()),
+                    |_| num.lc(Scalar::one()),
+                    |lc| lc + allocated.get_variable(),
+                );
+                Ok(allocated)
+            }
+            Elt::Allocated(a) => a.square(cs),
+        }
+    }
+
+    fn num(&self) -> num::Num<Scalar> {
+        let num = match self {
+            Elt::Num(num) => num.clone(),
+            Elt::Allocated(a) => a.clone().into(),
+        };
+
+        num
+    }
 }
 
 /// Circuit for Poseidon hash.
-pub struct PoseidonCircuit<'a, Scalar, A>
+pub struct PoseidonCircuit2<'a, Scalar, A>
 where
     Scalar: PrimeField,
     A: Arity<Scalar>,
@@ -113,8 +144,8 @@ where
     _w: PhantomData<A>,
 }
 
-/// PoseidonCircuit implementation.
-impl<'a, Scalar, A> PoseidonCircuit<'a, Scalar, A>
+/// PoseidonCircuit2 implementation.
+impl<'a, Scalar, A> PoseidonCircuit2<'a, Scalar, A>
 where
     Scalar: PrimeField,
     A: Arity<Scalar>,
@@ -123,7 +154,7 @@ where
     fn new(elements: Vec<Elt<Scalar>>, constants: &'a PoseidonConstants<Scalar, A>) -> Self {
         let width = constants.width();
 
-        PoseidonCircuit {
+        PoseidonCircuit2 {
             constants_offset: 0,
             width,
             elements,
@@ -136,8 +167,8 @@ where
 
     fn hash<CS: ConstraintSystem<Scalar>>(
         &mut self,
-        mut cs: CS,
-    ) -> Result<AllocatedNum<Scalar>, SynthesisError> {
+        cs: &mut CS,
+    ) -> Result<Elt<Scalar>, SynthesisError> {
         self.full_round(cs.namespace(|| "first round"), true, false)?;
 
         for i in 1..self.constants.full_rounds / 2 {
@@ -161,7 +192,24 @@ where
         }
         self.full_round(cs.namespace(|| "terminal full round"), false, true)?;
 
-        self.elements[1].ensure_allocated(&mut cs.namespace(|| "hash result"), true)
+        let elt = self.elements[1].clone();
+
+        Ok(elt)
+    }
+
+    fn hash_to_allocated<CS: ConstraintSystem<Scalar>>(
+        &mut self,
+        mut cs: CS,
+    ) -> Result<AllocatedNum<Scalar>, SynthesisError> {
+        let elt = self.hash(&mut cs).unwrap();
+        elt.ensure_allocated(&mut cs, true)
+    }
+
+    fn hash_to_num<CS: ConstraintSystem<Scalar>>(
+        &mut self,
+        mut cs: CS,
+    ) -> Result<num::Num<Scalar>, SynthesisError> {
+        self.hash(&mut cs).map(|elt| elt.num())
     }
 
     fn full_round<CS: ConstraintSystem<Scalar>>(
@@ -340,7 +388,7 @@ where
 }
 
 /// Create circuit for Poseidon hash.
-pub fn poseidon_hash<CS, Scalar, A>(
+pub fn poseidon_hash_allocated<CS, Scalar, A>(
     mut cs: CS,
     preimage: Vec<AllocatedNum<Scalar>>,
     constants: &PoseidonConstants<Scalar, A>,
@@ -368,26 +416,58 @@ where
         }
     }
 
-    let mut p = PoseidonCircuit::new(elements, constants);
+    let mut p = PoseidonCircuit2::new(elements, constants);
 
-    p.hash(cs)
+    p.hash_to_allocated(cs)
+}
+
+/// Create circuit for Poseidon hash.
+pub fn poseidon_hash_num<CS, Scalar, A>(
+    mut cs: CS,
+    preimage: Vec<AllocatedNum<Scalar>>,
+    constants: &PoseidonConstants<Scalar, A>,
+) -> Result<num::Num<Scalar>, SynthesisError>
+where
+    CS: ConstraintSystem<Scalar>,
+    Scalar: PrimeField,
+    A: Arity<Scalar>,
+{
+    let arity = A::to_usize();
+    let tag_element = Elt::num_from_fr::<CS>(constants.domain_tag);
+    let mut elements = Vec::with_capacity(arity + 1);
+    elements.push(tag_element);
+    elements.extend(preimage.into_iter().map(Elt::Allocated));
+
+    if let HashType::ConstantLength(length) = constants.hash_type {
+        assert!(length <= arity, "illegal length: constants are malformed");
+        // Add zero-padding.
+        for i in 0..(arity - length) {
+            let allocated = AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
+                Ok(Scalar::zero())
+            })?;
+            let elt = Elt::Allocated(allocated);
+            elements.push(elt);
+        }
+    }
+
+    let mut p = PoseidonCircuit2::new(elements, constants);
+
+    p.hash_to_num(cs)
 }
 
 /// Compute l^5 and enforce constraint. If round_key is supplied, add it to result.
 fn quintic_s_box<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
     mut cs: CS,
-    e: &Elt<Scalar>,
+    l: &Elt<Scalar>,
     post_round_key: Option<Scalar>,
 ) -> Result<Elt<Scalar>, SynthesisError> {
-    let l = e.ensure_allocated(&mut cs.namespace(|| "S-box input"), true)?;
-
     // If round_key was supplied, add it after all exponentiation.
     let l2 = l.square(cs.namespace(|| "l^2"))?;
     let l4 = l2.square(cs.namespace(|| "l^4"))?;
     let l5 = mul_sum(
         cs.namespace(|| "(l4 * l) + rk)"),
         &l4,
-        &l,
+        l,
         None,
         post_round_key,
         true,
@@ -399,20 +479,18 @@ fn quintic_s_box<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
 /// Compute l^5 and enforce constraint. If round_key is supplied, add it to l first.
 fn quintic_s_box_pre_add<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
     mut cs: CS,
-    e: &Elt<Scalar>,
+    l: &Elt<Scalar>,
     pre_round_key: Option<Scalar>,
     post_round_key: Option<Scalar>,
 ) -> Result<Elt<Scalar>, SynthesisError> {
     if let (Some(pre_round_key), Some(post_round_key)) = (pre_round_key, post_round_key) {
-        let l = e.ensure_allocated(&mut cs.namespace(|| "S-box input"), true)?;
-
         // If round_key was supplied, add it to l before squaring.
-        let l2 = square_sum(cs.namespace(|| "(l+rk)^2"), pre_round_key, &l, true)?;
+        let l2 = square_sum(cs.namespace(|| "(l+rk)^2"), pre_round_key, l, true)?;
         let l4 = l2.square(cs.namespace(|| "l^4"))?;
         let l5 = mul_sum(
             cs.namespace(|| "l4 * (l + rk)"),
             &l4,
-            &l,
+            l,
             Some(pre_round_key),
             Some(post_round_key),
             true,
@@ -443,14 +521,14 @@ fn constant_quintic_s_box_pre_add_tag<CS: ConstraintSystem<Scalar>, Scalar: Prim
 pub fn square_sum<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
     mut cs: CS,
     to_add: Scalar,
-    num: &AllocatedNum<Scalar>,
+    elt: &Elt<Scalar>,
     enforce: bool,
 ) -> Result<AllocatedNum<Scalar>, SynthesisError>
 where
     CS: ConstraintSystem<Scalar>,
 {
     let res = AllocatedNum::alloc(cs.namespace(|| "squared sum"), || {
-        let mut tmp = num.get_value().ok_or(SynthesisError::AssignmentMissing)?;
+        let mut tmp = elt.val().ok_or(SynthesisError::AssignmentMissing)?;
         tmp.add_assign(&to_add);
         tmp = tmp.square();
 
@@ -460,8 +538,8 @@ where
     if enforce {
         cs.enforce(
             || "squared sum constraint",
-            |lc| lc + num.get_variable() + (to_add, CS::one()),
-            |lc| lc + num.get_variable() + (to_add, CS::one()),
+            |_| elt.lc() + (to_add, CS::one()),
+            |_| elt.lc() + (to_add, CS::one()),
             |lc| lc + res.get_variable(),
         );
     }
@@ -473,7 +551,7 @@ where
 pub fn mul_sum<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
     mut cs: CS,
     a: &AllocatedNum<Scalar>,
-    b: &AllocatedNum<Scalar>,
+    b: &Elt<Scalar>,
     pre_add: Option<Scalar>,
     post_add: Option<Scalar>,
     enforce: bool,
@@ -482,7 +560,7 @@ where
     CS: ConstraintSystem<Scalar>,
 {
     let res = AllocatedNum::alloc(cs.namespace(|| "mul_sum"), || {
-        let mut tmp = b.get_value().ok_or(SynthesisError::AssignmentMissing)?;
+        let mut tmp = b.val().ok_or(SynthesisError::AssignmentMissing)?;
         if let Some(x) = pre_add {
             tmp.add_assign(&x);
         }
@@ -501,14 +579,14 @@ where
             if let Some(pre) = pre_add {
                 cs.enforce(
                     || "mul sum constraint pre-post-add",
-                    |lc| lc + b.get_variable() + (pre, CS::one()),
+                    |_| b.lc() + (pre, CS::one()),
                     |lc| lc + a.get_variable(),
                     |lc| lc + res.get_variable() + (neg, CS::one()),
                 );
             } else {
                 cs.enforce(
                     || "mul sum constraint post-add",
-                    |lc| lc + b.get_variable(),
+                    |_| b.lc(),
                     |lc| lc + a.get_variable(),
                     |lc| lc + res.get_variable() + (neg, CS::one()),
                 );
@@ -517,14 +595,14 @@ where
             if let Some(pre) = pre_add {
                 cs.enforce(
                     || "mul sum constraint pre-add",
-                    |lc| lc + b.get_variable() + (pre, CS::one()),
+                    |_| b.lc() + (pre, CS::one()),
                     |lc| lc + a.get_variable(),
                     |lc| lc + res.get_variable(),
                 );
             } else {
                 cs.enforce(
                     || "mul sum constraint",
-                    |lc| lc + b.get_variable(),
+                    |_| b.lc(),
                     |lc| lc + a.get_variable(),
                     |lc| lc + res.get_variable(),
                 );
@@ -600,21 +678,21 @@ mod tests {
 
     #[test]
     fn test_poseidon_hash() {
-        test_poseidon_hash_aux::<typenum::U2>(Strength::Standard, 311, false);
-        test_poseidon_hash_aux::<typenum::U4>(Strength::Standard, 377, false);
-        test_poseidon_hash_aux::<typenum::U8>(Strength::Standard, 505, false);
-        test_poseidon_hash_aux::<typenum::U16>(Strength::Standard, 761, false);
-        test_poseidon_hash_aux::<typenum::U24>(Strength::Standard, 1009, false);
-        test_poseidon_hash_aux::<typenum::U36>(Strength::Standard, 1385, false);
+        test_poseidon_hash_aux::<typenum::U2>(Strength::Standard, 234, false);
+        test_poseidon_hash_aux::<typenum::U4>(Strength::Standard, 285, false);
+        test_poseidon_hash_aux::<typenum::U8>(Strength::Standard, 384, false);
+        test_poseidon_hash_aux::<typenum::U16>(Strength::Standard, 582, false);
+        test_poseidon_hash_aux::<typenum::U24>(Strength::Standard, 774, false);
+        test_poseidon_hash_aux::<typenum::U32>(Strength::Standard, 969, false);
+        test_poseidon_hash_aux::<typenum::U36>(Strength::Standard, 1065, false);
 
-        test_poseidon_hash_aux::<typenum::U2>(Strength::Strengthened, 367, false);
-        test_poseidon_hash_aux::<typenum::U4>(Strength::Strengthened, 433, false);
-        test_poseidon_hash_aux::<typenum::U8>(Strength::Strengthened, 565, false);
-        test_poseidon_hash_aux::<typenum::U16>(Strength::Strengthened, 821, false);
-        test_poseidon_hash_aux::<typenum::U24>(Strength::Strengthened, 1069, false);
-        test_poseidon_hash_aux::<typenum::U36>(Strength::Strengthened, 1445, false);
-
-        test_poseidon_hash_aux::<typenum::U15>(Strength::Standard, 730, true);
+        test_poseidon_hash_aux::<typenum::U2>(Strength::Strengthened, 276, false);
+        test_poseidon_hash_aux::<typenum::U4>(Strength::Strengthened, 327, false);
+        test_poseidon_hash_aux::<typenum::U8>(Strength::Strengthened, 429, false);
+        test_poseidon_hash_aux::<typenum::U16>(Strength::Strengthened, 627, false);
+        test_poseidon_hash_aux::<typenum::U24>(Strength::Strengthened, 819, false);
+        test_poseidon_hash_aux::<typenum::U32>(Strength::Strengthened, 1014, false);
+        test_poseidon_hash_aux::<typenum::U36>(Strength::Strengthened, 1110, false);
     }
 
     fn test_poseidon_hash_aux<A>(
@@ -641,60 +719,101 @@ mod tests {
             arity..=arity
         };
         for preimage_length in range {
-            let mut cs = TestConstraintSystem::<Fr>::new();
-
             let constants = if constant_length {
                 constants_x.with_length(preimage_length)
             } else {
                 constants_x.clone()
             };
+
             let expected_constraints_calculated = {
-                let arity_tag_constraints = 0;
                 let width = 1 + arity;
-                // The '- 1' term represents the first s-box for the arity tag, which is a constant and needs no constraint.
-                let s_boxes = (width * constants.full_rounds) + constants.partial_rounds - 1;
-                let s_box_constraints = 3 * s_boxes;
-                let mds_constraints =
-                    (width * constants.full_rounds) + constants.partial_rounds - arity;
-                arity_tag_constraints + s_box_constraints + mds_constraints
+                let s_box_cost = 3;
+                let savings_from_domain_tag_sbox = s_box_cost; // The very first s-box output is constant.
+
+                let base_expected_constraints = (width * s_box_cost * constants.full_rounds)
+                    + (s_box_cost * constants.partial_rounds);
+                let adjustment = savings_from_domain_tag_sbox;
+
+                base_expected_constraints - adjustment
             };
-            let mut i = 0;
 
-            let mut fr_data = vec![Fr::zero(); preimage_length];
-            let data: Vec<AllocatedNum<Fr>> = (0..preimage_length)
-                .enumerate()
-                .map(|_| {
-                    let fr = Fr::random(&mut rng);
-                    fr_data[i] = fr;
-                    i += 1;
-                    AllocatedNum::alloc(cs.namespace(|| format!("data {}", i)), || Ok(fr)).unwrap()
-                })
-                .collect::<Vec<_>>();
+            let mut data = |cs: &mut TestConstraintSystem<Fr>, fr_data: &mut [Fr]| {
+                (0..preimage_length)
+                    .map(|i| {
+                        let fr = Fr::random(&mut rng);
+                        fr_data[i] = fr;
+                        AllocatedNum::alloc(cs.namespace(|| format!("data {}", i)), || Ok(fr))
+                            .unwrap()
+                    })
+                    .collect::<Vec<_>>()
+            };
 
-            let out = poseidon_hash(&mut cs, data, &constants).expect("poseidon hashing failed");
+            {
+                let mut cs = TestConstraintSystem::<Fr>::new();
+                let mut fr_data = vec![Fr::zero(); preimage_length];
+                let data: Vec<AllocatedNum<Fr>> = data(&mut cs, &mut fr_data);
 
-            let mut p = Poseidon::<Fr, A>::new_with_preimage(&fr_data, &constants);
-            let expected: Fr = p.hash_in_mode(HashMode::Correct);
+                let out = poseidon_hash_allocated(&mut cs, data.clone(), &constants)
+                    .expect("poseidon hashing failed");
 
-            assert!(cs.is_satisfied(), "constraints not satisfied");
+                let mut p = Poseidon::<Fr, A>::new_with_preimage(&fr_data, &constants);
+                let expected: Fr = p.hash_in_mode(HashMode::Correct);
 
-            assert_eq!(
-                expected,
-                out.get_value().unwrap(),
-                "circuit and non-circuit do not match"
-            );
+                let expected_constraints_calculated = expected_constraints_calculated + 1;
+                let expected_constraints = expected_constraints + 1;
 
-            assert_eq!(
-                expected_constraints_calculated,
-                cs.num_constraints(),
-                "constraint number miscalculated"
-            );
+                assert!(cs.is_satisfied(), "constraints not satisfied");
 
-            assert_eq!(
-                expected_constraints,
-                cs.num_constraints(),
-                "constraint number changed",
-            );
+                assert_eq!(
+                    expected,
+                    out.get_value().unwrap(),
+                    "circuit and non-circuit do not match"
+                );
+
+                assert_eq!(
+                    expected_constraints_calculated,
+                    cs.num_constraints(),
+                    "constraint number miscalculated"
+                );
+
+                assert_eq!(
+                    expected_constraints,
+                    cs.num_constraints(),
+                    "constraint number changed",
+                );
+            }
+
+            {
+                let mut cs = TestConstraintSystem::<Fr>::new();
+                let mut fr_data = vec![Fr::zero(); preimage_length];
+                let data: Vec<AllocatedNum<Fr>> = data(&mut cs, &mut fr_data);
+
+                let out =
+                    poseidon_hash_num(&mut cs, data, &constants).expect("poseidon hashing failed");
+
+                let mut p = Poseidon::<Fr, A>::new_with_preimage(&fr_data, &constants);
+                let expected: Fr = p.hash_in_mode(HashMode::Correct);
+
+                assert!(cs.is_satisfied(), "constraints not satisfied");
+
+                assert_eq!(
+                    expected,
+                    out.get_value().unwrap(),
+                    "circuit and non-circuit do not match"
+                );
+
+                assert_eq!(
+                    expected_constraints_calculated,
+                    cs.num_constraints(),
+                    "constraint number miscalculated"
+                );
+
+                assert_eq!(
+                    expected_constraints,
+                    cs.num_constraints(),
+                    "constraint number changed",
+                );
+            }
         }
     }
 
@@ -712,7 +831,9 @@ mod tests {
 
         let mut cs1 = cs.namespace(|| "square_sum");
         let two = fr(2);
-        let three = AllocatedNum::alloc(cs1.namespace(|| "three"), || Ok(Fr::from(3))).unwrap();
+        let three = Elt::Allocated(
+            AllocatedNum::alloc(cs1.namespace(|| "three"), || Ok(Fr::from(3))).unwrap(),
+        );
         let res = square_sum(cs1, two, &three, true).unwrap();
 
         let twenty_five = Fr::from(25);
@@ -765,7 +886,6 @@ mod tests {
                 };
             });
 
-            res.ensure_allocated(&mut cs, true).unwrap();
             assert!(cs.is_satisfied());
         }
         {
@@ -817,9 +937,7 @@ mod tests {
                 };
             });
 
-            let allocated = res2.ensure_allocated(&mut cs, true).unwrap();
-
-            let v = allocated.get_value().unwrap();
+            let v = res2.val().unwrap();
             assert_eq!(fr(452), v); // (7 * 56) + (8 * 3) + (9 * 4) = 448
 
             assert!(cs.is_satisfied());
