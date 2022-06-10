@@ -61,7 +61,7 @@ where
                         let mut cs = BenchCS::<Fr>::new();
                         let circuit = BenchCircuit::<A> {
                             n: *n,
-                            circuit_type: circuit_type,
+                            circuit_type,
                             _a: PhantomData::<A>,
                         };
                         circuit.synthesize(&mut cs)
