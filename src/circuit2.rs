@@ -1,3 +1,4 @@
+/// The `circuit2` module implements the optimal Poseidon hash circuit.
 use std::ops::{AddAssign, MulAssign};
 
 use crate::hash_type::HashType;
@@ -387,7 +388,7 @@ where
     }
 }
 
-/// Create circuit for Poseidon hash.
+/// Create circuit for Poseidon hash, returning an unallocated `Num` at the cost of one constraint.
 pub fn poseidon_hash_allocated<CS, Scalar, A>(
     mut cs: CS,
     preimage: Vec<AllocatedNum<Scalar>>,
@@ -421,7 +422,7 @@ where
     p.hash_to_allocated(cs)
 }
 
-/// Create circuit for Poseidon hash.
+/// Create circuit for Poseidon hash, minimizing constraints by returning an unallocated `Num`.
 pub fn poseidon_hash_num<CS, Scalar, A>(
     mut cs: CS,
     preimage: Vec<AllocatedNum<Scalar>>,

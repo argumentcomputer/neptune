@@ -1,5 +1,7 @@
+/// Implement the legacy Poseidon hash circuit, retained for backwards compatibility with extant trusted setups.
 use std::ops::{AddAssign, MulAssign};
 
+use crate::circuit2::poseidon_hash_allocated;
 use crate::hash_type::HashType;
 use crate::matrix::Matrix;
 use crate::mds::SparseMatrix;
@@ -10,6 +12,39 @@ use bellperson::gadgets::num::AllocatedNum;
 use bellperson::{ConstraintSystem, LinearCombination, SynthesisError};
 use ff::{Field, PrimeField};
 use std::marker::PhantomData;
+
+#[derive(Clone, Copy, Debug)]
+pub enum CircuitType {
+    Legacy,
+    OptimalAllocated,
+}
+
+impl CircuitType {
+    pub fn label(&self) -> String {
+        match self {
+            Self::Legacy => "Legacy Poseidon Circuit".into(),
+            Self::OptimalAllocated => "Optimal Allocated Poseidon Circuit,".into(),
+        }
+    }
+}
+
+/// Convenience function to potentially ease upgrade transition from legacy to optimal circuits.
+pub fn poseidon_hash_circuit<CS, Scalar, A>(
+    cs: CS,
+    circuit_type: CircuitType,
+    preimage: Vec<AllocatedNum<Scalar>>,
+    constants: &PoseidonConstants<Scalar, A>,
+) -> Result<AllocatedNum<Scalar>, SynthesisError>
+where
+    CS: ConstraintSystem<Scalar>,
+    Scalar: PrimeField,
+    A: Arity<Scalar>,
+{
+    match circuit_type {
+        CircuitType::Legacy => poseidon_hash(cs, preimage, constants),
+        CircuitType::OptimalAllocated => poseidon_hash_allocated(cs, preimage, constants),
+    }
+}
 
 /// Similar to `num::Num`, we use `Elt` to accumulate both values and linear combinations, then eventually
 /// extract into a `num::AllocatedNum`, enforcing that the linear combination corresponds to the result.
@@ -339,7 +374,7 @@ where
     }
 }
 
-/// Create circuit for Poseidon hash.
+/// Create legacy circuit for Poseidon hash. If possible, prefer the equivalent 'optimal' alternatives.
 pub fn poseidon_hash<CS, Scalar, A>(
     mut cs: CS,
     preimage: Vec<AllocatedNum<Scalar>>,
