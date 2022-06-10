@@ -6,17 +6,18 @@ use blstrs::Scalar as Fr;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ff::Field;
 use generic_array::typenum;
-use neptune::circuit::poseidon_hash;
+use neptune::circuit::{poseidon_hash_circuit, CircuitType};
 use neptune::*;
 use rand::thread_rng;
 use std::marker::PhantomData;
 
-struct BenchCircuit<A: Arity<Fr>> {
+struct BenchCircuit<'a, A: Arity<Fr>> {
     n: usize,
+    circuit_type: &'a CircuitType,
     _a: PhantomData<A>,
 }
 
-impl<A: Arity<Fr>> Circuit<Fr> for BenchCircuit<A> {
+impl<A: Arity<Fr>> Circuit<Fr> for BenchCircuit<'_, A> {
     fn synthesize<CS: ConstraintSystem<Fr>>(self, mut cs: &mut CS) -> Result<(), SynthesisError> {
         let mut rng = thread_rng();
         let arity = A::to_usize();
@@ -34,7 +35,8 @@ impl<A: Arity<Fr>> Circuit<Fr> for BenchCircuit<A> {
                     AllocatedNum::alloc(cs.namespace(|| format!("data {}", i)), || Ok(fr)).unwrap()
                 })
                 .collect::<Vec<_>>();
-            let _ = poseidon_hash(&mut cs, data, &constants).expect("poseidon hashing failed");
+            let _ = poseidon_hash_circuit(&mut cs, *self.circuit_type, data, &constants)
+                .expect("poseidon hashing failed");
         }
         Ok(())
     }
@@ -45,28 +47,29 @@ where
     A: Arity<Fr>,
 {
     let mut group = c.benchmark_group(format!("synthesis-{}", A::to_usize()));
-
-    let mut num_hashes = 1;
-
-    for _ in 0..4 {
-        group.bench_with_input(
-            BenchmarkId::new(
-                "Poseidon Synthesis",
-                format!("arity: {}, count: {}", A::to_usize(), num_hashes),
-            ),
-            &num_hashes,
-            |b, n| {
-                b.iter(|| {
-                    let mut cs = BenchCS::<Fr>::new();
-                    let circuit = BenchCircuit::<A> {
-                        n: *n,
-                        _a: PhantomData::<A>,
-                    };
-                    circuit.synthesize(&mut cs)
-                })
-            },
-        );
-        num_hashes *= 10;
+    for i in 0..4 {
+        let num_hashes = 10usize.pow(i);
+        for circuit_type in &[CircuitType::Legacy, CircuitType::OptimalAllocated] {
+            group.bench_with_input(
+                BenchmarkId::new(
+                    circuit_type.label(),
+                    format!("arity: {}, count: {}", A::to_usize(), num_hashes),
+                ),
+                &num_hashes,
+                |b, n| {
+                    b.iter(|| {
+                        let mut cs = BenchCS::<Fr>::new();
+                        let circuit = BenchCircuit::<A> {
+                            n: *n,
+                            circuit_type,
+                            _a: PhantomData::<A>,
+                        };
+                        circuit.synthesize(&mut cs)
+                    })
+                },
+            );
+        }
+        // num_hashes *= 10;
     }
 }
 
