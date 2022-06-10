@@ -121,12 +121,10 @@ impl<Scalar: PrimeField> Elt<Scalar> {
     }
 
     fn num(&self) -> num::Num<Scalar> {
-        let num = match self {
+        match self {
             Elt::Num(num) => num.clone(),
             Elt::Allocated(a) => a.clone().into(),
-        };
-
-        num
+        }
     }
 }
 
