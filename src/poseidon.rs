@@ -315,7 +315,7 @@ where
     /// Panics if the provided slice is bigger than the arity.
     pub fn set_preimage(&mut self, preimage: &[F]) {
         self.reset();
-        self.elements[1..].copy_from_slice(&preimage);
+        self.elements[1..].copy_from_slice(preimage);
         self.pos = self.elements.len();
     }
 
@@ -483,7 +483,7 @@ where
                 let index = self.current_round - sparse_offset - 1;
                 let sparse_matrix = &self.constants.sparse_matrixes[index];
 
-                self.product_mds_with_sparse_matrix(&sparse_matrix);
+                self.product_mds_with_sparse_matrix(sparse_matrix);
             } else {
                 self.product_mds();
             }
@@ -576,7 +576,7 @@ where
     fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
         Ok(preimages
             .iter()
-            .map(|preimage| Poseidon::new_with_preimage(&preimage, &self.constants).hash())
+            .map(|preimage| Poseidon::new_with_preimage(preimage, &self.constants).hash())
             .collect())
     }
 

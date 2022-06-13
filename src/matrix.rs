@@ -70,7 +70,7 @@ pub fn mat_mul<F: PrimeField>(a: &Matrix<F>, b: &Matrix<F>) -> Option<Matrix<F>>
         .iter()
         .map(|input_row| {
             b_t.iter()
-                .map(|transposed_column| vec_mul(&input_row, &transposed_column))
+                .map(|transposed_column| vec_mul(input_row, transposed_column))
                 .collect()
         })
         .collect();
@@ -251,7 +251,7 @@ fn eliminate<F: PrimeField>(
             let mut factor = val;
             factor.mul_assign(&inv_pivot);
 
-            let scaled_pivot = scalar_vec_mul(factor, &pivot);
+            let scaled_pivot = scalar_vec_mul(factor, pivot);
             let eliminated = vec_sub(row, &scaled_pivot);
             result.push(eliminated);
 
@@ -319,8 +319,8 @@ fn reduce_to_identity<F: PrimeField>(
             inv.unwrap()
         };
 
-        let mut normalized = scalar_vec_mul(inv, &row);
-        let mut shadow_normalized = scalar_vec_mul(inv, &shadow_row);
+        let mut normalized = scalar_vec_mul(inv, row);
+        let mut shadow_normalized = scalar_vec_mul(inv, shadow_row);
 
         for j in 0..i {
             let idx = size - j - 1;
@@ -346,7 +346,7 @@ fn reduce_to_identity<F: PrimeField>(
 //
 pub(crate) fn invert<F: PrimeField>(matrix: &Matrix<F>) -> Option<Matrix<F>> {
     let mut shadow = make_identity(columns(matrix));
-    let ut = upper_triangular(&matrix, &mut shadow);
+    let ut = upper_triangular(matrix, &mut shadow);
 
     ut.and_then(|x| reduce_to_identity(&x, &mut shadow))
         .and(Some(shadow))
