@@ -56,7 +56,7 @@ where
             }
             None => columns.iter().enumerate().for_each(|(i, column)| {
                 self.data[start + i] =
-                    Poseidon::new_with_preimage(&column, &self.column_constants).hash();
+                    Poseidon::new_with_preimage(column, &self.column_constants).hash();
             }),
         };
 

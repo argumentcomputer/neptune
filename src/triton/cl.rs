@@ -65,13 +65,13 @@ pub fn futhark_context(device: &opencl::Device) -> ClResult<Arc<Mutex<FutharkCon
     info!("getting context for ~{:?}", device.name());
     let mut map = FUTHARK_CONTEXT_MAP.write().unwrap();
 
-    if !map.contains_key(&device) {
+    if !map.contains_key(device) {
         info!("device: {:?}", device);
         let cl_device_id = device.cl_device_id() as bindings::cl_device_id;
         let context = create_futhark_context(cl_device_id)?;
         map.insert(device.clone(), Arc::new(Mutex::new(context)));
     }
-    Ok(Arc::clone(&map[&device]))
+    Ok(Arc::clone(&map[device]))
 }
 
 /// Returns the first device available

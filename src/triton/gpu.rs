@@ -208,7 +208,7 @@ where
 
     fn round_keys(&self, ctx: &FutharkContext) -> Result<Array_u64_2d, Error> {
         let round_keys = &self.0.compressed_round_constants;
-        array_u64_2d_from_frs(ctx, &round_keys)
+        array_u64_2d_from_frs(ctx, round_keys)
     }
 
     fn mds_matrix(&self, ctx: &FutharkContext) -> Result<Array_u64_3d, Error> {
@@ -401,11 +401,11 @@ fn init_hash2(ctx: &mut FutharkContext, strength: Strength) -> Result<BatcherSta
         Strength::Standard => {
             let state = ctx
                 .init2(
-                    constants.arity_tag(&ctx)?,
-                    constants.round_keys(&ctx)?,
-                    constants.mds_matrix(&ctx)?,
-                    constants.pre_sparse_matrix(&ctx)?,
-                    constants.sparse_matrixes(&ctx)?,
+                    constants.arity_tag(ctx)?,
+                    constants.round_keys(ctx)?,
+                    constants.mds_matrix(ctx)?,
+                    constants.pre_sparse_matrix(ctx)?,
+                    constants.sparse_matrixes(ctx)?,
                 )
                 .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
             Ok(BatcherState::Arity2(state))
@@ -413,11 +413,11 @@ fn init_hash2(ctx: &mut FutharkContext, strength: Strength) -> Result<BatcherSta
         Strength::Strengthened => {
             let state = ctx
                 .init2s(
-                    constants.arity_tag(&ctx)?,
-                    constants.round_keys(&ctx)?,
-                    constants.mds_matrix(&ctx)?,
-                    constants.pre_sparse_matrix(&ctx)?,
-                    constants.sparse_matrixes(&ctx)?,
+                    constants.arity_tag(ctx)?,
+                    constants.round_keys(ctx)?,
+                    constants.mds_matrix(ctx)?,
+                    constants.pre_sparse_matrix(ctx)?,
+                    constants.sparse_matrixes(ctx)?,
                 )
                 .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
             Ok(BatcherState::Arity2s(state))
@@ -431,11 +431,11 @@ fn init_hash8(ctx: &mut FutharkContext, strength: Strength) -> Result<BatcherSta
         Strength::Standard => {
             let state = ctx
                 .init8(
-                    constants.arity_tag(&ctx)?,
-                    constants.round_keys(&ctx)?,
-                    constants.mds_matrix(&ctx)?,
-                    constants.pre_sparse_matrix(&ctx)?,
-                    constants.sparse_matrixes(&ctx)?,
+                    constants.arity_tag(ctx)?,
+                    constants.round_keys(ctx)?,
+                    constants.mds_matrix(ctx)?,
+                    constants.pre_sparse_matrix(ctx)?,
+                    constants.sparse_matrixes(ctx)?,
                 )
                 .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
 
@@ -444,11 +444,11 @@ fn init_hash8(ctx: &mut FutharkContext, strength: Strength) -> Result<BatcherSta
         Strength::Strengthened => {
             let state = ctx
                 .init8s(
-                    constants.arity_tag(&ctx)?,
-                    constants.round_keys(&ctx)?,
-                    constants.mds_matrix(&ctx)?,
-                    constants.pre_sparse_matrix(&ctx)?,
-                    constants.sparse_matrixes(&ctx)?,
+                    constants.arity_tag(ctx)?,
+                    constants.round_keys(ctx)?,
+                    constants.mds_matrix(ctx)?,
+                    constants.pre_sparse_matrix(ctx)?,
+                    constants.sparse_matrixes(ctx)?,
                 )
                 .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
 
@@ -464,11 +464,11 @@ fn init_hash11(ctx: &mut FutharkContext, strength: Strength) -> Result<BatcherSt
         Strength::Standard => {
             let state = ctx
                 .init11(
-                    constants.arity_tag(&ctx)?,
-                    constants.round_keys(&ctx)?,
-                    constants.mds_matrix(&ctx)?,
-                    constants.pre_sparse_matrix(&ctx)?,
-                    constants.sparse_matrixes(&ctx)?,
+                    constants.arity_tag(ctx)?,
+                    constants.round_keys(ctx)?,
+                    constants.mds_matrix(ctx)?,
+                    constants.pre_sparse_matrix(ctx)?,
+                    constants.sparse_matrixes(ctx)?,
                 )
                 .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
 
@@ -477,11 +477,11 @@ fn init_hash11(ctx: &mut FutharkContext, strength: Strength) -> Result<BatcherSt
         Strength::Strengthened => {
             let state = ctx
                 .init11s(
-                    constants.arity_tag(&ctx)?,
-                    constants.round_keys(&ctx)?,
-                    constants.mds_matrix(&ctx)?,
-                    constants.pre_sparse_matrix(&ctx)?,
-                    constants.sparse_matrixes(&ctx)?,
+                    constants.arity_tag(ctx)?,
+                    constants.round_keys(ctx)?,
+                    constants.mds_matrix(ctx)?,
+                    constants.pre_sparse_matrix(ctx)?,
+                    constants.sparse_matrixes(ctx)?,
                 )
                 .map_err(|e| Error::GpuError(format!("{:?}", e)))?;
 
@@ -500,7 +500,7 @@ where
 {
     assert_eq!(2, A::to_usize());
     let flat_preimages = as_mont_u64s(preimages);
-    let input = Array_u64_1d::from_vec(*ctx, &flat_preimages, &[flat_preimages.len() as i64, 1])
+    let input = Array_u64_1d::from_vec(*ctx, flat_preimages, &[flat_preimages.len() as i64, 1])
         .map_err(|_| Error::Other("could not convert".to_string()))?;
 
     let (res, state) = ctx
@@ -523,7 +523,7 @@ where
 {
     assert_eq!(8, A::to_usize());
     let flat_preimages = as_mont_u64s(preimages);
-    let input = Array_u64_1d::from_vec(*ctx, &flat_preimages, &[flat_preimages.len() as i64, 1])
+    let input = Array_u64_1d::from_vec(*ctx, flat_preimages, &[flat_preimages.len() as i64, 1])
         .map_err(|_| Error::Other("could not convert".to_string()))?;
 
     let (res, state) = ctx
@@ -546,7 +546,7 @@ where
 {
     assert_eq!(11, A::to_usize());
     let flat_preimages = as_mont_u64s(preimages);
-    let input = Array_u64_1d::from_vec(*ctx, &flat_preimages, &[flat_preimages.len() as i64, 1])
+    let input = Array_u64_1d::from_vec(*ctx, flat_preimages, &[flat_preimages.len() as i64, 1])
         .map_err(|_| Error::Other("could not convert".to_string()))?;
 
     let (res, state) = ctx
@@ -569,7 +569,7 @@ where
 {
     assert_eq!(2, A::to_usize());
     let flat_preimages = as_mont_u64s(preimages);
-    let input = Array_u64_1d::from_vec(*ctx, &flat_preimages, &[flat_preimages.len() as i64, 1])
+    let input = Array_u64_1d::from_vec(*ctx, flat_preimages, &[flat_preimages.len() as i64, 1])
         .map_err(|_| Error::Other("could not convert".to_string()))?;
 
     let (res, state) = ctx
@@ -592,7 +592,7 @@ where
 {
     assert_eq!(8, A::to_usize());
     let flat_preimages = as_mont_u64s(preimages);
-    let input = Array_u64_1d::from_vec(*ctx, &flat_preimages, &[flat_preimages.len() as i64, 1])
+    let input = Array_u64_1d::from_vec(*ctx, flat_preimages, &[flat_preimages.len() as i64, 1])
         .map_err(|_| Error::Other("could not convert".to_string()))?;
 
     let (res, state) = ctx
@@ -615,7 +615,7 @@ where
 {
     assert_eq!(11, A::to_usize());
     let flat_preimages = as_mont_u64s(preimages);
-    let input = Array_u64_1d::from_vec(*ctx, &flat_preimages, &[flat_preimages.len() as i64, 1])
+    let input = Array_u64_1d::from_vec(*ctx, flat_preimages, &[flat_preimages.len() as i64, 1])
         .map_err(|_| Error::Other("could not convert".to_string()))?;
 
     let (res, state) = ctx

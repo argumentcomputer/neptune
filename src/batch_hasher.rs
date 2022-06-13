@@ -88,7 +88,7 @@ where
         let opencl_device = device
             .opencl_device()
             .ok_or(Error::ClError(ClError::DeviceNotFound))?;
-        let futhark_context = cl::futhark_context(&opencl_device)?;
+        let futhark_context = cl::futhark_context(opencl_device)?;
         Ok(Self::OpenCl(GpuBatchHasher::<A>::new_with_strength(
             futhark_context,
             strength,
