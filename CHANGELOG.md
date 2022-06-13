@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 5.2.0 - 2022-06-13
+- Update bellperson for aggregate proofs versioning (https://github.com/filecoin-project/neptune/pull/149)
+
 ## 5.1.0 - 2021-10-21
 - Fix, test, and enable custom domain tags. (https://github.com/filecoin-project/neptune/pull/116)
 - Update bellperson to v0.18.0 (https://github.com/filecoin-project/neptune/pull/115)
