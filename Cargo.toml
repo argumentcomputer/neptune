@@ -10,7 +10,7 @@ resolver = "2"
 
 [dependencies]
 lazy_static = "1.4.0"
-bellperson = { version = "0.20", default-features = false }
+bellperson = { version = "0.22", default-features = false }
 blake2s_simd = "0.5"
 blstrs = { version = "0.5.0" }
 byteorder = "1"
@@ -71,6 +71,3 @@ wasm = [ "bellperson/wasm" ]
 members = [
   "gbench",
 ]
-
-[patch.crates-io]
-bellperson = { version = "0.20", git = "https://github.com/filecoin-project/bellperson" }
