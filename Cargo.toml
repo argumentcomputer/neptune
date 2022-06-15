@@ -73,4 +73,4 @@ members = [
 ]
 
 [patch.crates-io]
-bellperson = { version = "0.20", git = "https://github.com/filecoin-project/bellperson", branch = "forward-port-updates" }
+bellperson = { version = "0.20", git = "https://github.com/filecoin-project/bellperson" }
