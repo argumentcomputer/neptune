@@ -34,35 +34,19 @@ commands:
             sudo apt update
             sudo apt install -y ocl-icd-opencl-dev
 
-  test_target:
+  test:
     parameters:
-      target:
+      cargo-args:
+        description: Addtional arguments for the cargo command
         type: string
+        default: ""
     steps:
       - *restore-workspace
       - *restore-cache
       - run:
-          name: Test default features (<< parameters.target >>)
-          command: TARGET=<< parameters.target >> cargo test --release
-          no_output_timeout: 5m
-      - run:
-          name: Test (opencl) (<< parameters.target >>)
-          command: TARGET=<< parameters.target >> cargo test --release --features opencl,arity2,arity4,arity8,arity11,arity16,arity24,arity36 -- --test-threads=1
+          name: Test (<< parameters.cargo-args >>)
+          command: cargo test --release << parameters.cargo-args >> -- --test-threads=1
           no_output_timeout: 30m
-      # Darwin CI doesn't support CUDA
-      - when:
-          condition:
-            not:
-              equal: [ darwin, << parameters.target >> ]
-          steps:
-            - run:
-                name: Test (cuda) (<< parameters.target >>)
-                command: TARGET=<< parameters.target >> cargo test --release --features cuda,arity2,arity4,arity8,arity11,arity16,arity24,arity36 -- --test-threads=1
-                no_output_timeout: 30m
-            - run:
-                name: Test (cuda,opencl) (<< parameters.target >>)
-                command: TARGET=<< parameters.target >> cargo test --release --features cuda,opencl,arity2,arity4,arity8,arity11,arity16,arity24,arity36 -- --test-threads=1
-                no_output_timeout: 30m
 
 jobs:
   cargo_fetch:
@@ -99,7 +83,7 @@ jobs:
             - "~/.cargo"
             - "~/.rustup"
 
-  test_x86_64-unknown-linux-gnu:
+  test_default_and_opencl:
     executor: default
     environment:
       RUST_LOG: debug
@@ -109,10 +93,11 @@ jobs:
     steps:
       - set-env-path
       - install-gpu-deps
-      - test_target:
-          target: "x86_64-unknown-linux-gnu"
+      - test
+      - test:
+          cargo-args: "--features opencl,bls,pasta,arity2,arity4,arity8,arity11,arity16,arity24,arity36"
 
-  test_darwin:
+  test_darwin_default_and_opencl:
     macos:
       xcode: "12.5.0"
     working_directory: ~/crate
@@ -127,8 +112,36 @@ jobs:
       - run: rustup default $(cat rust-toolchain)
       - run: cargo update
       - run: cargo fetch
-      - test_target:
-          target: "darwin"
+      - test
+      - test:
+          cargo-args: "--features opencl,bls,pasta,arity2,arity4,arity8,arity11,arity16,arity24,arity36"
+
+  test_cuda:
+    executor: default
+    environment:
+      RUST_LOG: debug
+      # Build the kernel only for the single architecture that is used on CI. This should reduce
+      # the overall compile-time significantly.
+      NEPTUNE_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
+    steps:
+      - set-env-path
+      - install-gpu-deps
+      - test:
+          cargo-args: "--features cuda,bls,pasta,arity2,arity4,arity8,arity11,arity16,arity24,arity36"
+
+
+  test_cuda_opencl:
+    executor: default
+    environment:
+      RUST_LOG: debug
+      # Build the kernel only for the single architecture that is used on CI. This should reduce
+      # the overall compile-time significantly.
+      NEPTUNE_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
+    steps:
+      - set-env-path
+      - install-gpu-deps
+      - test:
+          cargo-args: "--features cuda,opencl,bls,pasta,arity2,arity4,arity8,arity11,arity16,arity24,arity36"
 
   rustfmt:
     executor: default
@@ -153,13 +166,13 @@ jobs:
           command: cargo clippy --all-targets -- -D warnings
       - run:
           name: Run cargo clippy (opencl)
-          command: cargo clippy --workspace --all-targets --no-default-features --features opencl,arity2 -- -D warnings
+          command: cargo clippy --workspace --all-targets --no-default-features --features opencl,bls,pasta,arity2 -- -D warnings
       - run:
           name: Run cargo clippy (cuda)
-          command: cargo clippy --workspace --all-targets --no-default-features --features cuda,arity2 -- -D warnings
+          command: cargo clippy --workspace --all-targets --no-default-features --features cuda,bls,pasta,arity2 -- -D warnings
       - run:
           name: Run cargo clippy (cuda,opencl)
-          command: cargo clippy --workspace --all-targets --no-default-features --features cuda,opencl,arity2 -- -D warnings
+          command: cargo clippy --workspace --all-targets --no-default-features --features cuda,bls,pasta,opencl,arity2 -- -D warnings
 
 workflows:
   version: 2.1
@@ -173,9 +186,15 @@ workflows:
       - clippy:
           requires:
             - cargo_fetch
-      - test_x86_64-unknown-linux-gnu:
+      - test_default_and_opencl:
           requires:
             - cargo_fetch
-      - test_darwin:
+      - test_darwin_default_and_opencl:
+          requires:
+            - cargo_fetch
+      - test_cuda:
+          requires:
+            - cargo_fetch
+      - test_cuda_opencl:
           requires:
             - cargo_fetch

@@ -5,7 +5,6 @@ use crate::poseidon_alt::{hash_correct, hash_optimized_dynamic};
 use crate::preprocessing::compress_round_constants;
 use crate::{matrix, quintic_s_box, BatchHasher, Strength, DEFAULT_STRENGTH};
 use crate::{round_constants, round_numbers, Error};
-use blstrs::Scalar as Fr;
 use ff::PrimeField;
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
 use std::marker::PhantomData;
@@ -547,17 +546,19 @@ where
 }
 
 #[derive(Debug)]
-pub struct SimplePoseidonBatchHasher<A>
+pub struct SimplePoseidonBatchHasher<F, A>
 where
-    A: Arity<Fr>,
+    F: PrimeField,
+    A: Arity<F>,
 {
-    constants: PoseidonConstants<Fr, A>,
+    constants: PoseidonConstants<F, A>,
     max_batch_size: usize,
 }
 
-impl<A> SimplePoseidonBatchHasher<A>
+impl<F, A> SimplePoseidonBatchHasher<F, A>
 where
-    A: Arity<Fr>,
+    F: PrimeField,
+    A: Arity<F>,
 {
     pub(crate) fn new(max_batch_size: usize) -> Self {
         Self::new_with_strength(DEFAULT_STRENGTH, max_batch_size)
@@ -565,16 +566,17 @@ where
 
     pub(crate) fn new_with_strength(strength: Strength, max_batch_size: usize) -> Self {
         Self {
-            constants: PoseidonConstants::<Fr, A>::new_with_strength(strength),
+            constants: PoseidonConstants::<F, A>::new_with_strength(strength),
             max_batch_size,
         }
     }
 }
-impl<A> BatchHasher<A> for SimplePoseidonBatchHasher<A>
+impl<F, A> BatchHasher<F, A> for SimplePoseidonBatchHasher<F, A>
 where
-    A: Arity<Fr>,
+    F: PrimeField,
+    A: Arity<F>,
 {
-    fn hash(&mut self, preimages: &[GenericArray<Fr, A>]) -> Result<Vec<Fr>, Error> {
+    fn hash(&mut self, preimages: &[GenericArray<F, A>]) -> Result<Vec<F>, Error> {
         Ok(preimages
             .iter()
             .map(|preimage| Poseidon::new_with_preimage(preimage, &self.constants).hash())
@@ -597,7 +599,7 @@ mod tests {
     #[test]
     fn reset() {
         let test_arity = 2;
-        let preimage = vec![Fr::one(); test_arity];
+        let preimage = vec![<Fr as Field>::one(); test_arity];
         let constants = PoseidonConstants::new();
         let mut h = Poseidon::<Fr, U2>::new_with_preimage(&preimage, &constants);
         h.hash();
@@ -614,7 +616,7 @@ mod tests {
         let test_arity = 2;
         let mut preimage = vec![Fr::zero(); test_arity];
         let constants = PoseidonConstants::new();
-        preimage[0] = Fr::one();
+        preimage[0] = <Fr as Field>::one();
 
         let mut h = Poseidon::<Fr, U2>::new_with_preimage(&preimage, &constants);
 
@@ -628,7 +630,7 @@ mod tests {
     fn hash_arity_3() {
         let mut preimage = [Fr::zero(); 3];
         let constants = PoseidonConstants::new();
-        preimage[0] = Fr::one();
+        preimage[0] = <Fr as Field>::one();
 
         let mut h = Poseidon::<Fr, typenum::U3>::new_with_preimage(&preimage, &constants);
 

@@ -1,4 +1,4 @@
-DEVICE {field} quintic_s_box({field} l, {field} pre_add, {field} post_add) {{
+DEVICE {field} quintic_s_box_{field}({field} l, {field} pre_add, {field} post_add) {{
     {field} tmp = {field}_add(l, pre_add);
     tmp = {field}_sqr(l);
     tmp = {field}_sqr(tmp);
@@ -8,7 +8,7 @@ DEVICE {field} quintic_s_box({field} l, {field} pre_add, {field} post_add) {{
     return tmp;
   }}
 
-DEVICE {field} scalar_product(CONSTANT {field}* a, {field}* b, int size) {{
+DEVICE {field} scalar_product_{field}(CONSTANT {field}* a, {field}* b, int size) {{
     {field} res = {field}_ZERO;
 
     for (int i = 0; i < size; ++i) {{
