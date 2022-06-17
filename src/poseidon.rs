@@ -817,11 +817,9 @@ mod tests {
         let mut constant_sponge = Sponge::new_with_constants(&constant_constants, Mode::Simplex);
 
         let check_simple = constant_length <= test_arity;
-        dbg!(&constant_sponge.state.elements);
         for n in 0..constant_length {
             let scalar = Fr::from(n as u64);
-            dbg!("absorbing");
-            constant_sponge.absorb(&scalar, &mut ());
+            constant_sponge.absorb(&scalar, &mut ()).unwrap();
             if check_simple {
                 pc.input(scalar).unwrap();
             }
@@ -829,13 +827,10 @@ mod tests {
 
         let constant_sponge_digest = constant_sponge.squeeze(&mut ()).unwrap();
         if check_simple {
-            dbg!("pc");
             let constant_simple_digest = pc.hash();
-            dbg!("sponge");
-            assert_eq!(constant_simple_digest, constant_sponge_digest);
+            assert_eq!(constant_simple_digest, constant_sponge_digest.unwrap());
         }
 
-        dbg!(&test_arity);
         let expected_constant = match strength {
             Strength::Standard =>
             // Currently secure round constants.
@@ -932,9 +927,8 @@ mod tests {
                 _ => unimplemented!(),
             },
         };
-        assert_eq!(expected_constant, constant_sponge_digest);
+        assert_eq!(expected_constant, constant_sponge_digest.unwrap());
 
-        dbg!(test_arity);
         assert_eq!(expected, digest);
     }
 

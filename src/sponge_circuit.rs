@@ -35,6 +35,7 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
 {
     type Acc = Namespace<'a, F, CS>;
     type Elt = Elt<F>;
+    type Error = SynthesisError;
 
     fn new_with_constants(constants: &'a PoseidonConstants<F, A>, mode: Mode) -> Self {
         Self {
@@ -118,11 +119,11 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
         self.state.apply_padding();
     }
 
-    fn permute_state(&mut self, ns: &mut Self::Acc) {
+    fn permute_state(&mut self, ns: &mut Self::Acc) -> Result<(), Self::Error> {
         self.permutation_count += 1;
         self.state
-            .hash(&mut ns.namespace(|| format!("permutation {}", self.permutation_count)))
-            .unwrap(); // FIXME: Unwrap
+            .hash(&mut ns.namespace(|| format!("permutation {}", self.permutation_count)))?;
+        Ok(())
     }
 
     fn enqueue(&mut self, elt: Self::Elt) {
@@ -147,7 +148,7 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
     fn squeeze_elements(&mut self, count: usize, ns: &mut Self::Acc) -> Vec<Self::Elt> {
         let mut elements = Vec::with_capacity(count);
         for _ in 0..count {
-            if let Some(squeezed) = self.squeeze(ns) {
+            if let Ok(Some(squeezed)) = self.squeeze(ns) {
                 elements.push(squeezed);
             }
         }
@@ -196,8 +197,10 @@ mod tests {
                 .push(circuit.make_elt(element, &mut ns.namespace(|| format!("elt{}", i))));
         }
 
-        sponge.absorb_elements(elements.as_slice(), acc);
-        circuit.absorb_elements(allocated_elements.as_slice(), &mut ns);
+        sponge.absorb_elements(elements.as_slice(), acc).unwrap();
+        circuit
+            .absorb_elements(allocated_elements.as_slice(), &mut ns)
+            .unwrap();
 
         let result = sponge.squeeze_elements(n, acc);
         let allocated_result = circuit.squeeze_elements(n, &mut ns);
@@ -241,19 +244,19 @@ mod tests {
 
         // Exercise duplex sponges with eventual size less, equal to, and greater to rate.
         for size in 4..10 {
-            test_duplex_consistency_aux::<Fr, typenum::U8, _>(&mut rng, size, 20);
+            test_duplex_consistency_aux::<Fr, typenum::U8, _>(&mut rng, size, 10);
         }
 
         // Exercise duplex sponges with eventual size less, equal to, and greater than multiples of rate.
         for _ in 0..10 {
             let size = rng.gen_range(15..25);
-            test_duplex_consistency_aux::<Fr, typenum::U4, _>(&mut rng, size, 100);
+            test_duplex_consistency_aux::<Fr, typenum::U4, _>(&mut rng, size, 10);
         }
 
         // Use very small rate to ensure exercising edge cases.
         for _ in 0..10 {
             let size = rng.gen_range(15..25);
-            test_duplex_consistency_aux::<Fr, typenum::U2, _>(&mut rng, size, 100);
+            test_duplex_consistency_aux::<Fr, typenum::U2, _>(&mut rng, size, 10);
         }
     }
 
@@ -291,8 +294,10 @@ mod tests {
         let acc = &mut ();
 
         // Reminder: a duplex sponge should encode its length as a prefix.
-        sponge.absorb(&F::from(n as u64), acc);
-        circuit.absorb(&circuit.make_elt(F::from(n as u64), &mut ns), &mut ns);
+        sponge.absorb(&F::from(n as u64), acc).unwrap();
+        circuit
+            .absorb(&circuit.make_elt(F::from(n as u64), &mut ns), &mut ns)
+            .unwrap();
 
         let mut output = Vec::with_capacity(n);
         let mut circuit_output = Vec::with_capacity(n);
@@ -305,7 +310,7 @@ mod tests {
             signature.push(try_to_squeeze);
 
             if try_to_squeeze {
-                if let Some(squeezed) = sponge.squeeze(acc) {
+                if let Ok(Some(squeezed)) = sponge.squeeze(acc) {
                     output.push(squeezed);
 
                     let x = circuit.squeeze(&mut ns).unwrap();
@@ -313,10 +318,10 @@ mod tests {
                 }
             } else {
                 let f = F::from(sponge.absorbed() as u64);
-                sponge.absorb(&f, acc);
+                sponge.absorb(&f, acc).unwrap();
                 i += 1;
                 let elt = circuit.make_elt(f, &mut ns.namespace(|| format!("{}", i)));
-                circuit.absorb(&elt, &mut ns);
+                circuit.absorb(&elt, &mut ns).unwrap();
             }
         }
 
@@ -324,7 +329,7 @@ mod tests {
         assert_eq!(output.len(), circuit_output.len());
 
         for (a, b) in output.iter().zip(circuit_output) {
-            assert_eq!(*a, b.val().unwrap());
+            assert_eq!(*a, b.unwrap().val().unwrap());
         }
 
         (output, signature)
