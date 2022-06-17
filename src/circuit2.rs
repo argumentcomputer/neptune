@@ -78,8 +78,7 @@ impl<Scalar: PrimeField> Elt<Scalar> {
         }
     }
 
-    /// Add two Nums and return a Num tracking the calculation. It is forbidden to invoke on an Allocated because the intended computation
-    /// does not include that path.
+    /// Add two Elts and return Elt::Num tracking the calculation.
     #[allow(clippy::should_implement_trait)]
     pub fn add(self, other: Elt<Scalar>) -> Result<Elt<Scalar>, SynthesisError> {
         match (self, other) {
