@@ -93,6 +93,11 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
         self.state.elements[index] = elt;
     }
 
+    fn make_elt(&self, val: F, ns: &mut Self::Acc) -> Self::Elt {
+        let allocated = AllocatedNum::alloc(ns, || Ok(val)).unwrap();
+        Elt::Allocated(allocated)
+    }
+
     fn rate(&self) -> usize {
         A::to_usize()
     }
@@ -107,19 +112,6 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
 
     fn constants(&self) -> &PoseidonConstants<F, A> {
         self.constants
-    }
-
-    fn ensure_absorbing(&mut self) {
-        match self.direction() {
-            Direction::Absorbing => (),
-            Direction::Squeezing => {
-                if self.is_simplex() {
-                    panic!("Simplex sponge cannot absorb after squeezing.");
-                } else {
-                    self.set_direction(Direction::Absorbing);
-                }
-            }
-        }
     }
 
     fn pad(&mut self) {
@@ -148,14 +140,16 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
     }
 
     fn absorb_aux(&mut self, elt: &Self::Elt) -> Self::Elt {
-        self.element(self.absorb_pos()).add(elt.clone()).unwrap() // FIXME: unwrap
+        // Elt::add always returns `Ok`, so `unwrap` is safe.
+        self.element(self.absorb_pos()).add(elt.clone()).unwrap()
     }
 
     fn squeeze_elements(&mut self, count: usize, ns: &mut Self::Acc) -> Vec<Self::Elt> {
         let mut elements = Vec::with_capacity(count);
         for _ in 0..count {
-            elements.push(self.squeeze(ns).unwrap());
-            // FIXME: unwrap
+            if let Some(squeezed) = self.squeeze(ns) {
+                elements.push(squeezed);
+            }
         }
         elements
     }
@@ -184,38 +178,33 @@ mod tests {
 
     fn test_simplex_aux<F: PrimeField, A: Arity<F>, R: Rng>(rng: &mut R, n: usize) {
         let c = Sponge::<F, A>::simplex_constants(n);
+
         let mut circuit = SpongeCircuit::new_with_constants(&c, Mode::Simplex);
-        let mut sponge = Sponge::new_with_constants(&c, Mode::Simplex);
-
         let mut cs = TestConstraintSystem::<F>::new();
-
         let mut ns = cs.namespace(|| "ns");
+
+        let mut sponge = Sponge::new_with_constants(&c, Mode::Simplex);
+        let acc = &mut ();
 
         let mut elements = Vec::with_capacity(n);
         let mut allocated_elements = Vec::with_capacity(n);
 
         for i in 0..n {
             let element = F::random(&mut *rng);
-            let allocated =
-                AllocatedNum::alloc(&mut ns.namespace(|| (format!("element {}", i))), || {
-                    Ok(element)
-                })
-                .unwrap();
             elements.push(element);
-            allocated_elements.push(allocated.into());
+            allocated_elements
+                .push(circuit.make_elt(element, &mut ns.namespace(|| format!("elt{}", i))));
         }
 
-        let mut acc = ();
-        sponge.absorb_elements(elements.as_slice(), &mut acc);
+        sponge.absorb_elements(elements.as_slice(), acc);
         circuit.absorb_elements(allocated_elements.as_slice(), &mut ns);
 
-        let result = sponge.squeeze_elements(n, &mut acc);
+        let result = sponge.squeeze_elements(n, acc);
         let allocated_result = circuit.squeeze_elements(n, &mut ns);
 
         let root_cs = ns.get_root();
 
         assert!(root_cs.is_satisfied());
-
         assert_eq!(result.len(), allocated_result.len());
 
         result
@@ -231,7 +220,7 @@ mod tests {
 
         assert_eq!(expected_permutations, circuit.permutation_count);
         assert_eq!(expected_constraints, root_cs.num_constraints());
-        // Simple sanity check that are all non-zero and distinct.
+        // Simple sanity check that results are all non-zero and distinct.
         for (i, elt) in allocated_result.iter().enumerate() {
             assert!(elt.val().unwrap() != F::zero());
             // This is expensive (n^2), but it's hard to put field element into a set since we can't hash or compare (except equality).
@@ -244,5 +233,100 @@ mod tests {
 
         assert_eq!(n, elements.len());
         assert_eq!(n, allocated_result.len());
+    }
+
+    #[test]
+    fn test_sponge_duplex_circuit_consistency() {
+        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
+
+        // Exercise duplex sponges with eventual size less, equal to, and greater to rate.
+        for size in 4..10 {
+            test_duplex_consistency_aux::<Fr, typenum::U8, _>(&mut rng, size, 20);
+        }
+
+        // Exercise duplex sponges with eventual size less, equal to, and greater than multiples of rate.
+        for _ in 0..10 {
+            let size = rng.gen_range(15..25);
+            test_duplex_consistency_aux::<Fr, typenum::U4, _>(&mut rng, size, 100);
+        }
+
+        // Use very small rate to ensure exercising edge cases.
+        for _ in 0..10 {
+            let size = rng.gen_range(15..25);
+            test_duplex_consistency_aux::<Fr, typenum::U2, _>(&mut rng, size, 100);
+        }
+    }
+
+    fn test_duplex_consistency_aux<F: PrimeField, A: Arity<F>, R: Rng>(
+        rng: &mut R,
+        n: usize,
+        trials: usize,
+    ) {
+        let mut output = None;
+        let mut signatures = HashSet::new();
+
+        for _ in 0..trials {
+            let (o, sig) = test_duplex_consistency_inner::<F, A, R>(rng, n);
+            signatures.insert(sig);
+            if let Some(output) = output {
+                assert_eq!(output, o);
+            };
+            output = Some(o);
+        }
+        // Make sure many different paths were taken.
+        assert!(trials as f64 > 0.9 * signatures.len() as f64);
+    }
+
+    fn test_duplex_consistency_inner<F: PrimeField, A: Arity<F>, R: Rng>(
+        rng: &mut R,
+        n: usize,
+    ) -> (Vec<F>, Vec<bool>) {
+        let c = Sponge::<F, A>::duplex_constants();
+
+        let mut circuit = SpongeCircuit::new_with_constants(&c, Mode::Duplex);
+        let mut cs = TestConstraintSystem::<F>::new();
+        let mut ns = cs.namespace(|| "ns");
+
+        let mut sponge = Sponge::new_with_constants(&c, Mode::Duplex);
+        let acc = &mut ();
+
+        // Reminder: a duplex sponge should encode its length as a prefix.
+        sponge.absorb(&F::from(n as u64), acc);
+        circuit.absorb(&circuit.make_elt(F::from(n as u64), &mut ns), &mut ns);
+
+        let mut output = Vec::with_capacity(n);
+        let mut circuit_output = Vec::with_capacity(n);
+
+        let mut signature = Vec::with_capacity(n);
+        let mut i = 0;
+
+        while output.len() < n {
+            let try_to_squeeze: bool = rng.gen();
+            signature.push(try_to_squeeze);
+
+            if try_to_squeeze {
+                if let Some(squeezed) = sponge.squeeze(acc) {
+                    output.push(squeezed);
+
+                    let x = circuit.squeeze(&mut ns).unwrap();
+                    circuit_output.push(x);
+                }
+            } else {
+                let f = F::from(sponge.absorbed() as u64);
+                sponge.absorb(&f, acc);
+                i += 1;
+                let elt = circuit.make_elt(f, &mut ns.namespace(|| format!("{}", i)));
+                circuit.absorb(&elt, &mut ns);
+            }
+        }
+
+        assert_eq!(n, output.len());
+        assert_eq!(output.len(), circuit_output.len());
+
+        for (a, b) in output.iter().zip(circuit_output) {
+            assert_eq!(*a, b.val().unwrap());
+        }
+
+        (output, signature)
     }
 }

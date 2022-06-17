@@ -84,6 +84,8 @@ pub trait SpongeTrait<'a, F: PrimeField, A: Arity<F>> {
     fn element(&self, index: usize) -> Self::Elt;
     fn set_element(&mut self, index: usize, elt: Self::Elt);
 
+    fn make_elt(&self, val: F, acc: &mut Self::Acc) -> Self::Elt;
+
     fn is_simplex(&self) -> bool {
         match self.mode() {
             Mode::Simplex => true,
@@ -145,7 +147,18 @@ pub trait SpongeTrait<'a, F: PrimeField, A: Arity<F>> {
         self.is_simplex() && self.squeezed() >= self.total_size()
     }
 
-    fn ensure_absorbing(&mut self);
+    fn ensure_absorbing(&mut self) {
+        match self.direction() {
+            Direction::Absorbing => (),
+            Direction::Squeezing => {
+                if self.is_simplex() {
+                    panic!("Simplex sponge cannot absorb after squeezing.");
+                } else {
+                    self.set_direction(Direction::Absorbing);
+                }
+            }
+        }
+    }
 
     fn permute(&mut self, acc: &mut Self::Acc) {
         // NOTE: this will apply any needed padding in the partially-absorbed case.
@@ -161,6 +174,7 @@ pub trait SpongeTrait<'a, F: PrimeField, A: Arity<F>> {
                     panic!("Duplex sponge must permute exactly `rate` absorbed elements.")
                 }
                 Mode::Simplex => {
+                    dbg!(&self.squeezed(), self.total_size(), self.rate());
                     let final_permutation = self.squeezed() % self.total_size() <= self.rate();
                     assert!(
                         final_permutation,
@@ -323,6 +337,10 @@ impl<'a, F: PrimeField, A: Arity<F>> SpongeTrait<'a, F, A> for Sponge<'a, F, A> 
         self.state.elements[index] = elt;
     }
 
+    fn make_elt(&self, val: F, _acc: &mut Self::Acc) -> Self::Elt {
+        val
+    }
+
     fn rate(&self) -> usize {
         A::to_usize()
     }
@@ -337,19 +355,6 @@ impl<'a, F: PrimeField, A: Arity<F>> SpongeTrait<'a, F, A> for Sponge<'a, F, A> 
 
     fn constants(&self) -> &PoseidonConstants<F, A> {
         self.state.constants
-    }
-
-    fn ensure_absorbing(&mut self) {
-        match self.direction() {
-            Direction::Absorbing => (),
-            Direction::Squeezing => {
-                if self.is_simplex() {
-                    panic!("Simplex sponge cannot absorb after squeezing.");
-                } else {
-                    self.set_direction(Direction::Absorbing);
-                }
-            }
-        }
     }
 
     fn pad(&mut self) {
