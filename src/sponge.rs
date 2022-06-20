@@ -175,7 +175,6 @@ pub trait SpongeTrait<'a, F: PrimeField, A: Arity<F>> {
                     panic!("Duplex sponge must permute exactly `rate` absorbed elements.")
                 }
                 Mode::Simplex => {
-                    dbg!(&self.squeezed(), self.total_size(), self.rate());
                     let final_permutation = self.squeezed() % self.total_size() <= self.rate();
                     assert!(
                         final_permutation,

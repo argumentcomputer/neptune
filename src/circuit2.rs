@@ -169,7 +169,6 @@ where
         constants: &'a PoseidonConstants<Scalar, A>,
     ) -> Self {
         let elements = Self::initial_elements::<CS>();
-        dbg!(elements.len());
         Self::new(elements, constants)
     }
 
