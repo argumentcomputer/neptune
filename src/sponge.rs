@@ -10,8 +10,9 @@ A sponge can be instantiated in either simplex or duplex mode. Once instantiated
 
 At any time, a sponge is operating in one of two directions: squeezing or absorbing. All sponges are initialized in the
 absorbing direction. The number of absorbed field elements is incremented each time an element is absorbed and
-decremented each time an element is squeezed. The count of currently absorbed elements can never decrease below zero, so
-only as many elements as have been absorbed can be squeezed at any time.
+decremented each time an element is squeezed. In duplex mode, the count of currently absorbed elements can never
+decrease below zero, so only as many elements as have been absorbed can be squeezed at any time. In simplex mode, there
+is no limit on the number of elements that can be squeezed, once absorbption is complete.
 
 In simplex mode, absorbing and squeezing cannot be interleaved. First all elements are absorbed, then all needed
 elements are squeezed. At most the number of elements which were absorbed can be squeezed. Elements must be absorbed in
@@ -249,7 +250,7 @@ pub trait SpongeTrait<'a, F: PrimeField, A: Arity<F>> {
     fn squeeze(&mut self, acc: &mut Self::Acc) -> Result<Option<Self::Elt>, Self::Error> {
         self.ensure_squeezing(acc)?;
 
-        if self.available() == 0 {
+        if self.is_duplex() && self.available() == 0 {
             // What has not yet been absorbed cannot be squeezed.
             return Ok(None);
         };
@@ -415,7 +416,7 @@ impl<F: PrimeField, A: Arity<F>> Iterator for Sponge<'_, F, A> {
     fn size_hint(&self) -> (usize, Option<usize>) {
         match self.mode {
             Mode::Duplex => (self.available(), None),
-            Mode::Simplex => (self.available(), Some(self.available())),
+            Mode::Simplex => (0, None),
         }
     }
 }
