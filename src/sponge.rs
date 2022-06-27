@@ -1,5 +1,6 @@
 use crate::hash_type::HashType;
 use crate::poseidon::{Arity, Poseidon, PoseidonConstants};
+use crate::sponge_api::{Hasher, InnerSpongeAPI, SpongeOp, SpongeParameter};
 use crate::{Error, Strength};
 use ff::PrimeField;
 use std::collections::VecDeque;
@@ -54,6 +55,9 @@ pub struct Sponge<'a, F: PrimeField, A: Arity<F>> {
     direction: Direction,
     squeeze_pos: usize,
     queue: VecDeque<F>,
+    parameter: SpongeParameter,
+    tag: F,
+    tag_hasher: Hasher,
 }
 
 pub trait SpongeTrait<'a, F: PrimeField, A: Arity<F>> {
@@ -294,6 +298,7 @@ impl<'a, F: PrimeField, A: Arity<F>> SpongeTrait<'a, F, A> for Sponge<'a, F, A> 
 
     fn new_with_constants(constants: &'a PoseidonConstants<F, A>, mode: Mode) -> Self {
         let poseidon = Poseidon::new(constants);
+        let tag = poseidon.constants.domain_tag;
 
         Self {
             mode,
@@ -303,6 +308,9 @@ impl<'a, F: PrimeField, A: Arity<F>> SpongeTrait<'a, F, A> for Sponge<'a, F, A> 
             squeezed: 0,
             squeeze_pos: 1,
             queue: VecDeque::with_capacity(A::to_usize()),
+            parameter: SpongeParameter::OpSequence(Vec::new()),
+            tag,
+            tag_hasher: Default::default(),
         }
     }
 
@@ -384,14 +392,14 @@ impl<'a, F: PrimeField, A: Arity<F>> SpongeTrait<'a, F, A> for Sponge<'a, F, A> 
     }
 
     fn squeeze_aux(&mut self) -> Self::Elt {
-        let squeezed = self.element(self.squeeze_pos());
-        self.set_squeeze_pos(self.squeeze_pos() + 1);
+        let squeezed = self.element(SpongeTrait::squeeze_pos(self));
+        SpongeTrait::set_squeeze_pos(self, SpongeTrait::squeeze_pos(self) + 1);
 
         squeezed
     }
 
     fn absorb_aux(&mut self, elt: &Self::Elt) -> Self::Elt {
-        self.element(self.absorb_pos()) + elt
+        self.element(SpongeTrait::absorb_pos(self)) + elt
     }
 
     fn absorb_elements(&mut self, elts: &[F], acc: &mut Self::Acc) -> Result<(), Self::Error> {
@@ -418,6 +426,66 @@ impl<F: PrimeField, A: Arity<F>> Iterator for Sponge<'_, F, A> {
             Mode::Duplex => (self.available(), None),
             Mode::Simplex => (0, None),
         }
+    }
+}
+
+impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
+    fn initialize_capacity(&mut self, tag: u128) {
+        let f = F::zero(); // FIXME
+
+        let mut bytes = F::Repr::default();
+        // FIXME: This might not be what we actually want, exactly.
+        bytes.as_mut()[..16].copy_from_slice(&tag.to_be_bytes());
+        self.tag = f;
+
+        self.state.elements[0] = f;
+    }
+
+    fn read_rate_element(&mut self, offset: usize) -> F {
+        self.state.elements[1 + offset]
+    }
+    fn write_rate_element(&mut self, offset: usize, x: F) {
+        self.state.elements[1 + offset] = x;
+    }
+    fn permute(&mut self) {
+        SpongeTrait::permute(self, &mut ()).unwrap();
+    }
+
+    // Supplemental methods needed for a generic implementation.
+    fn capacity(&self) -> usize {
+        SpongeTrait::capacity(self)
+    }
+    fn rate(&self) -> usize {
+        SpongeTrait::rate(self)
+    }
+    fn absorb_pos(&self) -> usize {
+        SpongeTrait::absorb_pos(self) - 1
+    }
+    fn squeeze_pos(&self) -> usize {
+        SpongeTrait::squeeze_pos(self) - 1
+    }
+    fn set_absorb_pos(&mut self, pos: usize) {
+        SpongeTrait::set_absorb_pos(self, pos + 1);
+    }
+    fn set_squeeze_pos(&mut self, pos: usize) {
+        SpongeTrait::set_squeeze_pos(self, pos + 1);
+    }
+
+    fn initialize_hasher(&mut self) {
+        self.tag_hasher = Default::default();
+    }
+    fn update_hasher(&mut self, op: SpongeOp) {
+        self.tag_hasher.update_op(op);
+    }
+    fn finalize_hasher(&mut self) -> u128 {
+        self.tag_hasher.clone().finalize()
+    }
+
+    fn set_parameter(&mut self, p: SpongeParameter) {
+        self.parameter = p;
+    }
+    fn get_parameter(&mut self) -> SpongeParameter {
+        self.parameter.clone()
     }
 }
 

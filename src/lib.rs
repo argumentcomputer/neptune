@@ -55,6 +55,7 @@ mod round_numbers;
 
 /// Sponge
 pub mod sponge;
+pub mod sponge_api;
 pub mod sponge_circuit;
 
 /// Hash types and domain separation tags.
