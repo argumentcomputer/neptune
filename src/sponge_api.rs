@@ -1,6 +1,7 @@
 use crate::poseidon::{Arity, Poseidon, PoseidonConstants};
 use ff::PrimeField;
 
+#[derive(Debug)]
 pub enum Error {
     ParameterUsageMismatch,
 }
@@ -62,11 +63,18 @@ impl Hasher {
     }
 
     pub fn update(&mut self, a: u32) {
-        self.x_i *= self.x;
-        self.state += self.x_i * a as u128;
+        self.x_i = self.x_i.overflowing_mul(self.x).0;
+        // TODO: Is this correct?
+        self.state = self
+            .state
+            .overflowing_add(self.x_i.overflowing_mul(a as u128).0)
+            .0;
     }
 
     fn finish_op(&mut self) {
+        if self.current_op.count() == 0 {
+            return;
+        };
         let op_value = self.current_op.value();
         self.update(op_value);
         self.current_op = self.current_op.reset();
@@ -144,7 +152,7 @@ impl SpongeParameter {
                 let mut hasher = Hasher::new();
 
                 for op in ops {
-                    hasher.update(op.value());
+                    hasher.update_op(*op);
                 }
                 hasher.finalize()
             }
@@ -154,8 +162,9 @@ impl SpongeParameter {
 
 pub trait SpongeAPI<F: PrimeField, A: Arity<F>> {
     fn start(&mut self, p: SpongeParameter);
-    fn absorb(&mut self, length: usize, elements: &[F]);
-    fn squeeze(&mut self, length: usize);
+    // FIXME: absorb_ and squeeze_ are so named to avoid conflicts with the underlying sponge's wrapped API for now.
+    fn absorb_(&mut self, length: usize, elements: &[F]);
+    fn squeeze_(&mut self, length: usize);
     fn finish(&mut self) -> Result<(), Error>;
 }
 
@@ -183,7 +192,8 @@ pub trait InnerSpongeAPI<F: PrimeField, A: Arity<F>> {
 
 impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S {
     fn start(&mut self, p: SpongeParameter) {
-        self.initialize_capacity(p.value());
+        let p_value = p.value();
+        self.initialize_capacity(p_value);
         self.set_parameter(p);
         for i in 0..self.rate() {
             self.write_rate_element(i, F::zero());
@@ -193,38 +203,36 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
         self.initialize_hasher();
     }
 
-    fn absorb(&mut self, length: usize, elements: &[F]) {
+    fn absorb_(&mut self, length: usize, elements: &[F]) {
         assert_eq!(length as usize, elements.len());
         let rate = self.rate();
 
         for element in elements.iter() {
-            let absorb_pos = self.absorb_pos();
-            if absorb_pos == rate {
+            if self.absorb_pos() == rate {
                 self.permute();
                 self.set_absorb_pos(0);
             }
-            self.write_rate_element(absorb_pos, *element);
-            self.set_absorb_pos(absorb_pos + 1);
+            self.write_rate_element(self.absorb_pos(), *element);
+            self.set_absorb_pos(self.absorb_pos() + 1);
         }
         self.set_squeeze_pos(rate);
         self.update_hasher(SpongeOp::Absorb(length as u32));
     }
 
-    fn squeeze(&mut self, length: usize) {
+    fn squeeze_(&mut self, length: usize) {
         let rate = self.rate();
         assert!(length <= rate);
 
         let mut out = Vec::with_capacity(length);
 
-        for i in 0..length {
-            let squeeze_pos = self.squeeze_pos();
-            if squeeze_pos == rate {
+        for _ in 0..length {
+            if self.squeeze_pos() == rate {
                 self.permute();
                 self.set_squeeze_pos(0);
                 self.set_absorb_pos(0);
             }
-            out[i] = self.read_rate_element(squeeze_pos);
-            self.set_squeeze_pos(squeeze_pos + 1);
+            out.push(self.read_rate_element(self.squeeze_pos()));
+            self.set_squeeze_pos(self.squeeze_pos() + 1);
         }
         self.update_hasher(SpongeOp::Squeeze(length as u32));
     }
@@ -232,7 +240,10 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
     fn finish(&mut self) -> Result<(), Error> {
         let result = self.finalize_hasher();
 
-        if result == self.get_parameter().value() {
+        // TODO: move this computation to start or elsewhere.
+        let expected = self.get_parameter().value();
+
+        if result == expected {
             Ok(())
         } else {
             Err(Error::ParameterUsageMismatch)

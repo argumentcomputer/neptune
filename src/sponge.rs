@@ -75,6 +75,11 @@ pub trait SpongeTrait<'a, F: PrimeField, A: Arity<F>> {
         PoseidonConstants::new_constant_length(0)
     }
 
+    fn api_constants() -> PoseidonConstants<F, A> {
+        // FIXME: Add support for an API HashType and create constants specifying that type.
+        PoseidonConstants::new()
+    }
+
     fn mode(&self) -> Mode;
     fn direction(&self) -> Direction;
     fn set_direction(&mut self, direction: Direction);
@@ -478,7 +483,7 @@ impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
         self.tag_hasher.update_op(op);
     }
     fn finalize_hasher(&mut self) -> u128 {
-        self.tag_hasher.clone().finalize()
+        self.tag_hasher.finalize()
     }
 
     fn set_parameter(&mut self, p: SpongeParameter) {
@@ -612,5 +617,65 @@ mod tests {
         assert_eq!(n, output.len());
 
         (output, signature)
+    }
+
+    #[test]
+    fn test_sponge_api_simple() {
+        use crate::sponge_api::SpongeAPI;
+
+        let parameter = SpongeParameter::OpSequence(vec![
+            SpongeOp::Absorb(1),
+            SpongeOp::Absorb(5),
+            SpongeOp::Squeeze(3),
+        ]);
+
+        {
+            let p = Sponge::<Fr, typenum::U5>::api_constants();
+            let mut sponge = Sponge::new_with_constants(&p, Mode::Simplex);
+
+            sponge.start(parameter);
+            sponge.absorb_(1, &[Fr::from(123)]);
+            sponge.absorb_(
+                5,
+                &[
+                    Fr::from(123),
+                    Fr::from(123),
+                    Fr::from(123),
+                    Fr::from(123),
+                    Fr::from(123),
+                ],
+            );
+
+            let _ = sponge.squeeze_(3);
+
+            sponge.finish().unwrap();
+        }
+    }
+
+    #[test]
+    fn test_sponge_api_failure() {
+        use crate::sponge_api::SpongeAPI;
+
+        let parameter = SpongeParameter::OpSequence(vec![
+            SpongeOp::Absorb(1),
+            SpongeOp::Absorb(5),
+            SpongeOp::Squeeze(3),
+        ]);
+
+        {
+            let p = Sponge::<Fr, typenum::U5>::api_constants();
+            let mut sponge = Sponge::new_with_constants(&p, Mode::Simplex);
+
+            sponge.start(parameter);
+            sponge.absorb_(1, &[Fr::from(123)]);
+            sponge.absorb_(
+                4,
+                &[Fr::from(123), Fr::from(123), Fr::from(123), Fr::from(123)],
+            );
+
+            let _ = sponge.squeeze_(3);
+
+            assert!(sponge.finish().is_err());
+        }
     }
 }
