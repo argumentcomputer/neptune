@@ -632,9 +632,10 @@ mod tests {
         {
             let p = Sponge::<Fr, typenum::U5>::api_constants();
             let mut sponge = Sponge::new_with_constants(&p, Mode::Simplex);
+            let acc = &mut ();
 
-            sponge.start(parameter);
-            sponge.absorb_(1, &[Fr::from(123)]);
+            sponge.start(parameter, acc);
+            sponge.absorb_(1, &[Fr::from(123)], acc);
             sponge.absorb_(
                 5,
                 &[
@@ -644,11 +645,12 @@ mod tests {
                     Fr::from(123),
                     Fr::from(123),
                 ],
+                acc,
             );
 
-            let _ = sponge.squeeze_(3);
+            let _ = sponge.squeeze_(3, acc);
 
-            sponge.finish().unwrap();
+            sponge.finish(acc).unwrap();
         }
     }
 
@@ -665,17 +667,19 @@ mod tests {
         {
             let p = Sponge::<Fr, typenum::U5>::api_constants();
             let mut sponge = Sponge::new_with_constants(&p, Mode::Simplex);
+            let acc = &mut ();
 
-            sponge.start(parameter);
-            sponge.absorb_(1, &[Fr::from(123)]);
+            sponge.start(parameter, acc);
+            sponge.absorb_(1, &[Fr::from(123)], acc);
             sponge.absorb_(
                 4,
                 &[Fr::from(123), Fr::from(123), Fr::from(123), Fr::from(123)],
+                acc,
             );
 
-            let _ = sponge.squeeze_(3);
+            let _ = sponge.squeeze_(3, acc);
 
-            assert!(sponge.finish().is_err());
+            assert!(sponge.finish(acc).is_err());
         }
     }
 }

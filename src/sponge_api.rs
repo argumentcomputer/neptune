@@ -160,12 +160,12 @@ impl SpongeParameter {
     }
 }
 
-pub trait SpongeAPI<F: PrimeField, A: Arity<F>> {
-    fn start(&mut self, p: SpongeParameter);
+pub trait SpongeAPI<F: PrimeField, A: Arity<F>, T> {
+    fn start(&mut self, p: SpongeParameter, _: &mut T);
     // FIXME: absorb_ and squeeze_ are so named to avoid conflicts with the underlying sponge's wrapped API for now.
-    fn absorb_(&mut self, length: usize, elements: &[F]);
-    fn squeeze_(&mut self, length: usize);
-    fn finish(&mut self) -> Result<(), Error>;
+    fn absorb_(&mut self, length: usize, elements: &[F], acc: &mut T);
+    fn squeeze_(&mut self, length: usize, acc: &mut T);
+    fn finish(&mut self, _: &mut T) -> Result<(), Error>;
 }
 
 pub trait InnerSpongeAPI<F: PrimeField, A: Arity<F>> {
@@ -190,8 +190,8 @@ pub trait InnerSpongeAPI<F: PrimeField, A: Arity<F>> {
     fn get_parameter(&mut self) -> SpongeParameter;
 }
 
-impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S {
-    fn start(&mut self, p: SpongeParameter) {
+impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>, T> SpongeAPI<F, A, T> for S {
+    fn start(&mut self, p: SpongeParameter, _: &mut T) {
         let p_value = p.value();
         self.initialize_capacity(p_value);
         self.set_parameter(p);
@@ -203,7 +203,7 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
         self.initialize_hasher();
     }
 
-    fn absorb_(&mut self, length: usize, elements: &[F]) {
+    fn absorb_(&mut self, length: usize, elements: &[F], acc: &mut T) {
         assert_eq!(length as usize, elements.len());
         let rate = self.rate();
 
@@ -219,7 +219,7 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
         self.update_hasher(SpongeOp::Absorb(length as u32));
     }
 
-    fn squeeze_(&mut self, length: usize) {
+    fn squeeze_(&mut self, length: usize, acc: &mut T) {
         let rate = self.rate();
         assert!(length <= rate);
 
@@ -237,7 +237,7 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
         self.update_hasher(SpongeOp::Squeeze(length as u32));
     }
 
-    fn finish(&mut self) -> Result<(), Error> {
+    fn finish(&mut self, __: &mut T) -> Result<(), Error> {
         let result = self.finalize_hasher();
 
         // TODO: move this computation to start or elsewhere.
