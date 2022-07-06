@@ -168,11 +168,11 @@ pub trait SpongeAPI<F: PrimeField, A: Arity<F>, T> {
     fn finish(&mut self, _: &mut T) -> Result<(), Error>;
 }
 
-pub trait InnerSpongeAPI<F: PrimeField, A: Arity<F>> {
+pub trait InnerSpongeAPI<F: PrimeField, A: Arity<F>, T> {
     fn initialize_capacity(&mut self, tag: u128);
     fn read_rate_element(&mut self, offset: usize) -> F;
     fn write_rate_element(&mut self, offset: usize, x: F);
-    fn permute(&mut self);
+    fn permute(&mut self, acc: &mut T);
 
     // Supplemental methods needed for a generic implementation.
     fn capacity(&self) -> usize;
@@ -190,7 +190,7 @@ pub trait InnerSpongeAPI<F: PrimeField, A: Arity<F>> {
     fn get_parameter(&mut self) -> SpongeParameter;
 }
 
-impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>, T> SpongeAPI<F, A, T> for S {
+impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A, T>, T> SpongeAPI<F, A, T> for S {
     fn start(&mut self, p: SpongeParameter, _: &mut T) {
         let p_value = p.value();
         self.initialize_capacity(p_value);
@@ -209,7 +209,7 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>, T> SpongeAPI<F, A, T> 
 
         for element in elements.iter() {
             if self.absorb_pos() == rate {
-                self.permute();
+                self.permute(acc);
                 self.set_absorb_pos(0);
             }
             self.write_rate_element(self.absorb_pos(), *element);
@@ -227,7 +227,7 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>, T> SpongeAPI<F, A, T> 
 
         for _ in 0..length {
             if self.squeeze_pos() == rate {
-                self.permute();
+                self.permute(acc);
                 self.set_squeeze_pos(0);
                 self.set_absorb_pos(0);
             }

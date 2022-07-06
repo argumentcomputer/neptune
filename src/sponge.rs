@@ -434,7 +434,7 @@ impl<F: PrimeField, A: Arity<F>> Iterator for Sponge<'_, F, A> {
     }
 }
 
-impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
+impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A, ()> for Sponge<'_, F, A> {
     fn initialize_capacity(&mut self, tag: u128) {
         let f = F::zero(); // FIXME
 
@@ -452,8 +452,8 @@ impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
     fn write_rate_element(&mut self, offset: usize, x: F) {
         self.state.elements[1 + offset] = x;
     }
-    fn permute(&mut self) {
-        SpongeTrait::permute(self, &mut ()).unwrap();
+    fn permute(&mut self, acc: &mut ()) {
+        SpongeTrait::permute(self, acc).unwrap();
     }
 
     // Supplemental methods needed for a generic implementation.
