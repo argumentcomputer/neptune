@@ -6,16 +6,14 @@ use crate::error::{ClError, Error};
 use crate::poseidon::SimplePoseidonBatchHasher;
 #[cfg(any(feature = "cuda", feature = "opencl"))]
 use crate::proteus::gpu::ClBatchHasher;
-use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
-#[cfg(any(feature = "cuda", feature = "opencl"))]
-use ec_gpu::GpuField;
+use crate::{Arity, BatchHasher, NeptuneField, Strength, DEFAULT_STRENGTH};
+use ec_gpu_gen::rust_gpu_tools::Device;
 use ff::PrimeField;
 use generic_array::GenericArray;
-use rust_gpu_tools::Device;
 
 pub enum Batcher<F, A>
 where
-    F: PrimeField,
+    F: NeptuneField,
     A: Arity<F>,
 {
     Cpu(SimplePoseidonBatchHasher<F, A>),
@@ -23,11 +21,10 @@ where
     OpenCl(ClBatchHasher<F, A>),
 }
 
-impl<
-        #[cfg(not(any(feature = "cuda", feature = "opencl")))] F: PrimeField,
-        #[cfg(any(feature = "cuda", feature = "opencl"))] F: PrimeField + GpuField,
-        A: Arity<F>,
-    > Batcher<F, A>
+impl<F, A> Batcher<F, A>
+where
+    F: NeptuneField,
+    A: Arity<F>,
 {
     /// Create a new CPU batcher.
     pub fn new_cpu(max_batch_size: usize) -> Self {
@@ -74,7 +71,7 @@ impl<
 
 impl<F, A> BatchHasher<F, A> for Batcher<F, A>
 where
-    F: PrimeField,
+    F: NeptuneField,
     A: Arity<F>,
 {
     fn hash(&mut self, preimages: &[GenericArray<F, A>]) -> Result<Vec<F>, Error> {

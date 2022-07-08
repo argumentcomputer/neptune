@@ -89,7 +89,7 @@ jobs:
       RUST_LOG: debug
       # Build the kernel only for the single architecture that is used on CI. This should reduce
       # the overall compile-time significantly.
-      NEPTUNE_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
+      EC_GPU_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
     steps:
       - set-env-path
       - install-gpu-deps
@@ -122,7 +122,7 @@ jobs:
       RUST_LOG: debug
       # Build the kernel only for the single architecture that is used on CI. This should reduce
       # the overall compile-time significantly.
-      NEPTUNE_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
+      EC_GPU_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
     steps:
       - set-env-path
       - install-gpu-deps
@@ -136,7 +136,7 @@ jobs:
       RUST_LOG: debug
       # Build the kernel only for the single architecture that is used on CI. This should reduce
       # the overall compile-time significantly.
-      NEPTUNE_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
+      EC_GPU_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
     steps:
       - set-env-path
       - install-gpu-deps
