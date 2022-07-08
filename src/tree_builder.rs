@@ -16,11 +16,11 @@ where
     fn reset(&mut self);
 }
 
-pub struct TreeBuilder<F, TreeArity>
-where
-    F: PrimeField,
+pub struct TreeBuilder<
+    #[cfg(not(any(feature = "cuda", feature = "opencl")))] F: PrimeField,
+    #[cfg(any(feature = "cuda", feature = "opencl"))] F: PrimeField + ec_gpu::GpuField,
     TreeArity: Arity<F>,
-{
+> {
     pub leaf_count: usize,
     data: Vec<F>,
     /// Index of the first unfilled datum.
@@ -30,10 +30,11 @@ where
     rows_to_discard: usize,
 }
 
-impl<F, TreeArity> TreeBuilderTrait<F, TreeArity> for TreeBuilder<F, TreeArity>
-where
-    F: PrimeField,
-    TreeArity: Arity<F>,
+impl<
+        #[cfg(not(any(feature = "cuda", feature = "opencl")))] F: PrimeField,
+        #[cfg(any(feature = "cuda", feature = "opencl"))] F: PrimeField + ec_gpu::GpuField,
+        TreeArity: Arity<F>,
+    > TreeBuilderTrait<F, TreeArity> for TreeBuilder<F, TreeArity>
 {
     fn add_leaves(&mut self, leaves: &[F]) -> Result<(), Error> {
         let start = self.fill_index;
@@ -83,10 +84,11 @@ fn as_generic_arrays<A: Arity<F>, F: PrimeField>(vec: &[F]) -> &[GenericArray<F,
     }
 }
 
-impl<F, TreeArity> TreeBuilder<F, TreeArity>
-where
-    F: PrimeField,
-    TreeArity: Arity<F>,
+impl<
+        #[cfg(not(any(feature = "cuda", feature = "opencl")))] F: PrimeField,
+        #[cfg(any(feature = "cuda", feature = "opencl"))] F: PrimeField + ec_gpu::GpuField,
+        TreeArity: Arity<F>,
+    > TreeBuilder<F, TreeArity>
 {
     pub fn new(
         tree_batcher: Option<Batcher<F, TreeArity>>,

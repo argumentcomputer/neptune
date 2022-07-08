@@ -8,16 +8,16 @@ use crate::poseidon::SimplePoseidonBatchHasher;
 use crate::proteus::gpu::ClBatchHasher;
 use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
 #[cfg(any(feature = "cuda", feature = "opencl"))]
-use ec_gpu::GpuField;
+use ec_gpu::{GpuField, GpuName};
 use ff::PrimeField;
 use generic_array::GenericArray;
 use rust_gpu_tools::Device;
 
-pub enum Batcher<F, A>
-where
-    F: PrimeField,
+pub enum Batcher<
+    #[cfg(not(any(feature = "cuda", feature = "opencl")))] F: PrimeField,
+    #[cfg(any(feature = "cuda", feature = "opencl"))] F: PrimeField + GpuField,
     A: Arity<F>,
-{
+> {
     Cpu(SimplePoseidonBatchHasher<F, A>),
     #[cfg(any(feature = "cuda", feature = "opencl"))]
     OpenCl(ClBatchHasher<F, A>),
@@ -72,10 +72,11 @@ impl<
     }
 }
 
-impl<F, A> BatchHasher<F, A> for Batcher<F, A>
-where
-    F: PrimeField,
-    A: Arity<F>,
+impl<
+        #[cfg(not(any(feature = "cuda", feature = "opencl")))] F: PrimeField,
+        #[cfg(any(feature = "cuda", feature = "opencl"))] F: PrimeField + ec_gpu::GpuField,
+        A: Arity<F>,
+    > BatchHasher<F, A> for Batcher<F, A>
 {
     fn hash(&mut self, preimages: &[GenericArray<F, A>]) -> Result<Vec<F>, Error> {
         match self {

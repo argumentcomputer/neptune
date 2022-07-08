@@ -4,7 +4,7 @@ use crate::error::{ClError, Error};
 use crate::hash_type::HashType;
 use crate::poseidon::PoseidonConstants;
 use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
-use ec_gpu::GpuField;
+use ec_gpu::{GpuField, GpuName};
 use ff::{Field, PrimeField};
 use generic_array::{typenum, ArrayLength, GenericArray};
 use log::info;
@@ -57,12 +57,12 @@ impl<T> opencl::KernelArgument for Buffer<T> {
 #[derive(Debug)]
 struct GpuConstants<F, A>(PoseidonConstants<F, A>)
 where
-    F: PrimeField,
+    F: PrimeField + GpuName,
     A: Arity<F>;
 
 pub struct ClBatchHasher<F, A>
 where
-    F: PrimeField,
+    F: PrimeField + GpuName,
     A: Arity<F>,
 {
     device: Device,
@@ -74,7 +74,7 @@ where
 
 impl<F, A> GpuConstants<F, A>
 where
-    F: PrimeField,
+    F: PrimeField + GpuName,
     A: Arity<F>,
 {
     fn strength(&self) -> Strength {
@@ -102,10 +102,10 @@ where
     }
 
     /// Returns the name of the kernel that can be be called with those contants
-    fn kernel_name(&self, field_name: &str) -> String {
+    fn kernel_name(&self) -> String {
         let arity = A::to_usize();
         let strength = self.strength();
-        format!("hash_preimages_{}_{}_{}", field_name, arity, strength)
+        format!("hash_preimages_{}_{}_{}", F::name(), arity, strength)
     }
 }
 
@@ -164,7 +164,7 @@ where
 const LOCAL_WORK_SIZE: usize = 256;
 impl<F, A> BatchHasher<F, A> for ClBatchHasher<F, A>
 where
-    F: PrimeField,
+    F: PrimeField + GpuName,
     A: Arity<F>,
 {
     fn hash(&mut self, preimages: &[GenericArray<F, A>]) -> Result<Vec<F>, Error> {
@@ -178,24 +178,7 @@ where
         let global_work_size = calc_global_work_size(batch_size, local_work_size);
         let num_hashes = preimages.len();
 
-        // Only one case can possibly ever match.
-        let mut maybe_kernel_name = None;
-        // Those field names below, that are passed into `kernel_name()`, need to match the ones
-        // in `proteus::source::generate_program`.
-        #[cfg(feature = "bls")]
-        if TypeId::of::<F>() == TypeId::of::<Fr>() {
-            maybe_kernel_name = Some(self.constants.kernel_name("Fr"));
-        }
-        #[cfg(feature = "pasta")]
-        if TypeId::of::<F>() == TypeId::of::<Fp>() {
-            maybe_kernel_name = Some(self.constants.kernel_name("Fp"));
-        }
-        #[cfg(feature = "pasta")]
-        if TypeId::of::<F>() == TypeId::of::<Fv>() {
-            maybe_kernel_name = Some(self.constants.kernel_name("Fv"));
-        }
-        let kernel_name = maybe_kernel_name
-            .ok_or_else(|| Error::GpuError("No kernel found for the given field.".to_string()))?;
+        let kernel_name = self.constants.kernel_name();
 
         let closures = program_closures!(|program, _args| -> Result<Vec<F>, Error> {
             let kernel = program.create_kernel(&kernel_name, global_work_size, local_work_size)?;

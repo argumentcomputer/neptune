@@ -5,7 +5,7 @@ mod round_numbers;
 #[cfg(feature = "bls")]
 use blstrs::Scalar as Fr;
 use ec_gpu::GpuField;
-use ec_gpu_gen::Limb;
+use ec_gpu_gen::{Limb, SourceBuilder};
 #[cfg(feature = "pasta")]
 use pasta_curves::{Fp, Fq as Fv};
 
@@ -126,18 +126,17 @@ fn poseidon_source(field: &str, strength: &str, derived_constants: &DerivedConst
 /// parameter is a list of tuples, where the first element contains the standard strength
 /// parameters, the second element is the strengthed one.
 fn generate_program_from_constants<F, L>(
-    field_name: &str,
     derived_constants: &[(DerivedConstants, DerivedConstants)],
 ) -> String
 where
-    F: GpuField,
+    F: GpuField + 'static,
     L: Limb,
 {
-    let mut source = vec![ec_gpu_gen::field::<F, L>(field_name), shared(field_name)];
+    let mut source = vec![shared(&F::name())];
     for (standard, _strengthened) in derived_constants {
-        source.push(poseidon_source(field_name, "standard", standard));
+        source.push(poseidon_source(&F::name(), "standard", standard));
         #[cfg(feature = "strengthened")]
-        source.push(poseidon_source(field_name, "strengthened", &_strengthened));
+        source.push(poseidon_source(&F::name(), "strengthened", &_strengthened));
     }
     source.join("\n")
 }
@@ -179,16 +178,20 @@ where
         derive_constants(36),
     ];
 
+    let source_builder = SourceBuilder::<L>::new();
+    #[cfg(feature = "bls")]
+    let source_builder = source_builder.add_field::<Fr>();
+    #[cfg(feature = "pasta")]
+    let source_builder = source_builder.add_field::<Fp>().add_field::<Fv>();
+
     let source = vec![
-        ec_gpu_gen::common(),
-        // Those field names below, need to match the ones pass into `kernel_name()` in
-        // `proteus::gpu::ClBatchHasher::hash`.
+        source_builder.build(),
         #[cfg(feature = "bls")]
-        generate_program_from_constants::<Fr, L>("Fr", &derived_constants),
+        generate_program_from_constants::<Fr, L>(&derived_constants),
         #[cfg(feature = "pasta")]
-        generate_program_from_constants::<Fp, L>("Fp", &derived_constants),
+        generate_program_from_constants::<Fp, L>(&derived_constants),
         #[cfg(feature = "pasta")]
-        generate_program_from_constants::<Fv, L>("Fv", &derived_constants),
+        generate_program_from_constants::<Fv, L>(&derived_constants),
     ];
     source.join("\n")
 }

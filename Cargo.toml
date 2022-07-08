@@ -76,3 +76,10 @@ pasta = ["pasta_curves/gpu"]
 members = [
   "gbench",
 ]
+
+[patch.crates-io]
+bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "fft-no-gpuengine" }
+blstrs = { git = "https://github.com/filecoin-project/blstrs", branch = "ec-gpu-impl" }
+ec-gpu = { git = "https://github.com/filecoin-project/ec-gpu", branch = "fft-no-gpuengine" }
+ec-gpu-gen = { git = "https://github.com/filecoin-project/ec-gpu", branch = "fft-no-gpuengine" }
+pasta_curves = { git = "https://github.com/filecoin-project/pasta_curves", branch = "ec-gpu-020" }
