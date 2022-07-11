@@ -24,16 +24,8 @@ pub enum HashType<F: PrimeField, A: Arity<F>> {
 }
 
 impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
-    pub fn domain_tag(&self, strength: &Strength) -> F {
-        let with_strength = |x: F| {
-            let mut tmp = x;
-            tmp.add_assign(&Self::strength_tag_component(strength));
-            tmp
-        };
-
-        // every domain tag receives a strength tag
-        // the strength tag is equivalent to: res += 0 or res += 2^32
-        with_strength(match self {
+    pub fn domain_tag(&self) -> F {
+        match self {
             // 2^arity - 1
             HashType::MerkleTree => A::tag(),
             // bitmask
@@ -51,17 +43,7 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
             // NOTE: in order to leave room for future `Strength` tags,
             // we make identifier a multiple of 2^40 rather than 2^32.
             HashType::Custom(ref ctype) => ctype.domain_tag(),
-        })
-    }
-
-    fn strength_tag_component(strength: &Strength) -> F {
-        let id = match strength {
-            // Standard strength doesn't affect the base tag.
-            Strength::Standard => 0,
-            Strength::Strengthened => 1,
-        };
-
-        x_pow2::<F>(id, 32)
+        }
     }
 
     /// Some HashTypes require more testing so are not yet supported, since they are not yet needed.
@@ -124,7 +106,7 @@ mod tests {
 
     #[test]
     fn test_domain_tags() {
-        let merkle_standard = HashType::MerkleTree::<Fr, U8>.domain_tag(&Strength::Standard);
+        let merkle_standard = HashType::MerkleTree::<Fr, U8>.domain_tag();
         let expected_merkle_standard = scalar_from_u64s([
             0x00000000000000ff,
             0x0000000000000000,
@@ -134,16 +116,6 @@ mod tests {
 
         assert_eq!(expected_merkle_standard, merkle_standard);
 
-        let merkle_strengthened =
-            HashType::MerkleTree::<Fr, U8>.domain_tag(&Strength::Strengthened);
-        let expected_merkle_strengthened = scalar_from_u64s([
-            0x00000001000000ff,
-            0x0000000000000000,
-            0x0000000000000000,
-            0x0000000000000000,
-        ]);
-        assert_eq!(expected_merkle_strengthened, merkle_strengthened,);
-
         // TODO: tests for
         // MerkleTreeSparse(u64),
         // VariableLength,
@@ -152,14 +124,13 @@ mod tests {
         let mut all_tags = Vec::new();
 
         for length in 1..15 {
-            let constant_standard =
-                HashType::ConstantLength::<Fr, U15>(length).domain_tag(&Strength::Standard);
+            let constant_standard = HashType::ConstantLength::<Fr, U15>(length).domain_tag();
 
             all_tags.push(constant_standard);
 
             if length <= 8 {
                 let constant_standard_alt_arity =
-                    HashType::ConstantLength::<Fr, U8>(length).domain_tag(&Strength::Standard);
+                    HashType::ConstantLength::<Fr, U8>(length).domain_tag();
 
                 // Constant-length tag is independent of arity.
                 assert_eq!(constant_standard, constant_standard_alt_arity);
@@ -176,32 +147,7 @@ mod tests {
             );
         }
 
-        for length in 1..15 {
-            let constant_strengthened =
-                HashType::ConstantLength::<Fr, U15>(length).domain_tag(&Strength::Strengthened);
-
-            all_tags.push(constant_strengthened);
-
-            if length <= 8 {
-                let constant_strengthened_alt_arity =
-                    HashType::ConstantLength::<Fr, U8>(length).domain_tag(&Strength::Strengthened);
-
-                // Constant-length tag is independent of arity.
-                assert_eq!(constant_strengthened, constant_strengthened_alt_arity);
-            }
-
-            assert_eq!(
-                constant_strengthened,
-                scalar_from_u64s([
-                    0x0000000100000000,
-                    length as u64,
-                    0x0000000000000000,
-                    0x0000000000000000
-                ])
-            );
-        }
-
-        let encryption_standard = HashType::Encryption::<Fr, U8>.domain_tag(&Strength::Standard);
+        let encryption_standard = HashType::Encryption::<Fr, U8>.domain_tag();
         let expected_encryption_standard = scalar_from_u64s([
             0x0000000100000000,
             0x0000000000000000,
@@ -210,20 +156,9 @@ mod tests {
         ]);
         assert_eq!(expected_encryption_standard, encryption_standard,);
 
-        let encryption_strengthened =
-            HashType::Encryption::<Fr, U8>.domain_tag(&Strength::Strengthened);
-        let expected_encryption_strengthened = scalar_from_u64s([
-            0x0000000200000000,
-            0x0000000000000000,
-            0x0000000000000000,
-            0x0000000000000000,
-        ]);
-        assert_eq!(expected_encryption_strengthened, encryption_strengthened);
-
         for index in 1..=256 {
             let custom = HashType::Custom::<Fr, U8>(CType::Arbitrary(index as u64));
-            let standard_custom = custom.domain_tag(&Strength::Standard);
-            let strengthened_custom = custom.domain_tag(&Strength::Strengthened);
+            let standard_custom = custom.domain_tag();
 
             let expected_standard_custom = scalar_from_u64s([
                 0x0000010000000000 * index,
@@ -232,26 +167,12 @@ mod tests {
                 0x0000000000000000,
             ]);
 
-            let expected_strengthened_custom = scalar_from_u64s([
-                0x0000010000000000 * index + 0x0000000100000000,
-                0x0000000000000000,
-                0x0000000000000000,
-                0x0000000000000000,
-            ]);
-
             all_tags.push(expected_standard_custom);
-            all_tags.push(expected_strengthened_custom);
 
             assert_eq!(expected_standard_custom, standard_custom);
-            assert_eq!(expected_strengthened_custom, strengthened_custom);
         }
 
-        all_tags.extend(&[
-            expected_merkle_standard,
-            expected_merkle_strengthened,
-            expected_encryption_standard,
-            expected_encryption_strengthened,
-        ]);
+        all_tags.extend(&[expected_merkle_standard, expected_encryption_standard]);
 
         let mut all_tags_set = HashSet::new();
         all_tags.iter().for_each(|x| {
