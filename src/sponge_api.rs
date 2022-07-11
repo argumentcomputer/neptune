@@ -160,19 +160,25 @@ impl SpongeParameter {
     }
 }
 
-pub trait SpongeAPI<F: PrimeField, A: Arity<F>, T> {
-    fn start(&mut self, p: SpongeParameter, _: &mut T);
+pub trait SpongeAPI<F: PrimeField, A: Arity<F>> {
+    type Acc;
+    type Value;
+
+    fn start(&mut self, p: SpongeParameter, _: &mut Self::Acc);
     // FIXME: absorb_ and squeeze_ are so named to avoid conflicts with the underlying sponge's wrapped API for now.
-    fn absorb_(&mut self, length: usize, elements: &[F], acc: &mut T);
-    fn squeeze_(&mut self, length: usize, acc: &mut T);
-    fn finish(&mut self, _: &mut T) -> Result<(), Error>;
+    fn absorb_(&mut self, length: usize, elements: &[Self::Value], acc: &mut Self::Acc);
+    fn squeeze_(&mut self, length: usize, acc: &mut Self::Acc);
+    fn finish(&mut self, _: &mut Self::Acc) -> Result<(), Error>;
 }
 
-pub trait InnerSpongeAPI<F: PrimeField, A: Arity<F>, T> {
-    fn initialize_capacity(&mut self, tag: u128);
-    fn read_rate_element(&mut self, offset: usize) -> F;
-    fn write_rate_element(&mut self, offset: usize, x: F);
-    fn permute(&mut self, acc: &mut T);
+pub trait InnerSpongeAPI<F: PrimeField, A: Arity<F>> {
+    type Acc;
+    type Value;
+
+    fn initialize_capacity(&mut self, tag: u128, acc: &mut Self::Acc);
+    fn read_rate_element(&mut self, offset: usize) -> Self::Value;
+    fn write_rate_element(&mut self, offset: usize, x: &Self::Value);
+    fn permute(&mut self, acc: &mut Self::Acc);
 
     // Supplemental methods needed for a generic implementation.
     fn capacity(&self) -> usize;
@@ -188,22 +194,27 @@ pub trait InnerSpongeAPI<F: PrimeField, A: Arity<F>, T> {
 
     fn set_parameter(&mut self, p: SpongeParameter);
     fn get_parameter(&mut self) -> SpongeParameter;
+
+    fn zero() -> Self::Value;
 }
 
-impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A, T>, T> SpongeAPI<F, A, T> for S {
-    fn start(&mut self, p: SpongeParameter, _: &mut T) {
+impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S {
+    type Acc = <S as InnerSpongeAPI<F, A>>::Acc;
+    type Value = <S as InnerSpongeAPI<F, A>>::Value;
+
+    fn start(&mut self, p: SpongeParameter, acc: &mut Self::Acc) {
         let p_value = p.value();
-        self.initialize_capacity(p_value);
+        self.initialize_capacity(p_value, acc);
         self.set_parameter(p);
         for i in 0..self.rate() {
-            self.write_rate_element(i, F::zero());
+            self.write_rate_element(i, &Self::zero());
         }
         self.set_absorb_pos(0);
         self.set_squeeze_pos(0);
         self.initialize_hasher();
     }
 
-    fn absorb_(&mut self, length: usize, elements: &[F], acc: &mut T) {
+    fn absorb_(&mut self, length: usize, elements: &[Self::Value], acc: &mut Self::Acc) {
         assert_eq!(length as usize, elements.len());
         let rate = self.rate();
 
@@ -212,14 +223,14 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A, T>, T> SpongeAPI<F, A, 
                 self.permute(acc);
                 self.set_absorb_pos(0);
             }
-            self.write_rate_element(self.absorb_pos(), *element);
+            self.write_rate_element(self.absorb_pos(), element.clone());
             self.set_absorb_pos(self.absorb_pos() + 1);
         }
         self.set_squeeze_pos(rate);
         self.update_hasher(SpongeOp::Absorb(length as u32));
     }
 
-    fn squeeze_(&mut self, length: usize, acc: &mut T) {
+    fn squeeze_(&mut self, length: usize, acc: &mut Self::Acc) {
         let rate = self.rate();
         assert!(length <= rate);
 
@@ -237,7 +248,7 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A, T>, T> SpongeAPI<F, A, 
         self.update_hasher(SpongeOp::Squeeze(length as u32));
     }
 
-    fn finish(&mut self, __: &mut T) -> Result<(), Error> {
+    fn finish(&mut self, __: &mut Self::Acc) -> Result<(), Error> {
         let result = self.finalize_hasher();
 
         // TODO: move this computation to start or elsewhere.

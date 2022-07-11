@@ -4,6 +4,7 @@ use crate::matrix::Matrix;
 use crate::mds::SparseMatrix;
 use crate::poseidon::{Arity, Poseidon, PoseidonConstants};
 use crate::sponge::{Direction, Mode, SpongeTrait};
+use crate::sponge_api::{Hasher, InnerSpongeAPI, SpongeOp, SpongeParameter};
 use bellperson::gadgets::boolean::Boolean;
 use bellperson::gadgets::num::{self, AllocatedNum};
 use bellperson::{ConstraintSystem, LinearCombination, Namespace, SynthesisError};
@@ -27,6 +28,9 @@ where
     state: PoseidonCircuit2<'a, F, A>,
     queue: VecDeque<Elt<F>>,
     permutation_circuits: Vec<PoseidonCircuit2<'a, F, A>>,
+    parameter: SpongeParameter,
+    tag: F,
+    tag_hasher: Hasher,
     _c: PhantomData<C>,
 }
 
@@ -38,6 +42,8 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
     type Error = SynthesisError;
 
     fn new_with_constants(constants: &'a PoseidonConstants<F, A>, mode: Mode) -> Self {
+        let tag = constants.domain_tag;
+
         Self {
             mode,
             direction: Direction::Absorbing,
@@ -49,6 +55,9 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
             state: PoseidonCircuit2::new_empty::<CS>(constants),
             queue: VecDeque::with_capacity(A::to_usize()),
             permutation_circuits: Default::default(),
+            parameter: SpongeParameter::OpSequence(Vec::new()),
+            tag,
+            tag_hasher: Default::default(),
             _c: Default::default(),
         }
     }
@@ -134,15 +143,17 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
     }
 
     fn squeeze_aux(&mut self) -> Self::Elt {
-        let squeezed = self.element(self.squeeze_pos());
-        self.set_squeeze_pos(self.squeeze_pos() + 1);
+        let squeezed = self.element(SpongeTrait::squeeze_pos(self));
+        SpongeTrait::set_squeeze_pos(self, SpongeTrait::squeeze_pos(self) + 1);
 
         squeezed
     }
 
     fn absorb_aux(&mut self, elt: &Self::Elt) -> Self::Elt {
         // Elt::add always returns `Ok`, so `unwrap` is safe.
-        self.element(self.absorb_pos()).add(elt.clone()).unwrap()
+        self.element(SpongeTrait::absorb_pos(self))
+            .add(elt.clone())
+            .unwrap()
     }
 
     fn squeeze_elements(&mut self, count: usize, ns: &mut Self::Acc) -> Vec<Self::Elt> {
@@ -153,6 +164,76 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
             }
         }
         elements
+    }
+}
+
+impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> InnerSpongeAPI<F, A>
+    for SpongeCircuit<'a, F, A, CS>
+{
+    type Acc = Namespace<'a, F, CS>;
+    type Value = Elt<F>;
+
+    fn zero() -> Elt<F> {
+        Elt::num_from_fr::<CS>(F::zero())
+    }
+
+    fn initialize_capacity(&mut self, tag: u128, acc: &mut Self::Acc) {
+        let f = F::zero(); // FIXME
+
+        let mut bytes = F::Repr::default();
+        // FIXME: This might not be what we actually want, exactly.
+        bytes.as_mut()[..16].copy_from_slice(&tag.to_be_bytes());
+        //self.tag = f;
+        let elt = self.make_elt(f, acc);
+
+        self.set_element(0, elt);
+    }
+
+    fn read_rate_element(&mut self, offset: usize) -> Self::Value {
+        self.state.elements[1 + offset].clone()
+    }
+    fn write_rate_element(&mut self, offset: usize, x: &Self::Value) {
+        self.state.elements[1 + offset] = x.clone();
+    }
+    fn permute(&mut self, acc: &mut Self::Acc) {
+        SpongeTrait::permute(self, acc).unwrap();
+    }
+
+    // Supplemental methods needed for a generic implementation.
+    fn capacity(&self) -> usize {
+        SpongeTrait::capacity(self)
+    }
+    fn rate(&self) -> usize {
+        SpongeTrait::rate(self)
+    }
+    fn absorb_pos(&self) -> usize {
+        SpongeTrait::absorb_pos(self) - 1
+    }
+    fn squeeze_pos(&self) -> usize {
+        SpongeTrait::squeeze_pos(self) - 1
+    }
+    fn set_absorb_pos(&mut self, pos: usize) {
+        SpongeTrait::set_absorb_pos(self, pos + 1);
+    }
+    fn set_squeeze_pos(&mut self, pos: usize) {
+        SpongeTrait::set_squeeze_pos(self, pos + 1);
+    }
+
+    fn initialize_hasher(&mut self) {
+        self.tag_hasher = Default::default();
+    }
+    fn update_hasher(&mut self, op: SpongeOp) {
+        self.tag_hasher.update_op(op);
+    }
+    fn finalize_hasher(&mut self) -> u128 {
+        self.tag_hasher.finalize()
+    }
+
+    fn set_parameter(&mut self, p: SpongeParameter) {
+        self.parameter = p;
+    }
+    fn get_parameter(&mut self) -> SpongeParameter {
+        self.parameter.clone()
     }
 }
 
@@ -333,5 +414,86 @@ mod tests {
         }
 
         (output, signature)
+    }
+
+    #[test]
+    fn test_sponge_api_circuit_simple() {
+        use crate::sponge_api::SpongeAPI;
+
+        let parameter = SpongeParameter::OpSequence(vec![
+            SpongeOp::Absorb(1),
+            SpongeOp::Absorb(5),
+            SpongeOp::Squeeze(3),
+        ]);
+
+        {
+            let p = Sponge::<Fr, typenum::U5>::api_constants();
+            let mut sponge = SpongeCircuit::new_with_constants(&p, Mode::Simplex);
+            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut ns = cs.namespace(|| "ns");
+            let acc = &mut ns;
+
+            sponge.start(parameter, acc);
+            sponge.absorb_(
+                1,
+                &[Elt::num_from_fr::<TestConstraintSystem<Fr>>(Fr::from(123))],
+                acc,
+            );
+            sponge.absorb_(
+                5,
+                &[
+                    Elt::num_from_fr::<TestConstraintSystem<Fr>>(Fr::from(123)),
+                    Elt::num_from_fr::<TestConstraintSystem<Fr>>(Fr::from(123)),
+                    Elt::num_from_fr::<TestConstraintSystem<Fr>>(Fr::from(123)),
+                    Elt::num_from_fr::<TestConstraintSystem<Fr>>(Fr::from(123)),
+                    Elt::num_from_fr::<TestConstraintSystem<Fr>>(Fr::from(123)),
+                ],
+                acc,
+            );
+
+            let _ = sponge.squeeze_(3, acc);
+
+            sponge.finish(acc).unwrap();
+        }
+    }
+
+    #[test]
+    fn test_sponge_api_circuit_failure() {
+        use crate::sponge_api::SpongeAPI;
+
+        let parameter = SpongeParameter::OpSequence(vec![
+            SpongeOp::Absorb(1),
+            SpongeOp::Absorb(5),
+            SpongeOp::Squeeze(3),
+        ]);
+
+        {
+            let p = Sponge::<Fr, typenum::U5>::api_constants();
+            let mut sponge = SpongeCircuit::new_with_constants(&p, Mode::Simplex);
+            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut ns = cs.namespace(|| "ns");
+            let acc = &mut ns;
+
+            sponge.start(parameter, acc);
+            sponge.absorb_(
+                1,
+                &[Elt::num_from_fr::<TestConstraintSystem<Fr>>(Fr::from(123))],
+                acc,
+            );
+            sponge.absorb_(
+                4,
+                &[
+                    Elt::num_from_fr::<TestConstraintSystem<Fr>>(Fr::from(123)),
+                    Elt::num_from_fr::<TestConstraintSystem<Fr>>(Fr::from(123)),
+                    Elt::num_from_fr::<TestConstraintSystem<Fr>>(Fr::from(123)),
+                    Elt::num_from_fr::<TestConstraintSystem<Fr>>(Fr::from(123)),
+                ],
+                acc,
+            );
+
+            let _ = sponge.squeeze_(3, acc);
+
+            assert!(sponge.finish(acc).is_err());
+        }
     }
 }
