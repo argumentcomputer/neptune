@@ -5,6 +5,7 @@ use crate::mds::SparseMatrix;
 use crate::poseidon::{Arity, Poseidon, PoseidonConstants};
 use crate::sponge::{Direction, Mode, SpongeTrait};
 use crate::sponge_api::{Hasher, InnerSpongeAPI, SpongeOp, SpongeParameter};
+use crate::Strength;
 use bellperson::gadgets::boolean::Boolean;
 use bellperson::gadgets::num::{self, AllocatedNum};
 use bellperson::{ConstraintSystem, LinearCombination, Namespace, SynthesisError};
@@ -427,7 +428,7 @@ mod tests {
         ]);
 
         {
-            let p = Sponge::<Fr, typenum::U5>::api_constants();
+            let p = Sponge::<Fr, typenum::U5>::api_constants(Strength::Standard);
             let mut sponge = SpongeCircuit::new_with_constants(&p, Mode::Simplex);
             let mut cs = TestConstraintSystem::<Fr>::new();
             let mut ns = cs.namespace(|| "ns");
@@ -468,7 +469,7 @@ mod tests {
         ]);
 
         {
-            let p = Sponge::<Fr, typenum::U5>::api_constants();
+            let p = Sponge::<Fr, typenum::U5>::api_constants(Strength::Standard);
             let mut sponge = SpongeCircuit::new_with_constants(&p, Mode::Simplex);
             let mut cs = TestConstraintSystem::<Fr>::new();
             let mut ns = cs.namespace(|| "ns");

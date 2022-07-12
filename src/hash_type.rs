@@ -21,6 +21,7 @@ pub enum HashType<F: PrimeField, A: Arity<F>> {
     ConstantLength(usize),
     Encryption,
     Custom(CType<F, A>),
+    Sponge,
 }
 
 impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
@@ -43,6 +44,7 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
             // NOTE: in order to leave room for future `Strength` tags,
             // we make identifier a multiple of 2^40 rather than 2^32.
             HashType::Custom(ref ctype) => ctype.domain_tag(),
+            HashType::Sponge => F::zero(),
         }
     }
 
@@ -57,6 +59,7 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
             HashType::ConstantLength(_) => true,
             HashType::Encryption => true,
             HashType::Custom(_) => true,
+            HashType::Sponge => true,
         }
     }
 }
@@ -173,6 +176,13 @@ mod tests {
         }
 
         all_tags.extend(&[expected_merkle_standard, expected_encryption_standard]);
+
+        let standard_sponge = HashType::Sponge::<Fr, U8>.domain_tag();
+        let expected_standard_sponge = scalar_from_u64s([0, 0, 0, 0]);
+
+        all_tags.push(standard_sponge);
+
+        assert_eq!(expected_standard_sponge, standard_sponge);
 
         let mut all_tags_set = HashSet::new();
         all_tags.iter().for_each(|x| {

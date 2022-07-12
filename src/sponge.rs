@@ -60,7 +60,10 @@ pub struct Sponge<'a, F: PrimeField, A: Arity<F>> {
     tag_hasher: Hasher,
 }
 
-pub trait SpongeTrait<'a, F: PrimeField, A: Arity<F>> {
+pub trait SpongeTrait<'a, F: PrimeField, A: Arity<F>>
+where
+    Self: Sized,
+{
     type Acc;
     type Elt;
     type Error;
@@ -75,9 +78,8 @@ pub trait SpongeTrait<'a, F: PrimeField, A: Arity<F>> {
         PoseidonConstants::new_constant_length(0)
     }
 
-    fn api_constants() -> PoseidonConstants<F, A> {
-        // FIXME: Add support for an API HashType and create constants specifying that type.
-        PoseidonConstants::new()
+    fn api_constants(strength: Strength) -> PoseidonConstants<F, A> {
+        PoseidonConstants::new_with_strength_and_type(strength, HashType::Sponge)
     }
 
     fn mode(&self) -> Mode;
@@ -637,7 +639,7 @@ mod tests {
         ]);
 
         {
-            let p = Sponge::<Fr, typenum::U5>::api_constants();
+            let p = Sponge::<Fr, typenum::U5>::api_constants(Strength::Standard);
             let mut sponge = Sponge::new_with_constants(&p, Mode::Simplex);
             let acc = &mut ();
 
@@ -672,7 +674,7 @@ mod tests {
         ]);
 
         {
-            let p = Sponge::<Fr, typenum::U5>::api_constants();
+            let p = Sponge::<Fr, typenum::U5>::api_constants(Strength::Standard);
             let mut sponge = Sponge::new_with_constants(&p, Mode::Simplex);
             let acc = &mut ();
 
