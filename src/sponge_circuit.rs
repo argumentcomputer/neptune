@@ -51,7 +51,7 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
             constants,
             absorbed: 0,
             squeezed: 0,
-            squeeze_pos: 1,
+            squeeze_pos: 0,
             permutation_count: 0,
             state: PoseidonCircuit2::new_empty::<CS>(constants),
             queue: VecDeque::with_capacity(A::to_usize()),
@@ -91,15 +91,16 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
         self.squeeze_pos = squeeze_pos;
     }
     fn absorb_pos(&self) -> usize {
-        self.state.pos
+        self.state.pos - 1
     }
     fn set_absorb_pos(&mut self, pos: usize) {
-        self.state.pos = pos;
+        self.state.pos = pos + 1;
     }
 
     fn element(&self, index: usize) -> Self::Elt {
         self.state.elements[index].clone()
     }
+
     fn set_element(&mut self, index: usize, elt: Self::Elt) {
         self.state.elements[index] = elt;
     }
@@ -144,7 +145,7 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
     }
 
     fn squeeze_aux(&mut self) -> Self::Elt {
-        let squeezed = self.element(SpongeTrait::squeeze_pos(self));
+        let squeezed = self.element(SpongeTrait::squeeze_pos(self) + SpongeTrait::capacity(self));
         SpongeTrait::set_squeeze_pos(self, SpongeTrait::squeeze_pos(self) + 1);
 
         squeezed
@@ -152,7 +153,7 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
 
     fn absorb_aux(&mut self, elt: &Self::Elt) -> Self::Elt {
         // Elt::add always returns `Ok`, so `unwrap` is safe.
-        self.element(SpongeTrait::absorb_pos(self))
+        self.element(SpongeTrait::absorb_pos(self) + SpongeTrait::capacity(self))
             .add(elt.clone())
             .unwrap()
     }
@@ -191,10 +192,10 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> InnerSpongeAP
     }
 
     fn read_rate_element(&mut self, offset: usize) -> Self::Value {
-        self.state.elements[1 + offset].clone()
+        self.element(offset)
     }
     fn write_rate_element(&mut self, offset: usize, x: &Self::Value) {
-        self.state.elements[1 + offset] = x.clone();
+        self.set_element(offset, x.clone());
     }
     fn permute(&mut self, acc: &mut Self::Acc) {
         SpongeTrait::permute(self, acc).unwrap();
@@ -208,16 +209,16 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> InnerSpongeAP
         SpongeTrait::rate(self)
     }
     fn absorb_pos(&self) -> usize {
-        SpongeTrait::absorb_pos(self) - 1
+        SpongeTrait::absorb_pos(self)
     }
     fn squeeze_pos(&self) -> usize {
-        SpongeTrait::squeeze_pos(self) - 1
+        SpongeTrait::squeeze_pos(self)
     }
     fn set_absorb_pos(&mut self, pos: usize) {
-        SpongeTrait::set_absorb_pos(self, pos + 1);
+        SpongeTrait::set_absorb_pos(self, pos);
     }
     fn set_squeeze_pos(&mut self, pos: usize) {
-        SpongeTrait::set_squeeze_pos(self, pos + 1);
+        SpongeTrait::set_squeeze_pos(self, pos);
     }
 
     fn initialize_hasher(&mut self) {
@@ -435,12 +436,14 @@ mod tests {
             let acc = &mut ns;
 
             sponge.start(parameter, acc);
-            sponge.absorb_(
+            SpongeAPI::absorb(
+                &mut sponge,
                 1,
                 &[Elt::num_from_fr::<TestConstraintSystem<Fr>>(Fr::from(123))],
                 acc,
             );
-            sponge.absorb_(
+            SpongeAPI::absorb(
+                &mut sponge,
                 5,
                 &[
                     Elt::num_from_fr::<TestConstraintSystem<Fr>>(Fr::from(123)),
@@ -452,7 +455,7 @@ mod tests {
                 acc,
             );
 
-            let _ = sponge.squeeze_(3, acc);
+            let _ = SpongeAPI::squeeze(&mut sponge, 3, acc);
 
             sponge.finish(acc).unwrap();
         }
@@ -476,12 +479,14 @@ mod tests {
             let acc = &mut ns;
 
             sponge.start(parameter, acc);
-            sponge.absorb_(
+            SpongeAPI::absorb(
+                &mut sponge,
                 1,
                 &[Elt::num_from_fr::<TestConstraintSystem<Fr>>(Fr::from(123))],
                 acc,
             );
-            sponge.absorb_(
+            SpongeAPI::absorb(
+                &mut sponge,
                 4,
                 &[
                     Elt::num_from_fr::<TestConstraintSystem<Fr>>(Fr::from(123)),
@@ -492,7 +497,7 @@ mod tests {
                 acc,
             );
 
-            let _ = sponge.squeeze_(3, acc);
+            let _ = SpongeAPI::squeeze(&mut sponge, 3, acc);
 
             assert!(sponge.finish(acc).is_err());
         }

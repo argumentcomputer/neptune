@@ -165,9 +165,8 @@ pub trait SpongeAPI<F: PrimeField, A: Arity<F>> {
     type Value;
 
     fn start(&mut self, p: SpongeParameter, _: &mut Self::Acc);
-    // FIXME: absorb_ and squeeze_ are so named to avoid conflicts with the underlying sponge's wrapped API for now.
-    fn absorb_(&mut self, length: usize, elements: &[Self::Value], acc: &mut Self::Acc);
-    fn squeeze_(&mut self, length: usize, acc: &mut Self::Acc);
+    fn absorb(&mut self, length: usize, elements: &[Self::Value], acc: &mut Self::Acc);
+    fn squeeze(&mut self, length: usize, acc: &mut Self::Acc);
     fn finish(&mut self, _: &mut Self::Acc) -> Result<(), Error>;
 }
 
@@ -214,7 +213,7 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
         self.initialize_hasher();
     }
 
-    fn absorb_(&mut self, length: usize, elements: &[Self::Value], acc: &mut Self::Acc) {
+    fn absorb(&mut self, length: usize, elements: &[Self::Value], acc: &mut Self::Acc) {
         assert_eq!(length as usize, elements.len());
         let rate = self.rate();
 
@@ -230,7 +229,7 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
         self.update_hasher(SpongeOp::Absorb(length as u32));
     }
 
-    fn squeeze_(&mut self, length: usize, acc: &mut Self::Acc) {
+    fn squeeze(&mut self, length: usize, acc: &mut Self::Acc) {
         let rate = self.rate();
         assert!(length <= rate);
 

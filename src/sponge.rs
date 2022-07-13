@@ -130,7 +130,7 @@ where
         self.absorbed() - self.squeezed()
     }
 
-    fn is_immediately_squeezble(&self) -> bool {
+    fn is_immediately_squeezable(&self) -> bool {
         self.squeeze_pos() < self.absorb_pos()
     }
 
@@ -152,7 +152,7 @@ where
     fn constants(&self) -> &PoseidonConstants<F, A>;
 
     fn can_squeeze_without_permuting(&self) -> bool {
-        self.squeeze_pos() < self.size()
+        self.squeeze_pos() < self.size() - self.capacity()
     }
 
     fn is_exhausted(&self) -> bool {
@@ -178,7 +178,7 @@ where
         // However, padding should only be applied when no more elements will be absorbed.
         // A duplex sponge should never apply padding implicitly, and a simplex sponge should only do so when it is
         // about to apply its final permutation.
-        let unpermuted = self.absorb_pos() - self.capacity();
+        let unpermuted = self.absorb_pos();
         let needs_padding = self.is_absorbing() && unpermuted < self.rate();
 
         if needs_padding {
@@ -198,8 +198,8 @@ where
         }
 
         self.permute_state(acc)?;
-        self.set_absorb_pos(self.capacity());
-        self.set_squeeze_pos(self.capacity());
+        self.set_absorb_pos(0);
+        self.set_squeeze_pos(0);
         Ok(())
     }
 
@@ -213,8 +213,8 @@ where
             Direction::Absorbing => {
                 match self.mode() {
                     Mode::Simplex => {
-                        let done_squeezing_previous = self.squeeze_pos() >= self.size();
-                        let partially_absorbed = self.absorb_pos() > self.capacity();
+                        let done_squeezing_previous = self.squeeze_pos() >= self.rate();
+                        let partially_absorbed = self.absorb_pos() > 0;
 
                         if done_squeezing_previous || partially_absorbed {
                             self.permute(acc)?;
@@ -238,14 +238,14 @@ where
 
         // Add input element to state and advance absorption position.
         let tmp = self.absorb_aux(elt);
-        self.set_element(self.absorb_pos(), tmp);
+        self.set_element(self.absorb_pos() + self.capacity(), tmp);
         self.set_absorb_pos(self.absorb_pos() + 1);
 
         // When position equals size, we need to permute.
-        if self.absorb_pos() >= self.size() {
+        if self.absorb_pos() >= self.rate() {
             if self.is_duplex() {
                 // When we permute, existing unsqueezed elements will be lost. Enqueue them.
-                while self.is_immediately_squeezble() {
+                while self.is_immediately_squeezable() {
                     let elt = self.squeeze_aux();
                     self.enqueue(elt);
                 }
@@ -313,7 +313,7 @@ impl<'a, F: PrimeField, A: Arity<F>> SpongeTrait<'a, F, A> for Sponge<'a, F, A> 
             state: poseidon,
             absorbed: 0,
             squeezed: 0,
-            squeeze_pos: 1,
+            squeeze_pos: 0,
             queue: VecDeque::with_capacity(A::to_usize()),
             parameter: SpongeParameter::OpSequence(Vec::new()),
             tag,
@@ -349,10 +349,10 @@ impl<'a, F: PrimeField, A: Arity<F>> SpongeTrait<'a, F, A> for Sponge<'a, F, A> 
         self.squeeze_pos = squeeze_pos;
     }
     fn absorb_pos(&self) -> usize {
-        self.state.pos
+        self.state.pos - 1
     }
     fn set_absorb_pos(&mut self, pos: usize) {
-        self.state.pos = pos;
+        self.state.pos = pos + 1;
     }
 
     fn element(&self, index: usize) -> Self::Elt {
@@ -399,14 +399,14 @@ impl<'a, F: PrimeField, A: Arity<F>> SpongeTrait<'a, F, A> for Sponge<'a, F, A> 
     }
 
     fn squeeze_aux(&mut self) -> Self::Elt {
-        let squeezed = self.element(SpongeTrait::squeeze_pos(self));
+        let squeezed = self.element(SpongeTrait::squeeze_pos(self) + SpongeTrait::capacity(self));
         SpongeTrait::set_squeeze_pos(self, SpongeTrait::squeeze_pos(self) + 1);
 
         squeezed
     }
 
     fn absorb_aux(&mut self, elt: &Self::Elt) -> Self::Elt {
-        self.element(SpongeTrait::absorb_pos(self)) + elt
+        self.element(SpongeTrait::absorb_pos(self) + SpongeTrait::capacity(self)) + elt
     }
 
     fn absorb_elements(&mut self, elts: &[F], acc: &mut Self::Acc) -> Result<(), Self::Error> {
@@ -456,10 +456,10 @@ impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
     }
 
     fn read_rate_element(&mut self, offset: usize) -> F {
-        self.state.elements[1 + offset]
+        self.element(offset)
     }
     fn write_rate_element(&mut self, offset: usize, x: &F) {
-        self.state.elements[1 + offset] = x.clone();
+        self.set_element(offset, x.clone());
     }
     fn permute(&mut self, acc: &mut ()) {
         SpongeTrait::permute(self, acc).unwrap();
@@ -473,16 +473,16 @@ impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
         SpongeTrait::rate(self)
     }
     fn absorb_pos(&self) -> usize {
-        SpongeTrait::absorb_pos(self) - 1
+        SpongeTrait::absorb_pos(self)
     }
     fn squeeze_pos(&self) -> usize {
-        SpongeTrait::squeeze_pos(self) - 1
+        SpongeTrait::squeeze_pos(self)
     }
     fn set_absorb_pos(&mut self, pos: usize) {
-        SpongeTrait::set_absorb_pos(self, pos + 1);
+        SpongeTrait::set_absorb_pos(self, pos);
     }
     fn set_squeeze_pos(&mut self, pos: usize) {
-        SpongeTrait::set_squeeze_pos(self, pos + 1);
+        SpongeTrait::set_squeeze_pos(self, pos);
     }
 
     fn initialize_hasher(&mut self) {
@@ -644,8 +644,9 @@ mod tests {
             let acc = &mut ();
 
             sponge.start(parameter, acc);
-            sponge.absorb_(1, &[Fr::from(123)], acc);
-            sponge.absorb_(
+            SpongeAPI::absorb(&mut sponge, 1, &[Fr::from(123)], acc);
+            SpongeAPI::absorb(
+                &mut sponge,
                 5,
                 &[
                     Fr::from(123),
@@ -657,7 +658,7 @@ mod tests {
                 acc,
             );
 
-            let _ = sponge.squeeze_(3, acc);
+            let _ = SpongeAPI::squeeze(&mut sponge, 3, acc);
 
             sponge.finish(acc).unwrap();
         }
@@ -679,14 +680,15 @@ mod tests {
             let acc = &mut ();
 
             sponge.start(parameter, acc);
-            sponge.absorb_(1, &[Fr::from(123)], acc);
-            sponge.absorb_(
+            SpongeAPI::absorb(&mut sponge, 1, &[Fr::from(123)], acc);
+            SpongeAPI::absorb(
+                &mut sponge,
                 4,
                 &[Fr::from(123), Fr::from(123), Fr::from(123), Fr::from(123)],
                 acc,
             );
 
-            let _ = sponge.squeeze_(3, acc);
+            let _ = SpongeAPI::squeeze(&mut sponge, 3, acc);
 
             assert!(sponge.finish(acc).is_err());
         }
