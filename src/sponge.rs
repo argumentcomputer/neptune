@@ -506,6 +506,7 @@ impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::*;
     use blstrs::Scalar as Fr;
     use generic_array::typenum;
     use rand::{Rng, SeedableRng};
@@ -658,9 +659,32 @@ mod tests {
                 acc,
             );
 
-            let _ = SpongeAPI::squeeze(&mut sponge, 3, acc);
+            let output = SpongeAPI::squeeze(&mut sponge, 3, acc);
 
             sponge.finish(acc).unwrap();
+            assert_eq!(
+                vec![
+                    scalar_from_u64s([
+                        0x46dd799a1809b1cd,
+                        0x60c9aa7c9934e6fe,
+                        0xc1feadcc674de39c,
+                        0x1ee914dbc85bc558
+                    ]),
+                    scalar_from_u64s([
+                        0x52681367b6689438,
+                        0xe4ac15bed72972e5,
+                        0x05ff5305f28bd2d0,
+                        0x56a75f0015c72379
+                    ]),
+                    scalar_from_u64s([
+                        0x117bb2fe142e7e71,
+                        0x74aaf50cd3dabf9c,
+                        0x83e8d5b434b6c5c1,
+                        0x28d9ffdeba0fa832
+                    ])
+                ],
+                output
+            );
         }
     }
 
