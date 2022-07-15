@@ -145,7 +145,6 @@ where
     }
 
     /// `new_constant_length` creates constants for hashing a constant-sized preimage.
-    /// FIXME: Implement hash for length > rate using sponge.
     pub fn new_constant_length(length: usize) -> Self {
         Self::new_with_strength_and_type(DEFAULT_STRENGTH, HashType::ConstantLength(length))
     }
@@ -376,6 +375,7 @@ where
                 self.pos = self.elements.len();
             }
             HashType::VariableLength => todo!(),
+            HashType::Sponge => (),
             _ => (),
         }
     }
