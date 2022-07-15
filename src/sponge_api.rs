@@ -223,7 +223,7 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
                 self.permute(acc);
                 self.set_absorb_pos(0);
             }
-            self.write_rate_element(self.absorb_pos(), element.clone());
+            self.write_rate_element(self.absorb_pos(), element);
             self.set_absorb_pos(self.absorb_pos() + 1);
         }
         self.set_squeeze_pos(rate);
@@ -249,7 +249,7 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
         out
     }
 
-    fn finish(&mut self, __: &mut Self::Acc) -> Result<(), Error> {
+    fn finish(&mut self, _: &mut Self::Acc) -> Result<(), Error> {
         let result = self.finalize_hasher();
         let expected = self.get_tag();
 

@@ -456,7 +456,7 @@ impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
         self.element(offset + SpongeTrait::capacity(self))
     }
     fn write_rate_element(&mut self, offset: usize, x: &F) {
-        self.set_element(offset + SpongeTrait::capacity(self), x.clone());
+        self.set_element(offset + SpongeTrait::capacity(self), *x);
     }
     fn permute(&mut self, acc: &mut ()) {
         SpongeTrait::permute(self, acc).unwrap();
