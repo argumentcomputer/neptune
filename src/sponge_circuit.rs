@@ -29,7 +29,7 @@ where
     state: PoseidonCircuit2<'a, F, A>,
     queue: VecDeque<Elt<F>>,
     parameter: SpongeParameter,
-    tag: F,
+    tag: u128,
     tag_hasher: Hasher,
     _c: PhantomData<C>,
 }
@@ -42,8 +42,6 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
     type Error = SynthesisError;
 
     fn new_with_constants(constants: &'a PoseidonConstants<F, A>, mode: Mode) -> Self {
-        let tag = constants.domain_tag;
-
         Self {
             mode,
             direction: Direction::Absorbing,
@@ -55,7 +53,7 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
             state: PoseidonCircuit2::new_empty::<CS>(constants),
             queue: VecDeque::with_capacity(A::to_usize()),
             parameter: SpongeParameter::OpSequence(Vec::new()),
-            tag,
+            tag: 0,
             tag_hasher: Default::default(),
             _c: Default::default(),
         }
@@ -178,22 +176,20 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> InnerSpongeAP
     }
 
     fn initialize_capacity(&mut self, tag: u128, acc: &mut Self::Acc) {
-        let f = F::zero(); // FIXME
+        self.tag = tag;
+        let mut repr = F::Repr::default();
+        repr.as_mut()[..16].copy_from_slice(&tag.to_le_bytes());
 
-        let mut bytes = F::Repr::default();
-        // FIXME: This might not be what we actually want, exactly.
-        bytes.as_mut()[..16].copy_from_slice(&tag.to_be_bytes());
-        //self.tag = f;
+        let f = F::from_repr(repr).unwrap();
         let elt = self.make_elt(f, acc);
-
         self.set_element(0, elt);
     }
 
     fn read_rate_element(&mut self, offset: usize) -> Self::Value {
-        self.element(offset)
+        self.element(offset + SpongeTrait::capacity(self))
     }
     fn write_rate_element(&mut self, offset: usize, x: &Self::Value) {
-        self.set_element(offset, x.clone());
+        self.set_element(offset + SpongeTrait::capacity(self), x.clone());
     }
     fn permute(&mut self, acc: &mut Self::Acc) {
         SpongeTrait::permute(self, acc).unwrap();
@@ -234,6 +230,9 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> InnerSpongeAP
     }
     fn get_parameter(&mut self) -> SpongeParameter {
         self.parameter.clone()
+    }
+    fn get_tag(&self) -> u128 {
+        self.tag
     }
 }
 
@@ -426,14 +425,14 @@ mod tests {
             SpongeOp::Squeeze(3),
         ]);
 
-        {
+        let circuit_output = {
             let p = Sponge::<Fr, typenum::U5>::api_constants(Strength::Standard);
             let mut sponge = SpongeCircuit::new_with_constants(&p, Mode::Simplex);
             let mut cs = TestConstraintSystem::<Fr>::new();
             let mut ns = cs.namespace(|| "ns");
             let acc = &mut ns;
 
-            sponge.start(parameter, acc);
+            sponge.start(parameter.clone(), acc);
             SpongeAPI::absorb(
                 &mut sponge,
                 1,
@@ -453,9 +452,43 @@ mod tests {
                 acc,
             );
 
-            let _ = SpongeAPI::squeeze(&mut sponge, 3, acc);
+            let output = SpongeAPI::squeeze(&mut sponge, 3, acc);
 
             sponge.finish(acc).unwrap();
+
+            output
+        };
+
+        let non_circuit_output = {
+            let p = Sponge::<Fr, typenum::U5>::api_constants(Strength::Standard);
+            let mut sponge = Sponge::new_with_constants(&p, Mode::Simplex);
+            let acc = &mut ();
+
+            sponge.start(parameter, acc);
+            SpongeAPI::absorb(&mut sponge, 1, &[Fr::from(123)], acc);
+            SpongeAPI::absorb(
+                &mut sponge,
+                5,
+                &[
+                    Fr::from(123),
+                    Fr::from(123),
+                    Fr::from(123),
+                    Fr::from(123),
+                    Fr::from(123),
+                ],
+                acc,
+            );
+
+            let output = SpongeAPI::squeeze(&mut sponge, 3, acc);
+
+            sponge.finish(acc).unwrap();
+
+            output
+        };
+
+        assert_eq!(non_circuit_output.len(), circuit_output.len());
+        for (circuit, non_circuit) in circuit_output.iter().zip(non_circuit_output) {
+            assert_eq!(circuit.val().unwrap(), non_circuit);
         }
     }
 

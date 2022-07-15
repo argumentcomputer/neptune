@@ -56,7 +56,7 @@ pub struct Sponge<'a, F: PrimeField, A: Arity<F>> {
     squeeze_pos: usize,
     queue: VecDeque<F>,
     parameter: SpongeParameter,
-    tag: F,
+    tag: u128,
     tag_hasher: Hasher,
 }
 
@@ -305,7 +305,6 @@ impl<'a, F: PrimeField, A: Arity<F>> SpongeTrait<'a, F, A> for Sponge<'a, F, A> 
 
     fn new_with_constants(constants: &'a PoseidonConstants<F, A>, mode: Mode) -> Self {
         let poseidon = Poseidon::new(constants);
-        let tag = poseidon.constants.domain_tag;
 
         Self {
             mode,
@@ -316,7 +315,7 @@ impl<'a, F: PrimeField, A: Arity<F>> SpongeTrait<'a, F, A> for Sponge<'a, F, A> 
             squeeze_pos: 0,
             queue: VecDeque::with_capacity(A::to_usize()),
             parameter: SpongeParameter::OpSequence(Vec::new()),
-            tag,
+            tag: 0,
             tag_hasher: Default::default(),
         }
     }
@@ -445,21 +444,19 @@ impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
     }
 
     fn initialize_capacity(&mut self, tag: u128, _: &mut ()) {
-        let f = F::zero(); // FIXME
+        self.tag = tag;
+        let mut repr = F::Repr::default();
+        repr.as_mut()[..16].copy_from_slice(&tag.to_le_bytes());
 
-        let mut bytes = F::Repr::default();
-        // FIXME: This might not be what we actually want, exactly.
-        bytes.as_mut()[..16].copy_from_slice(&tag.to_be_bytes());
-        self.tag = f;
-
-        self.state.elements[0] = f;
+        let f = F::from_repr(repr).unwrap();
+        self.set_element(0, f);
     }
 
     fn read_rate_element(&mut self, offset: usize) -> F {
-        self.element(offset)
+        self.element(offset + SpongeTrait::capacity(self))
     }
     fn write_rate_element(&mut self, offset: usize, x: &F) {
-        self.set_element(offset, x.clone());
+        self.set_element(offset + SpongeTrait::capacity(self), x.clone());
     }
     fn permute(&mut self, acc: &mut ()) {
         SpongeTrait::permute(self, acc).unwrap();
@@ -500,6 +497,9 @@ impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
     }
     fn get_parameter(&mut self) -> SpongeParameter {
         self.parameter.clone()
+    }
+    fn get_tag(&self) -> u128 {
+        self.tag
     }
 }
 

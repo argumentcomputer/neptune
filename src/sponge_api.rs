@@ -166,7 +166,7 @@ pub trait SpongeAPI<F: PrimeField, A: Arity<F>> {
 
     fn start(&mut self, p: SpongeParameter, _: &mut Self::Acc);
     fn absorb(&mut self, length: usize, elements: &[Self::Value], acc: &mut Self::Acc);
-    fn squeeze(&mut self, length: usize, acc: &mut Self::Acc);
+    fn squeeze(&mut self, length: usize, acc: &mut Self::Acc) -> Vec<Self::Value>;
     fn finish(&mut self, _: &mut Self::Acc) -> Result<(), Error>;
 }
 
@@ -193,6 +193,7 @@ pub trait InnerSpongeAPI<F: PrimeField, A: Arity<F>> {
 
     fn set_parameter(&mut self, p: SpongeParameter);
     fn get_parameter(&mut self) -> SpongeParameter;
+    fn get_tag(&self) -> u128;
 
     fn zero() -> Self::Value;
 }
@@ -229,7 +230,7 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
         self.update_hasher(SpongeOp::Absorb(length as u32));
     }
 
-    fn squeeze(&mut self, length: usize, acc: &mut Self::Acc) {
+    fn squeeze(&mut self, length: usize, acc: &mut Self::Acc) -> Vec<Self::Value> {
         let rate = self.rate();
         assert!(length <= rate);
 
@@ -245,13 +246,12 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
             self.set_squeeze_pos(self.squeeze_pos() + 1);
         }
         self.update_hasher(SpongeOp::Squeeze(length as u32));
+        out
     }
 
     fn finish(&mut self, __: &mut Self::Acc) -> Result<(), Error> {
         let result = self.finalize_hasher();
-
-        // TODO: move this computation to start or elsewhere.
-        let expected = self.get_parameter().value();
+        let expected = self.get_tag();
 
         if result == expected {
             Ok(())
