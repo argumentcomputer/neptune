@@ -5,8 +5,9 @@ use crate::{Error, Strength};
 use ff::PrimeField;
 use std::collections::VecDeque;
 
-/*
+// General information on sponge construction: https://keccak.team/files/CSF-0.1.pdf
 
+/*
 A sponge can be instantiated in either simplex or duplex mode. Once instantiated, a sponge's mode never changes.
 
 At any time, a sponge is operating in one of two directions: squeezing or absorbing. All sponges are initialized in the
