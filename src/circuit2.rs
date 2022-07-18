@@ -205,8 +205,26 @@ where
         Ok(elt)
     }
 
-    pub fn apply_padding(&mut self) {
-        // todo!()
+    pub fn apply_padding<CS: ConstraintSystem<Scalar>>(&mut self) {
+        if let HashType::ConstantLength(l) = self.constants.hash_type {
+            let final_pos = 1 + (l % self.constants.arity());
+
+            assert_eq!(
+                self.pos, final_pos,
+                "preimage length does not match constant length required for hash"
+            );
+        };
+        match self.constants.hash_type {
+            HashType::ConstantLength(_) | HashType::Encryption => {
+                for elt in self.elements[self.pos..].iter_mut() {
+                    *elt = Elt::num_from_fr::<CS>(Scalar::zero());
+                }
+                self.pos = self.elements.len();
+            }
+            HashType::VariableLength => todo!(),
+            HashType::Sponge => (),
+            _ => (),
+        }
     }
 
     fn hash_to_allocated<CS: ConstraintSystem<Scalar>>(

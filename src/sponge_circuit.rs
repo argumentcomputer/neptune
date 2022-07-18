@@ -123,7 +123,7 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
     }
 
     fn pad(&mut self) {
-        self.state.apply_padding();
+        self.state.apply_padding::<CS>();
     }
 
     fn permute_state(&mut self, ns: &mut Self::Acc) -> Result<(), Self::Error> {
