@@ -171,10 +171,6 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> InnerSpongeAP
     type Acc = Namespace<'a, F, CS>;
     type Value = Elt<F>;
 
-    fn zero() -> Elt<F> {
-        Elt::num_from_fr::<CS>(F::zero())
-    }
-
     fn initialize_capacity(&mut self, tag: u128, acc: &mut Self::Acc) {
         self.tag = tag;
         let mut repr = F::Repr::default();
@@ -196,9 +192,11 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> InnerSpongeAP
     }
 
     // Supplemental methods needed for a generic implementation.
-    fn capacity(&self) -> usize {
-        SpongeTrait::capacity(self)
+
+    fn zero() -> Elt<F> {
+        Elt::num_from_fr::<CS>(F::zero())
     }
+
     fn rate(&self) -> usize {
         SpongeTrait::rate(self)
     }
@@ -225,12 +223,6 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> InnerSpongeAP
         self.tag_hasher.finalize()
     }
 
-    fn set_parameter(&mut self, p: SpongeParameter) {
-        self.parameter = p;
-    }
-    fn get_parameter(&mut self) -> SpongeParameter {
-        self.parameter.clone()
-    }
     fn get_tag(&self) -> u128 {
         self.tag
     }

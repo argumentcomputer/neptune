@@ -1,3 +1,7 @@
+/// This module implements a variant of the 'Secure Sponge API for Field Elements':  https://hackmd.io/bHgsH6mMStCVibM_wYvb2w
+///
+/// The API is defined by the `SpongeAPI` trait, which is implemented in terms of the `InnerSpongeAPI` trait.
+/// `Neptune` provides implementations of `InnerSpongeAPI` for both `sponge::Sponge` and `sponge_circuit::SpongeCircuit`.
 use crate::poseidon::{Arity, Poseidon, PoseidonConstants};
 use ff::PrimeField;
 
@@ -6,16 +10,13 @@ pub enum Error {
     ParameterUsageMismatch,
 }
 
-// Secure Sponge API for Field Elements
-// https://hackmd.io/bHgsH6mMStCVibM_wYvb2w
-
 #[derive(Clone, Copy, Debug)]
 pub enum SpongeOp {
     Absorb(u32),
     Squeeze(u32),
 }
 
-// A large 128-bit prime, per // https://primes.utm.edu/lists/2small/100bit.html.
+// A large 128-bit prime, per https://primes.utm.edu/lists/2small/100bit.html.
 const HASHER_BASE: u128 = (0 - 159) as u128;
 
 #[derive(Clone, Copy, Debug)]
@@ -54,6 +55,7 @@ impl Hasher {
         h
     }
 
+    /// Update hasher's current op to coalesce absorb/squeeze runs.
     pub fn update_op(&mut self, op: SpongeOp) {
         if self.current_op.matches(op) {
             self.current_op = self.current_op.combine(op)
@@ -64,7 +66,6 @@ impl Hasher {
 
     pub fn update(&mut self, a: u32) {
         self.x_i = self.x_i.overflowing_mul(self.x).0;
-        // TODO: Is this correct?
         self.state = self
             .state
             .overflowing_add(self.x_i.overflowing_mul(a as u128).0)
@@ -180,7 +181,6 @@ pub trait InnerSpongeAPI<F: PrimeField, A: Arity<F>> {
     fn permute(&mut self, acc: &mut Self::Acc);
 
     // Supplemental methods needed for a generic implementation.
-    fn capacity(&self) -> usize;
     fn rate(&self) -> usize;
     fn absorb_pos(&self) -> usize;
     fn squeeze_pos(&self) -> usize;
@@ -191,8 +191,6 @@ pub trait InnerSpongeAPI<F: PrimeField, A: Arity<F>> {
     fn update_hasher(&mut self, op: SpongeOp);
     fn finalize_hasher(&mut self) -> u128;
 
-    fn set_parameter(&mut self, p: SpongeParameter);
-    fn get_parameter(&mut self) -> SpongeParameter;
     fn get_tag(&self) -> u128;
 
     fn zero() -> Self::Value;
@@ -205,7 +203,7 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
     fn start(&mut self, p: SpongeParameter, acc: &mut Self::Acc) {
         let p_value = p.value();
         self.initialize_capacity(p_value, acc);
-        self.set_parameter(p);
+
         for i in 0..self.rate() {
             self.write_rate_element(i, &Self::zero());
         }

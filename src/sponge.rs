@@ -14,7 +14,7 @@ At any time, a sponge is operating in one of two directions: squeezing or absorb
 absorbing direction. The number of absorbed field elements is incremented each time an element is absorbed and
 decremented each time an element is squeezed. In duplex mode, the count of currently absorbed elements can never
 decrease below zero, so only as many elements as have been absorbed can be squeezed at any time. In simplex mode, there
-is no limit on the number of elements that can be squeezed, once absorbption is complete.
+is no limit on the number of elements that can be squeezed, once absorption is complete.
 
 In simplex mode, absorbing and squeezing cannot be interleaved. First all elements are absorbed, then all needed
 elements are squeezed. At most the number of elements which were absorbed can be squeezed. Elements must be absorbed in
@@ -440,10 +440,6 @@ impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
     type Acc = ();
     type Value = F;
 
-    fn zero() -> F {
-        F::zero()
-    }
-
     fn initialize_capacity(&mut self, tag: u128, _: &mut ()) {
         self.tag = tag;
         let mut repr = F::Repr::default();
@@ -464,9 +460,11 @@ impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
     }
 
     // Supplemental methods needed for a generic implementation.
-    fn capacity(&self) -> usize {
-        SpongeTrait::capacity(self)
+
+    fn zero() -> F {
+        F::zero()
     }
+
     fn rate(&self) -> usize {
         SpongeTrait::rate(self)
     }
@@ -493,12 +491,6 @@ impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
         self.tag_hasher.finalize()
     }
 
-    fn set_parameter(&mut self, p: SpongeParameter) {
-        self.parameter = p;
-    }
-    fn get_parameter(&mut self) -> SpongeParameter {
-        self.parameter.clone()
-    }
     fn get_tag(&self) -> u128 {
         self.tag
     }
