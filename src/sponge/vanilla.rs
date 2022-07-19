@@ -233,7 +233,7 @@ where
 
     fn absorb_aux(&mut self, elt: &Self::Elt) -> Self::Elt;
 
-    /// Absorb one field element or panic if duplex sponge is full.
+    /// Absorb one field element
     fn absorb(&mut self, elt: &Self::Elt, acc: &mut Self::Acc) -> Result<(), Self::Error> {
         self.ensure_absorbing();
 
@@ -510,7 +510,7 @@ mod tests {
     fn test_simplex() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
-        // Exercise duplex sponges with eventual size less, equal to, and greater to rate.
+        // Exercise simplex sponges with eventual size less, equal to, and greater to rate.
         for size in 2..10 {
             test_simplex_aux::<Fr, typenum::U4, _>(&mut rng, size);
         }
