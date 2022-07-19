@@ -1,6 +1,6 @@
 use crate::hash_type::HashType;
 use crate::poseidon::{Arity, Poseidon, PoseidonConstants};
-use crate::sponge_api::{Hasher, InnerSpongeAPI, SpongeOp, SpongeParameter};
+use crate::sponge::api::{Hasher, InnerSpongeAPI, SpongeOp, SpongeParameter};
 use crate::{Error, Strength};
 use ff::PrimeField;
 use std::collections::VecDeque;
@@ -624,7 +624,7 @@ mod tests {
 
     #[test]
     fn test_sponge_api_simple() {
-        use crate::sponge_api::SpongeAPI;
+        use crate::sponge::api::SpongeAPI;
 
         let parameter = SpongeParameter::OpSequence(vec![
             SpongeOp::Absorb(1),
@@ -683,7 +683,7 @@ mod tests {
 
     #[test]
     fn test_sponge_api_failure() {
-        use crate::sponge_api::SpongeAPI;
+        use crate::sponge::api::SpongeAPI;
 
         let parameter = SpongeParameter::OpSequence(vec![
             SpongeOp::Absorb(1),

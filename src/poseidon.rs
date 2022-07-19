@@ -604,7 +604,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sponge::SpongeTrait;
+    use crate::sponge::vanilla::SpongeTrait;
     use crate::*;
     use blstrs::Scalar as Fr;
     use ff::Field;
@@ -698,7 +698,7 @@ mod tests {
             p4.input(scalar).unwrap();
         }
 
-        use crate::sponge::{Mode, Sponge};
+        use crate::sponge::vanilla::{Mode, Sponge};
 
         let digest = p.hash();
         let digest2 = p2.hash_in_mode(Correct);

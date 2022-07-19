@@ -3,8 +3,10 @@ use crate::hash_type::HashType;
 use crate::matrix::Matrix;
 use crate::mds::SparseMatrix;
 use crate::poseidon::{Arity, Poseidon, PoseidonConstants};
-use crate::sponge::{Direction, Mode, SpongeTrait};
-use crate::sponge_api::{Hasher, InnerSpongeAPI, SpongeOp, SpongeParameter};
+use crate::sponge::{
+    api::{Hasher, InnerSpongeAPI, SpongeOp, SpongeParameter},
+    vanilla::{Direction, Mode, SpongeTrait},
+};
 use crate::Strength;
 use bellperson::gadgets::boolean::Boolean;
 use bellperson::gadgets::num::{self, AllocatedNum};
@@ -231,7 +233,8 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> InnerSpongeAP
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sponge::Sponge;
+    use crate::sponge::vanilla::Sponge;
+
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use blstrs::Scalar as Fr;
     use generic_array::typenum;
@@ -409,7 +412,7 @@ mod tests {
 
     #[test]
     fn test_sponge_api_circuit_simple() {
-        use crate::sponge_api::SpongeAPI;
+        use crate::sponge::api::SpongeAPI;
 
         let parameter = SpongeParameter::OpSequence(vec![
             SpongeOp::Absorb(1),
@@ -486,7 +489,7 @@ mod tests {
 
     #[test]
     fn test_sponge_api_circuit_failure() {
-        use crate::sponge_api::SpongeAPI;
+        use crate::sponge::api::SpongeAPI;
 
         let parameter = SpongeParameter::OpSequence(vec![
             SpongeOp::Absorb(1),
