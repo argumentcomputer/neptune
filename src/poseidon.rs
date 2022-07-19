@@ -344,6 +344,7 @@ where
 
         Ok(self.pos - 1)
     }
+
     pub fn hash_in_mode(&mut self, mode: HashMode) -> F {
         let res = match mode {
             Correct => hash_correct(self),
