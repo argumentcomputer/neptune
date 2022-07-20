@@ -230,7 +230,6 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
 
     fn squeeze(&mut self, length: usize, acc: &mut Self::Acc) -> Vec<Self::Value> {
         let rate = self.rate();
-        assert!(length <= rate);
 
         let mut out = Vec::with_capacity(length);
 
