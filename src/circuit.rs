@@ -48,8 +48,6 @@ where
 
 /// Similar to `num::Num`, we use `Elt` to accumulate both values and linear combinations, then eventually
 /// extract into a `num::AllocatedNum`, enforcing that the linear combination corresponds to the result.
-/// In this way, all intermediate calculations are accounted for, with the restriction that we can only
-/// accumulate linear (not polynomial) constraints. The set of operations provided here ensure this invariant is maintained.
 #[derive(Clone)]
 enum Elt<Scalar: PrimeField> {
     Allocated(AllocatedNum<Scalar>),

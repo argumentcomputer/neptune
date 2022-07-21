@@ -92,7 +92,8 @@ where
     pub(crate) current_round: usize, // Used in static optimization only for now.
     /// the elements to permute
     pub elements: GenericArray<F, A::ConstantsSize>,
-    pos: usize,
+    /// index of the next element of state to be absorbed
+    pub(crate) pos: usize,
     pub(crate) constants: &'a PoseidonConstants<F, A>,
     _f: PhantomData<F>,
 }
@@ -143,11 +144,8 @@ where
         Self::new_with_strength(DEFAULT_STRENGTH)
     }
 
-    /// `new_constant_length` creates constants for hashing a constant-sized preimage which is <= the max
-    /// supported by the permutation width.
+    /// `new_constant_length` creates constants for hashing a constant-sized preimage.
     pub fn new_constant_length(length: usize) -> Self {
-        let arity = A::to_usize();
-        assert!(length <= arity);
         Self::new_with_strength_and_type(DEFAULT_STRENGTH, HashType::ConstantLength(length))
     }
 
@@ -160,7 +158,7 @@ where
             _ => panic!("cannot set constant length of hash without type ConstantLength."),
         };
 
-        let domain_tag = hash_type.domain_tag(&self.strength);
+        let domain_tag = hash_type.domain_tag();
 
         Self {
             hash_type,
@@ -213,7 +211,7 @@ where
             pre_sparse_matrix,
             sparse_matrixes,
             strength,
-            domain_tag: hash_type.domain_tag(&strength),
+            domain_tag: hash_type.domain_tag(),
             full_rounds,
             half_full_rounds,
             partial_rounds,
@@ -296,7 +294,7 @@ where
                 })
             }
         };
-        let width = preimage.len();
+        let width = preimage.len() + 1;
 
         Poseidon {
             constants_offset: 0,
@@ -321,18 +319,21 @@ where
 
     /// Restore the initial state
     pub fn reset(&mut self) {
+        self.reset_offsets();
+        self.elements[1..].iter_mut().for_each(|l| *l = F::zero());
+        self.elements[0] = self.constants.domain_tag;
+    }
+
+    pub(crate) fn reset_offsets(&mut self) {
         self.constants_offset = 0;
         self.current_round = 0;
-        self.elements[1..]
-            .iter_mut()
-            .for_each(|l| *l = F::from(0u64));
-        self.elements[0] = self.constants.domain_tag;
         self.pos = 1;
     }
 
     /// The returned `usize` represents the element position (within arity) for the input operation
     pub fn input(&mut self, element: F) -> Result<usize, Error> {
         // Cannot input more elements than the defined arity
+        // To hash constant-length input greater than arity, use sponge explicitly.
         if self.pos >= self.constants.width() {
             return Err(Error::FullBuffer);
         }
@@ -345,31 +346,44 @@ where
     }
 
     pub fn hash_in_mode(&mut self, mode: HashMode) -> F {
-        self.apply_padding();
-        match mode {
+        let res = match mode {
             Correct => hash_correct(self),
             OptimizedDynamic => hash_optimized_dynamic(self),
             OptimizedStatic => self.hash_optimized_static(),
-        }
+        };
+        self.reset_offsets();
+        res
     }
 
     pub fn hash(&mut self) -> F {
         self.hash_in_mode(DEFAULT_HASH_MODE)
     }
 
-    fn apply_padding(&mut self) {
+    pub(crate) fn apply_padding(&mut self) {
+        if let HashType::ConstantLength(l) = self.constants.hash_type {
+            let final_pos = 1 + (l % self.constants.arity());
+
+            assert_eq!(
+                self.pos, final_pos,
+                "preimage length does not match constant length required for hash"
+            );
+        };
         match self.constants.hash_type {
-            HashType::ConstantLength(l) => {
-                assert_eq!(
-                    self.pos, l,
-                    "preimage length does not match constant length required for hash"
-                );
-                // There is nothing to do here, but only because the state elements were
-                // initialized to zero, and that is what we need to pad with.
+            HashType::ConstantLength(_) | HashType::Encryption => {
+                for elt in self.elements[self.pos..].iter_mut() {
+                    *elt = F::zero();
+                }
+                self.pos = self.elements.len();
             }
             HashType::VariableLength => todo!(),
+            HashType::Sponge => (),
             _ => (),
         }
+    }
+
+    #[inline]
+    pub fn extract_output(&self) -> F {
+        self.elements[1]
     }
 
     pub fn hash_optimized_static(&mut self) -> F {
@@ -398,7 +412,7 @@ where
             self.constants.compressed_round_constants.len()
         );
 
-        self.elements[1]
+        self.extract_output()
     }
 
     fn full_round(&mut self, last_round: bool) {
@@ -540,7 +554,7 @@ where
         let _ = std::mem::replace(&mut self.elements, result);
     }
 
-    fn debug(&self, msg: &str) {
+    pub(crate) fn debug(&self, msg: &str) {
         dbg!(msg, &self.constants_offset, &self.elements);
     }
 }
@@ -591,6 +605,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sponge::vanilla::SpongeTrait;
     use crate::*;
     use blstrs::Scalar as Fr;
     use ff::Field;
@@ -661,13 +676,21 @@ mod tests {
     where
         A: Arity<Fr>,
     {
-        let constants = PoseidonConstants::<Fr, A>::new_with_strength(strength);
-        let mut p = Poseidon::<Fr, A>::new(&constants);
-        let mut p2 = Poseidon::<Fr, A>::new(&constants);
-        let mut p3 = Poseidon::<Fr, A>::new(&constants);
-        let mut p4 = Poseidon::<Fr, A>::new(&constants);
+        let merkle_constants = PoseidonConstants::<Fr, A>::new_with_strength(strength);
+        let mut p = Poseidon::<Fr, A>::new(&merkle_constants);
+        let mut p2 = Poseidon::<Fr, A>::new(&merkle_constants);
+        let mut p3 = Poseidon::<Fr, A>::new(&merkle_constants);
+        let mut p4 = Poseidon::<Fr, A>::new(&merkle_constants);
 
-        let test_arity = constants.arity();
+        // Constant-length hashing. Should be tested with arities above, below, and equal to the length.
+        let constant_length = 4;
+        let constant_constants = PoseidonConstants::<Fr, A>::new_with_strength_and_type(
+            strength,
+            HashType::ConstantLength(constant_length),
+        );
+        let mut pc = Poseidon::<Fr, A>::new(&constant_constants);
+        let test_arity = A::to_usize();
+
         for n in 0..test_arity {
             let scalar = Fr::from(n as u64);
             p.input(scalar).unwrap();
@@ -675,6 +698,8 @@ mod tests {
             p3.input(scalar).unwrap();
             p4.input(scalar).unwrap();
         }
+
+        use crate::sponge::vanilla::{Mode, Sponge};
 
         let digest = p.hash();
         let digest2 = p2.hash_in_mode(Correct);
@@ -731,7 +756,7 @@ mod tests {
                         0x699303082a6e5d5f,
                     ]),
                     _ => {
-                        dbg!(digest, test_arity);
+                        // dbg!(digest, test_arity);
                         panic!("Arity lacks test vector: {}", test_arity)
                     }
                 }
@@ -741,55 +766,170 @@ mod tests {
             {
                 match test_arity {
                     2 => scalar_from_u64s([
-                        0x3abccd9afc5729b1,
-                        0x31662bb49883a7dc,
-                        0x2a0ae894f8500373,
-                        0x5f3027eb2ef4f4b8,
+                        0x793dbaf54552cd69,
+                        0x5278ecbf17040ea6,
+                        0xc48b36ecc4cab748,
+                        0x33d28a753baee41b,
                     ]),
                     4 => scalar_from_u64s([
-                        0x3ff99d0422e647ee,
-                        0xad9fc9ebbb1515e1,
-                        0x8f57e5ab121004ce,
-                        0x40223b87a6bd4508,
+                        0x4650ee190212aa9a,
+                        0xe5113a254d6f5c7e,
+                        0x54013bdaf68ba4c2,
+                        0x09d8207c51ca3f43,
                     ]),
                     8 => scalar_from_u64s([
-                        0xfffbca3d9ffcda00,
-                        0x7e4929e97170e2ae,
-                        0xfdbbbd4b1b984b9b,
-                        0x1367e3ced3e2edcb,
+                        0x9f0c3c93c3fc894e,
+                        0xe843d4cfba662df1,
+                        0xd69aae8fe1cb63e8,
+                        0x69e61465981ae17e,
                     ]),
                     11 => scalar_from_u64s([
-                        0x29d77677fef45927,
-                        0x39062662a7311a7a,
-                        0xa8650443f7bf09c1,
-                        0x7344835ba9059929,
+                        0x778af344d8f9e8b7,
+                        0xc94fe2ca3f46d433,
+                        0x07abbcf9b406e8d8,
+                        0x28bb83ff439753c0,
                     ]),
                     16 => scalar_from_u64s([
-                        0x48f16b2a7fa48951,
-                        0xbf999529774a192f,
-                        0x273664a5bf751815,
-                        0x6f53127e18f90e54,
+                        0x3cc2664c5fd6ae07,
+                        0xd7431eaaa5e43189,
+                        0x43ba5f418c6ef01d,
+                        0x68d7856395aa217e,
                     ]),
                     24 => scalar_from_u64s([
-                        0xce136f2a6675f44b,
-                        0x0bf949d57c82de03,
-                        0xeab0b00318558589,
-                        0x70015999f995274e,
+                        0x1df1da58827cb39d,
+                        0x0566756b7b80fb10,
+                        0x222eb82c6666be3d,
+                        0x086e4e81a35bfd92,
                     ]),
                     36 => scalar_from_u64s([
-                        0x80098c6336781a9a,
-                        0x591e29eb290a5b8e,
-                        0xd26ff2e8c5dd73e4,
-                        0x41d1adc5ece688c0,
+                        0x636401e9371dc311,
+                        0x8f69e35a702ed188,
+                        0x64d73b2ddc03d43b,
+                        0x609f8c6fe45cc054,
                     ]),
                     _ => {
-                        dbg!(digest, test_arity);
+                        // dbg!(digest, test_arity);
                         panic!("Arity lacks test vector: {}", test_arity)
                     }
                 }
             }
         };
-        dbg!(test_arity);
+
+        let mut constant_sponge = Sponge::new_with_constants(&constant_constants, Mode::Simplex);
+
+        let check_simple = constant_length <= test_arity;
+        for n in 0..constant_length {
+            let scalar = Fr::from(n as u64);
+            constant_sponge.absorb(&scalar, &mut ()).unwrap();
+            if check_simple {
+                pc.input(scalar).unwrap();
+            }
+        }
+
+        let constant_sponge_digest = constant_sponge.squeeze(&mut ()).unwrap();
+        if check_simple {
+            let constant_simple_digest = pc.hash();
+            assert_eq!(constant_simple_digest, constant_sponge_digest.unwrap());
+        }
+
+        let expected_constant = match strength {
+            Strength::Standard =>
+            // Currently secure round constants.
+            {
+                match test_arity {
+                    2 => scalar_from_u64s([
+                        0x1e12d20d3b71ec56,
+                        0x7fb97ce0b8f66322,
+                        0xc923003920c488d4,
+                        0x19e8a3fe6c2df9ff,
+                    ]),
+                    4 => scalar_from_u64s([
+                        0x8935b00a07909d45,
+                        0x4984de08542c9977,
+                        0x39443980077d7593,
+                        0x3a21a6ae86754a29,
+                    ]),
+                    8 => scalar_from_u64s([
+                        0x370a94532f818897,
+                        0x203e3c7c4a85c1f9,
+                        0xcad8b9f8aeb1578f,
+                        0x5c6de4b69de9d792,
+                    ]),
+                    11 => scalar_from_u64s([
+                        0xe9b0cb7d6496f73b,
+                        0x7d2807d793af9582,
+                        0xef841b6bf51a5a39,
+                        0x02550c3a2113c7ca,
+                    ]),
+                    16 => scalar_from_u64s([
+                        0x6a1e563d359c1bdd,
+                        0x6b4493d5d40be9d3,
+                        0x275a6eb04a0ecb37,
+                        0x30ec6fa0fec08504,
+                    ]),
+                    24 => scalar_from_u64s([
+                        0xc540772c5968a299,
+                        0xe2e556352af20f97,
+                        0x15ed0a6b8faba5aa,
+                        0x327bdee6fa2b22b6,
+                    ]),
+                    36 => scalar_from_u64s([
+                        0x7d89cddb70217dcd,
+                        0x02ae71d3d04f0b32,
+                        0xfe52151f29c50f99,
+                        0x626bdae6cad79307,
+                    ]),
+                    _ => unimplemented!(),
+                }
+            }
+            Strength::Strengthened => match test_arity {
+                2 => scalar_from_u64s([
+                    0xcbd4499072dcaff6,
+                    0xdd21d8ebc5db51fb,
+                    0x336c9c5c50e6a71e,
+                    0x28156ad178f3a8fe,
+                ]),
+                4 => scalar_from_u64s([
+                    0xa31d9dc66a42f972,
+                    0xb5be830aae89db0d,
+                    0xdff9a095d1d40420,
+                    0x466e7819bb809c44,
+                ]),
+                8 => scalar_from_u64s([
+                    0x6f2c393786312ee2,
+                    0xadb6da339b87e590,
+                    0xbf626c21fd6cb051,
+                    0x0bb12009ab1fb62a,
+                ]),
+                11 => scalar_from_u64s([
+                    0x6d14b130d0fc1ed5,
+                    0x96e16aa48efc68a9,
+                    0xf199e67d4e6e4bc7,
+                    0x5ee31c86cd42e810,
+                ]),
+                16 => scalar_from_u64s([
+                    0x7dbe8ac03eb7fb25,
+                    0xeb53bd55f5095e4e,
+                    0x5bc3390694ee8251,
+                    0x4611720250274a29,
+                ]),
+                24 => scalar_from_u64s([
+                    0xe2ed71355cbe9268,
+                    0x2400a67b915b45fa,
+                    0xaa5f37dd1685188e,
+                    0x1075afe1e62be162,
+                ]),
+                36 => scalar_from_u64s([
+                    0x8d6f2e5faf077152,
+                    0xd3cd55eeec46751a,
+                    0x4fc92a1baa0ee777,
+                    0x4ed7c0e22446987f,
+                ]),
+                _ => unimplemented!(),
+            },
+        };
+        assert_eq!(expected_constant, constant_sponge_digest.unwrap());
+
         assert_eq!(expected, digest);
     }
 
