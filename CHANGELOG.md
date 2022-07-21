@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 7.0.0 - 2022-7-21
+- Implement sponge construction. (https://github.com/filecoin-project/neptune/pull/151)
+- feat: support other fields (https://github.com/filecoin-project/neptune/pull/135)
+- feat: update dependencies to the latest (https://github.com/filecoin-project/neptune/pull/150)
+
 ## 6.2.0 - 2022-6-10
 - Reduce constraints (https://github.com/filecoin-project/neptune/pull/148)
 
