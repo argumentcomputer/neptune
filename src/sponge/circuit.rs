@@ -173,13 +173,13 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> InnerSpongeAP
     type Acc = Namespace<'a, F, CS>;
     type Value = Elt<F>;
 
-    fn initialize_capacity(&mut self, tag: u128, acc: &mut Self::Acc) {
+    fn initialize_capacity(&mut self, tag: u128, _acc: &mut Self::Acc) {
         self.tag = tag;
         let mut repr = F::Repr::default();
         repr.as_mut()[..16].copy_from_slice(&tag.to_le_bytes());
 
         let f = F::from_repr(repr).unwrap();
-        let elt = self.make_elt(f, acc);
+        let elt = Elt::num_from_fr::<Self::Acc>(f);
         self.set_element(0, elt);
     }
 
@@ -235,7 +235,7 @@ mod tests {
     use super::*;
     use crate::sponge::vanilla::Sponge;
 
-    use bellperson::util_cs::test_cs::TestConstraintSystem;
+    use bellperson::{util_cs::test_cs::TestConstraintSystem, Circuit};
     use blstrs::Scalar as Fr;
     use generic_array::typenum;
     use rand::{Rng, SeedableRng};
@@ -268,8 +268,10 @@ mod tests {
         for i in 0..n {
             let element = F::random(&mut *rng);
             elements.push(element);
-            allocated_elements
-                .push(circuit.make_elt(element, &mut ns.namespace(|| format!("elt{}", i))));
+            allocated_elements.push(Elt::Allocated(
+                AllocatedNum::alloc(&mut ns.namespace(|| format!("elt{}", i)), || Ok(element))
+                    .unwrap(),
+            ));
         }
 
         sponge.absorb_elements(elements.as_slice(), acc).unwrap();
@@ -371,7 +373,10 @@ mod tests {
         // Reminder: a duplex sponge should encode its length as a prefix.
         sponge.absorb(&F::from(n as u64), acc).unwrap();
         circuit
-            .absorb(&circuit.make_elt(F::from(n as u64), &mut ns), &mut ns)
+            .absorb(
+                &Elt::Allocated(AllocatedNum::alloc(&mut ns, || Ok(F::from(n as u64))).unwrap()),
+                &mut ns,
+            )
             .unwrap();
 
         let mut output = Vec::with_capacity(n);
@@ -395,7 +400,9 @@ mod tests {
                 let f = F::from(sponge.absorbed() as u64);
                 sponge.absorb(&f, acc).unwrap();
                 i += 1;
-                let elt = circuit.make_elt(f, &mut ns.namespace(|| format!("{}", i)));
+                let elt = Elt::Allocated(
+                    AllocatedNum::alloc(&mut ns.namespace(|| format!("{}", i)), || Ok(f)).unwrap(),
+                );
                 circuit.absorb(&elt, &mut ns).unwrap();
             }
         }
@@ -527,5 +534,63 @@ mod tests {
 
             assert!(sponge.finish(acc).is_err());
         }
+    }
+
+    struct S<F: PrimeField, A: Arity<F>> {
+        p: PoseidonConstants<F, A>,
+    }
+
+    impl<F: PrimeField, A: Arity<F>> Circuit<F> for S<F, A> {
+        fn synthesize<CS: ConstraintSystem<F>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+            use crate::sponge::api::SpongeAPI;
+
+            let mut sponge = SpongeCircuit::<F, A, _>::new_with_constants(&self.p, Mode::Simplex);
+            let mut ns = cs.namespace(|| "ns");
+
+            let a1 = AllocatedNum::alloc(&mut ns.namespace(|| "a1"), || Ok(F::from(1))).unwrap();
+            let a2 = AllocatedNum::alloc(&mut ns.namespace(|| "a2"), || Ok(F::from(2))).unwrap();
+            let a3 = AllocatedNum::alloc(&mut ns.namespace(|| "a3"), || Ok(F::from(3))).unwrap();
+            let a4 = AllocatedNum::alloc(&mut ns.namespace(|| "a4"), || Ok(F::from(4))).unwrap();
+            let a5 = AllocatedNum::alloc(&mut ns.namespace(|| "a5"), || Ok(F::from(4))).unwrap();
+
+            let acc = &mut ns;
+
+            let parameter =
+                SpongeParameter::OpSequence(vec![SpongeOp::Absorb(5), SpongeOp::Squeeze(1)]);
+
+            sponge.start(parameter, acc);
+
+            SpongeAPI::absorb(
+                &mut sponge,
+                5,
+                &[
+                    Elt::Allocated(a1),
+                    Elt::Allocated(a2),
+                    Elt::Allocated(a3),
+                    Elt::Allocated(a4),
+                    Elt::Allocated(a5),
+                ],
+                acc,
+            );
+
+            let _squeezed = SpongeAPI::squeeze(&mut sponge, 1, acc);
+
+            sponge.finish(acc).unwrap();
+
+            Ok(())
+        }
+    }
+
+    fn test_sponge_synthesis_aux<F: PrimeField, A: Arity<F>>() {
+        let p: PoseidonConstants<F, A> = Sponge::api_constants(Strength::Standard);
+        let s = S { p };
+
+        let mut cs = TestConstraintSystem::<F>::new();
+        s.synthesize(&mut cs).unwrap();
+    }
+
+    #[test]
+    fn test_sponge_synthesis() {
+        test_sponge_synthesis_aux::<Fr, typenum::U4>();
     }
 }
