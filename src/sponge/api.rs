@@ -224,7 +224,7 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
             self.write_rate_element(self.absorb_pos(), element);
             self.set_absorb_pos(self.absorb_pos() + 1);
         }
-        self.set_squeeze_pos(rate);
+        self.set_squeeze_pos(0);
         self.update_hasher(SpongeOp::Absorb(length as u32));
     }
 
