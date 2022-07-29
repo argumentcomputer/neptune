@@ -152,7 +152,7 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
     fn absorb_aux(&mut self, elt: &Self::Elt) -> Self::Elt {
         // Elt::add always returns `Ok`, so `unwrap` is safe.
         self.element(SpongeTrait::absorb_pos(self) + SpongeTrait::capacity(self))
-            .add(elt.clone())
+            .add_ref(elt)
             .unwrap()
     }
 
@@ -213,6 +213,9 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> InnerSpongeAP
     }
     fn set_squeeze_pos(&mut self, pos: usize) {
         SpongeTrait::set_squeeze_pos(self, pos);
+    }
+    fn add(a: Elt<F>, b: &Elt<F>) -> Elt<F> {
+        a.add_ref(b).unwrap()
     }
 
     fn initialize_hasher(&mut self) {

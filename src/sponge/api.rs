@@ -187,6 +187,8 @@ pub trait InnerSpongeAPI<F: PrimeField, A: Arity<F>> {
     fn set_absorb_pos(&mut self, pos: usize);
     fn set_squeeze_pos(&mut self, pos: usize);
 
+    fn add(a: Self::Value, b: &Self::Value) -> Self::Value;
+
     fn initialize_hasher(&mut self);
     fn update_hasher(&mut self, op: SpongeOp);
     fn finalize_hasher(&mut self) -> u128;
@@ -221,7 +223,8 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
                 self.permute(acc);
                 self.set_absorb_pos(0);
             }
-            self.write_rate_element(self.absorb_pos(), element);
+            let old = self.read_rate_element(self.absorb_pos());
+            self.write_rate_element(self.absorb_pos(), &S::add(old, element));
             self.set_absorb_pos(self.absorb_pos() + 1);
         }
         self.set_squeeze_pos(rate);

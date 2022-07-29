@@ -87,6 +87,13 @@ impl<Scalar: PrimeField> Elt<Scalar> {
         }
     }
 
+    pub fn add_ref(self, other: &Elt<Scalar>) -> Result<Elt<Scalar>, SynthesisError> {
+        match (self, other) {
+            (Elt::Num(a), Elt::Num(b)) => Ok(Elt::Num(a.add(b))),
+            (a, b) => Ok(Elt::Num(a.num().add(&b.num()))),
+        }
+    }
+
     /// Scale
     pub fn scale<CS: ConstraintSystem<Scalar>>(
         self,

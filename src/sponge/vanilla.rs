@@ -481,6 +481,9 @@ impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
     fn set_squeeze_pos(&mut self, pos: usize) {
         SpongeTrait::set_squeeze_pos(self, pos);
     }
+    fn add(a: F, b: &F) -> F {
+        a + b
+    }
 
     fn initialize_hasher(&mut self) {
         self.tag_hasher = Default::default();
@@ -659,22 +662,22 @@ mod tests {
             assert_eq!(
                 vec![
                     scalar_from_u64s([
-                        0x46dd799a1809b1cd,
-                        0x60c9aa7c9934e6fe,
-                        0xc1feadcc674de39c,
-                        0x1ee914dbc85bc558
+                        0xba134c4ece935fbc,
+                        0xe73a1d3182eb09eb,
+                        0x2857622b451e20e2,
+                        0x4a04b345e5451f61
                     ]),
                     scalar_from_u64s([
-                        0x52681367b6689438,
-                        0xe4ac15bed72972e5,
-                        0x05ff5305f28bd2d0,
-                        0x56a75f0015c72379
+                        0x20d01828e5f41248,
+                        0x6b2387f9b6218ed6,
+                        0x7733dfe47b8b988d,
+                        0x4150ae19ca65b43f
                     ]),
                     scalar_from_u64s([
-                        0x117bb2fe142e7e71,
-                        0x74aaf50cd3dabf9c,
-                        0x83e8d5b434b6c5c1,
-                        0x28d9ffdeba0fa832
+                        0xd6b7cbcc386afe0d,
+                        0x0ae13bd1b53f84c8,
+                        0x5d58ffaabc54690b,
+                        0x391d3a2807744a01
                     ])
                 ],
                 output
