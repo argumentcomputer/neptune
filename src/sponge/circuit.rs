@@ -536,6 +536,86 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_sponge_api_circuit() {
+        for i in 1..3 {
+            for j in 1..3 {
+                test_sponge_api_circuit_aux::<Fr, typenum::U2>(i, j);
+            }
+        }
+    }
+
+    fn test_sponge_api_circuit_aux<F: PrimeField, A: Arity<F>>(
+        absorb_count: usize,
+        squeeze_count: usize,
+    ) {
+        use crate::sponge::api::SpongeAPI;
+
+        let arity = A::to_usize();
+        let expected_absorb_permutations = 1 + (absorb_count - 1) / arity;
+        let expected_squeeze_permutations = (squeeze_count - 1) / arity;
+        let expected_permutations = expected_absorb_permutations + expected_squeeze_permutations;
+
+        let parameter = SpongeParameter::OpSequence(vec![
+            SpongeOp::Absorb(absorb_count as u32),
+            SpongeOp::Squeeze(squeeze_count as u32),
+        ]);
+
+        let circuit_output = {
+            let p = Sponge::<Fr, typenum::U5>::api_constants(Strength::Standard);
+            let mut sponge = SpongeCircuit::new_with_constants(&p, Mode::Simplex);
+            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut ns = cs.namespace(|| "ns");
+            let acc = &mut ns;
+
+            let elts: Vec<_> =
+                std::iter::repeat(Elt::num_from_fr::<TestConstraintSystem<Fr>>(Fr::from(123)))
+                    .take(absorb_count)
+                    .collect();
+
+            sponge.start(parameter.clone(), acc);
+
+            SpongeAPI::absorb(&mut sponge, absorb_count, &elts[..], acc);
+
+            let output = SpongeAPI::squeeze(&mut sponge, squeeze_count, acc);
+
+            sponge.finish(acc).unwrap();
+
+            dbg!(
+                &expected_permutations,
+                &expected_squeeze_permutations,
+                sponge.permutation_count
+            );
+            assert_eq!(expected_permutations, sponge.permutation_count);
+
+            output
+        };
+
+        let non_circuit_output = {
+            let p = Sponge::<Fr, typenum::U5>::api_constants(Strength::Standard);
+            let mut sponge = Sponge::new_with_constants(&p, Mode::Simplex);
+            let acc = &mut ();
+
+            let elts: Vec<_> = std::iter::repeat(Fr::from(123))
+                .take(absorb_count)
+                .collect();
+
+            sponge.start(parameter, acc);
+            SpongeAPI::absorb(&mut sponge, absorb_count, &elts[..], acc);
+
+            let output = SpongeAPI::squeeze(&mut sponge, squeeze_count, acc);
+
+            sponge.finish(acc).unwrap();
+
+            output
+        };
+
+        assert_eq!(non_circuit_output.len(), circuit_output.len());
+        for (circuit, non_circuit) in circuit_output.iter().zip(non_circuit_output) {
+            assert_eq!(circuit.val().unwrap(), non_circuit);
+        }
+    }
+
     struct S<F: PrimeField, A: Arity<F>> {
         p: PoseidonConstants<F, A>,
     }
@@ -591,6 +671,7 @@ mod tests {
 
     #[test]
     fn test_sponge_synthesis() {
+        test_sponge_synthesis_aux::<Fr, typenum::U2>();
         test_sponge_synthesis_aux::<Fr, typenum::U4>();
     }
 }
