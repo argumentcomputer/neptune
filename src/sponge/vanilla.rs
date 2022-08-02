@@ -1,6 +1,6 @@
 use crate::hash_type::HashType;
 use crate::poseidon::{Arity, Poseidon, PoseidonConstants};
-use crate::sponge::api::{Hasher, InnerSpongeAPI, SpongeOp, SpongeParameter};
+use crate::sponge::api::{Hasher, InnerSpongeAPI, SpongeOp, IO};
 use crate::{Error, Strength};
 use ff::PrimeField;
 use std::collections::VecDeque;
@@ -56,7 +56,7 @@ pub struct Sponge<'a, F: PrimeField, A: Arity<F>> {
     direction: Direction,
     squeeze_pos: usize,
     queue: VecDeque<F>,
-    parameter: SpongeParameter,
+    parameter: IO,
     tag: u128,
     tag_hasher: Hasher,
 }
@@ -316,7 +316,7 @@ impl<'a, F: PrimeField, A: Arity<F>> SpongeTrait<'a, F, A> for Sponge<'a, F, A> 
             squeezed: 0,
             squeeze_pos: 0,
             queue: VecDeque::with_capacity(A::to_usize()),
-            parameter: SpongeParameter::OpSequence(Vec::new()),
+            parameter: IO::Pattern(Vec::new()),
             tag: 0,
             tag_hasher: Default::default(),
         }
@@ -630,7 +630,7 @@ mod tests {
     fn test_sponge_api_simple() {
         use crate::sponge::api::SpongeAPI;
 
-        let parameter = SpongeParameter::OpSequence(vec![
+        let parameter = IO::Pattern(vec![
             SpongeOp::Absorb(1),
             SpongeOp::Absorb(5),
             SpongeOp::Squeeze(3),
@@ -689,7 +689,7 @@ mod tests {
     fn test_sponge_api_failure() {
         use crate::sponge::api::SpongeAPI;
 
-        let parameter = SpongeParameter::OpSequence(vec![
+        let parameter = IO::Pattern(vec![
             SpongeOp::Absorb(1),
             SpongeOp::Absorb(5),
             SpongeOp::Squeeze(3),

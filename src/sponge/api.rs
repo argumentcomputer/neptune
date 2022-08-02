@@ -142,14 +142,14 @@ impl SpongeOp {
 }
 
 #[derive(Clone)]
-pub enum SpongeParameter {
-    OpSequence(Vec<SpongeOp>),
+pub enum IO {
+    Pattern(Vec<SpongeOp>),
 }
 
-impl SpongeParameter {
+impl IO {
     pub fn value(&self) -> u128 {
         match self {
-            Self::OpSequence(ops) => {
+            Self::Pattern(ops) => {
                 let mut hasher = Hasher::new();
 
                 for op in ops {
@@ -165,7 +165,7 @@ pub trait SpongeAPI<F: PrimeField, A: Arity<F>> {
     type Acc;
     type Value;
 
-    fn start(&mut self, p: SpongeParameter, _: &mut Self::Acc);
+    fn start(&mut self, p: IO, _: &mut Self::Acc);
     fn absorb(&mut self, length: usize, elements: &[Self::Value], acc: &mut Self::Acc);
     fn squeeze(&mut self, length: usize, acc: &mut Self::Acc) -> Vec<Self::Value>;
     fn finish(&mut self, _: &mut Self::Acc) -> Result<(), Error>;
@@ -210,7 +210,7 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
     type Acc = <S as InnerSpongeAPI<F, A>>::Acc;
     type Value = <S as InnerSpongeAPI<F, A>>::Value;
 
-    fn start(&mut self, p: SpongeParameter, acc: &mut Self::Acc) {
+    fn start(&mut self, p: IO, acc: &mut Self::Acc) {
         let p_value = p.value();
         self.initialize_state(p_value, acc);
 
