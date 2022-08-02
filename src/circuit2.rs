@@ -292,14 +292,7 @@ where
             };
 
             if first_round {
-                if i == 0 {
-                    // The very first s-box for the constant arity tag can also be computed statically, as a constant.
-                    self.elements[i] = constant_quintic_s_box_pre_add_tag::<CS, Scalar>(
-                        &self.elements[i],
-                        pre_round_key,
-                        post_round_key,
-                    );
-                } else {
+                {
                     self.elements[i] = quintic_s_box_pre_add(
                         cs.namespace(|| format!("quintic s-box {}", i)),
                         &self.elements[i],
@@ -564,7 +557,7 @@ fn constant_quintic_s_box_pre_add_tag<CS: ConstraintSystem<Scalar>, Scalar: Prim
     let mut tag = tag.val().expect("missing tag val");
     pre_round_key.expect("pre_round_key must be provided");
     post_round_key.expect("post_round_key must be provided");
-
+    dbg!(tag);
     crate::quintic_s_box::<Scalar>(&mut tag, pre_round_key.as_ref(), post_round_key.as_ref());
 
     Elt::num_from_fr::<CS>(tag)
@@ -731,23 +724,23 @@ mod tests {
 
     #[test]
     fn test_poseidon_hash() {
-        test_poseidon_hash_aux::<typenum::U2>(Strength::Standard, 234, false);
-        test_poseidon_hash_aux::<typenum::U4>(Strength::Standard, 285, false);
-        test_poseidon_hash_aux::<typenum::U8>(Strength::Standard, 384, false);
-        test_poseidon_hash_aux::<typenum::U16>(Strength::Standard, 582, false);
-        test_poseidon_hash_aux::<typenum::U24>(Strength::Standard, 774, false);
-        test_poseidon_hash_aux::<typenum::U32>(Strength::Standard, 969, false);
-        test_poseidon_hash_aux::<typenum::U36>(Strength::Standard, 1065, false);
+        test_poseidon_hash_aux::<typenum::U2>(Strength::Standard, 237, false);
+        test_poseidon_hash_aux::<typenum::U4>(Strength::Standard, 288, false);
+        test_poseidon_hash_aux::<typenum::U8>(Strength::Standard, 387, false);
+        test_poseidon_hash_aux::<typenum::U16>(Strength::Standard, 585, false);
+        test_poseidon_hash_aux::<typenum::U24>(Strength::Standard, 777, false);
+        test_poseidon_hash_aux::<typenum::U32>(Strength::Standard, 972, false);
+        test_poseidon_hash_aux::<typenum::U36>(Strength::Standard, 1068, false);
 
-        test_poseidon_hash_aux::<typenum::U2>(Strength::Strengthened, 276, false);
-        test_poseidon_hash_aux::<typenum::U4>(Strength::Strengthened, 327, false);
-        test_poseidon_hash_aux::<typenum::U8>(Strength::Strengthened, 429, false);
-        test_poseidon_hash_aux::<typenum::U16>(Strength::Strengthened, 627, false);
-        test_poseidon_hash_aux::<typenum::U24>(Strength::Strengthened, 819, false);
-        test_poseidon_hash_aux::<typenum::U32>(Strength::Strengthened, 1014, false);
-        test_poseidon_hash_aux::<typenum::U36>(Strength::Strengthened, 1110, false);
+        test_poseidon_hash_aux::<typenum::U2>(Strength::Strengthened, 279, false);
+        test_poseidon_hash_aux::<typenum::U4>(Strength::Strengthened, 330, false);
+        test_poseidon_hash_aux::<typenum::U8>(Strength::Strengthened, 432, false);
+        test_poseidon_hash_aux::<typenum::U16>(Strength::Strengthened, 630, false);
+        test_poseidon_hash_aux::<typenum::U24>(Strength::Strengthened, 822, false);
+        test_poseidon_hash_aux::<typenum::U32>(Strength::Strengthened, 1017, false);
+        test_poseidon_hash_aux::<typenum::U36>(Strength::Strengthened, 1113, false);
 
-        test_poseidon_hash_aux::<typenum::U15>(Strength::Standard, 558, true);
+        test_poseidon_hash_aux::<typenum::U15>(Strength::Standard, 561, true);
     }
 
     fn test_poseidon_hash_aux<A>(
@@ -783,13 +776,11 @@ mod tests {
             let expected_constraints_calculated = {
                 let width = 1 + arity;
                 let s_box_cost = 3;
-                let savings_from_domain_tag_sbox = s_box_cost; // The very first s-box output is constant.
 
                 let base_expected_constraints = (width * s_box_cost * constants.full_rounds)
                     + (s_box_cost * constants.partial_rounds);
-                let adjustment = savings_from_domain_tag_sbox;
 
-                base_expected_constraints - adjustment
+                base_expected_constraints
             };
 
             let mut data = |cs: &mut TestConstraintSystem<Fr>, fr_data: &mut [Fr]| {

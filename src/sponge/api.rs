@@ -220,6 +220,7 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
 
         for element in elements.iter() {
             if self.absorb_pos() == rate {
+                dbg!("permute in absorb");
                 self.permute(acc);
                 self.set_absorb_pos(0);
             }
@@ -238,6 +239,7 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
 
         for _ in 0..length {
             if self.squeeze_pos() == rate {
+                dbg!("permute in squeeze");
                 self.permute(acc);
                 self.set_squeeze_pos(0);
                 self.set_absorb_pos(0);

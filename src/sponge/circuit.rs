@@ -132,6 +132,8 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
         self.permutation_count += 1;
         self.state
             .hash(&mut ns.namespace(|| format!("permutation {}", self.permutation_count)))?;
+        dbg!("permute_state");
+
         Ok(())
     }
 
@@ -295,7 +297,7 @@ mod tests {
             .zip(&allocated_result)
             .all(|(a, b)| *a == b.val().unwrap());
 
-        let permutation_constraints = 285; // For U4.
+        let permutation_constraints = 288; // For U4.
         let permutations_per_direction = (n - 1) / A::to_usize();
         let final_absorption_permutation = 1;
         let expected_permutations = 2 * permutations_per_direction + final_absorption_permutation;
