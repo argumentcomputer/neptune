@@ -548,21 +548,6 @@ fn quintic_s_box_pre_add<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
     }
 }
 
-/// Compute l^5 and enforce constraint. If round_key is supplied, add it to l first.
-fn constant_quintic_s_box_pre_add_tag<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
-    tag: &Elt<Scalar>,
-    pre_round_key: Option<Scalar>,
-    post_round_key: Option<Scalar>,
-) -> Elt<Scalar> {
-    let mut tag = tag.val().expect("missing tag val");
-    pre_round_key.expect("pre_round_key must be provided");
-    post_round_key.expect("post_round_key must be provided");
-    dbg!(tag);
-    crate::quintic_s_box::<Scalar>(&mut tag, pre_round_key.as_ref(), post_round_key.as_ref());
-
-    Elt::num_from_fr::<CS>(tag)
-}
-
 /// Calculates square of sum and enforces that constraint.
 pub fn square_sum<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
     mut cs: CS,
