@@ -132,7 +132,6 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
         self.permutation_count += 1;
         self.state
             .hash(&mut ns.namespace(|| format!("permutation {}", self.permutation_count)))?;
-        dbg!("permute_state");
 
         Ok(())
     }
@@ -586,11 +585,6 @@ mod tests {
 
             sponge.finish(acc).unwrap();
 
-            dbg!(
-                &expected_permutations,
-                &expected_squeeze_permutations,
-                sponge.permutation_count
-            );
             assert_eq!(expected_permutations, sponge.permutation_count);
 
             output
