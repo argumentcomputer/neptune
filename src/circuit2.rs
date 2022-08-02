@@ -762,10 +762,8 @@ mod tests {
                 let width = 1 + arity;
                 let s_box_cost = 3;
 
-                let base_expected_constraints = (width * s_box_cost * constants.full_rounds)
-                    + (s_box_cost * constants.partial_rounds);
-
-                base_expected_constraints
+                (width * s_box_cost * constants.full_rounds)
+                    + (s_box_cost * constants.partial_rounds)
             };
 
             let mut data = |cs: &mut TestConstraintSystem<Fr>, fr_data: &mut [Fr]| {
