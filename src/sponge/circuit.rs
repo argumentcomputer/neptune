@@ -31,8 +31,6 @@ where
     state: PoseidonCircuit2<'a, F, A>,
     queue: VecDeque<Elt<F>>,
     pattern: IOPattern,
-    tag: u128,
-    tag_hasher: Hasher,
     io_count: usize,
     _c: PhantomData<C>,
 }
@@ -56,8 +54,6 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
             state: PoseidonCircuit2::new_empty::<CS>(constants),
             queue: VecDeque::with_capacity(A::to_usize()),
             pattern: IOPattern(Vec::new()),
-            tag: 0,
-            tag_hasher: Default::default(),
             io_count: 0,
             _c: Default::default(),
         }
@@ -177,7 +173,6 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> InnerSpongeAP
     type Value = Elt<F>;
 
     fn initialize_capacity(&mut self, tag: u128, _acc: &mut Self::Acc) {
-        self.tag = tag;
         let mut repr = F::Repr::default();
         repr.as_mut()[..16].copy_from_slice(&tag.to_le_bytes());
 
@@ -219,20 +214,6 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> InnerSpongeAP
     }
     fn add(a: Elt<F>, b: &Elt<F>) -> Elt<F> {
         a.add_ref(b).unwrap()
-    }
-
-    fn initialize_hasher(&mut self) {
-        self.tag_hasher = Default::default();
-    }
-    fn update_hasher(&mut self, op: SpongeOp) {
-        self.tag_hasher.update_op(op);
-    }
-    fn finalize_hasher(&mut self) -> u128 {
-        self.tag_hasher.finalize()
-    }
-
-    fn get_tag(&self) -> u128 {
-        self.tag
     }
 
     fn pattern(&self) -> &IOPattern {

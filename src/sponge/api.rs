@@ -200,12 +200,6 @@ pub trait InnerSpongeAPI<F: PrimeField, A: Arity<F>> {
 
     fn increment_io_count(&mut self) -> usize;
 
-    fn initialize_hasher(&mut self);
-    fn update_hasher(&mut self, op: SpongeOp);
-    fn finalize_hasher(&mut self) -> u128;
-
-    fn get_tag(&self) -> u128;
-
     fn zero() -> Self::Value;
 }
 
@@ -220,7 +214,6 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
 
         self.set_absorb_pos(0);
         self.set_squeeze_pos(0);
-        self.initialize_hasher();
     }
 
     fn absorb(&mut self, length: u32, elements: &[Self::Value], acc: &mut Self::Acc) {
@@ -241,7 +234,6 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
         assert_eq!(Some(&op), self.pattern().op_at(old_count));
 
         self.set_squeeze_pos(rate);
-        self.update_hasher(op);
     }
 
     fn squeeze(&mut self, length: u32, acc: &mut Self::Acc) -> Vec<Self::Value> {
@@ -262,19 +254,15 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
         let old_count = self.increment_io_count();
         assert_eq!(Some(&op), self.pattern().op_at(old_count));
 
-        self.increment_io_count();
-        self.update_hasher(op);
         out
     }
 
     fn finish(&mut self, acc: &mut Self::Acc) -> Result<(), Error> {
-        let result = self.finalize_hasher();
-        let expected = self.get_tag();
-
         // Clear state.
-        self.initialize_state(expected, acc);
+        self.initialize_state(0, acc);
+        let final_io_count = self.increment_io_count();
 
-        if result == expected {
+        if final_io_count == self.pattern().0.len() {
             Ok(())
         } else {
             Err(Error::ParameterUsageMismatch)

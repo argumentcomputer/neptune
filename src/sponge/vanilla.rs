@@ -57,8 +57,6 @@ pub struct Sponge<'a, F: PrimeField, A: Arity<F>> {
     squeeze_pos: usize,
     queue: VecDeque<F>,
     pattern: IOPattern,
-    tag: u128,
-    tag_hasher: Hasher,
     io_count: usize,
 }
 
@@ -318,8 +316,6 @@ impl<'a, F: PrimeField, A: Arity<F>> SpongeTrait<'a, F, A> for Sponge<'a, F, A> 
             squeeze_pos: 0,
             queue: VecDeque::with_capacity(A::to_usize()),
             pattern: IOPattern(Vec::new()),
-            tag: 0,
-            tag_hasher: Default::default(),
             io_count: 0,
         }
     }
@@ -444,7 +440,6 @@ impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
     type Value = F;
 
     fn initialize_capacity(&mut self, tag: u128, _: &mut ()) {
-        self.tag = tag;
         let mut repr = F::Repr::default();
         repr.as_mut()[..16].copy_from_slice(&tag.to_le_bytes());
 
@@ -485,20 +480,6 @@ impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
     }
     fn add(a: F, b: &F) -> F {
         a + b
-    }
-
-    fn initialize_hasher(&mut self) {
-        self.tag_hasher = Default::default();
-    }
-    fn update_hasher(&mut self, op: SpongeOp) {
-        self.tag_hasher.update_op(op);
-    }
-    fn finalize_hasher(&mut self) -> u128 {
-        self.tag_hasher.finalize()
-    }
-
-    fn get_tag(&self) -> u128 {
-        self.tag
     }
 
     fn pattern(&self) -> &IOPattern {
