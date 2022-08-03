@@ -10,10 +10,28 @@ pub enum Error {
     ParameterUsageMismatch,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SpongeOp {
     Absorb(u32),
     Squeeze(u32),
+}
+
+#[derive(Clone, Debug)]
+pub struct IOPattern(pub Vec<SpongeOp>);
+
+impl IOPattern {
+    pub fn value(&self) -> u128 {
+        let mut hasher = Hasher::new();
+
+        for op in self.0.iter() {
+            hasher.update_op(*op);
+        }
+        hasher.finalize()
+    }
+
+    pub fn op_at(&self, i: usize) -> Option<&SpongeOp> {
+        self.0.get(i)
+    }
 }
 
 // A large 128-bit prime, per https://primes.utm.edu/lists/2small/100bit.html.
@@ -141,33 +159,13 @@ impl SpongeOp {
     }
 }
 
-#[derive(Clone)]
-pub enum IO {
-    Pattern(Vec<SpongeOp>),
-}
-
-impl IO {
-    pub fn value(&self) -> u128 {
-        match self {
-            Self::Pattern(ops) => {
-                let mut hasher = Hasher::new();
-
-                for op in ops {
-                    hasher.update_op(*op);
-                }
-                hasher.finalize()
-            }
-        }
-    }
-}
-
 pub trait SpongeAPI<F: PrimeField, A: Arity<F>> {
     type Acc;
     type Value;
 
-    fn start(&mut self, p: IO, _: &mut Self::Acc);
-    fn absorb(&mut self, length: usize, elements: &[Self::Value], acc: &mut Self::Acc);
-    fn squeeze(&mut self, length: usize, acc: &mut Self::Acc) -> Vec<Self::Value>;
+    fn start(&mut self, p: IOPattern, _: &mut Self::Acc);
+    fn absorb(&mut self, length: u32, elements: &[Self::Value], acc: &mut Self::Acc);
+    fn squeeze(&mut self, length: u32, acc: &mut Self::Acc) -> Vec<Self::Value>;
     fn finish(&mut self, _: &mut Self::Acc) -> Result<(), Error>;
 }
 
@@ -197,6 +195,11 @@ pub trait InnerSpongeAPI<F: PrimeField, A: Arity<F>> {
         }
     }
 
+    fn pattern(&self) -> &IOPattern;
+    fn set_pattern(&mut self, pattern: IOPattern);
+
+    fn increment_io_count(&mut self) -> usize;
+
     fn initialize_hasher(&mut self);
     fn update_hasher(&mut self, op: SpongeOp);
     fn finalize_hasher(&mut self) -> u128;
@@ -210,8 +213,9 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
     type Acc = <S as InnerSpongeAPI<F, A>>::Acc;
     type Value = <S as InnerSpongeAPI<F, A>>::Value;
 
-    fn start(&mut self, p: IO, acc: &mut Self::Acc) {
+    fn start(&mut self, p: IOPattern, acc: &mut Self::Acc) {
         let p_value = p.value();
+        self.set_pattern(p);
         self.initialize_state(p_value, acc);
 
         self.set_absorb_pos(0);
@@ -219,7 +223,7 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
         self.initialize_hasher();
     }
 
-    fn absorb(&mut self, length: usize, elements: &[Self::Value], acc: &mut Self::Acc) {
+    fn absorb(&mut self, length: u32, elements: &[Self::Value], acc: &mut Self::Acc) {
         assert_eq!(length as usize, elements.len());
         let rate = self.rate();
 
@@ -232,14 +236,18 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
             self.write_rate_element(self.absorb_pos(), &S::add(old, element));
             self.set_absorb_pos(self.absorb_pos() + 1);
         }
+        let op = SpongeOp::Absorb(length);
+        let old_count = self.increment_io_count();
+        assert_eq!(Some(&op), self.pattern().op_at(old_count));
+
         self.set_squeeze_pos(rate);
-        self.update_hasher(SpongeOp::Absorb(length as u32));
+        self.update_hasher(op);
     }
 
-    fn squeeze(&mut self, length: usize, acc: &mut Self::Acc) -> Vec<Self::Value> {
+    fn squeeze(&mut self, length: u32, acc: &mut Self::Acc) -> Vec<Self::Value> {
         let rate = self.rate();
 
-        let mut out = Vec::with_capacity(length);
+        let mut out = Vec::with_capacity(length as usize);
 
         for _ in 0..length {
             if self.squeeze_pos() == rate {
@@ -250,7 +258,12 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
             out.push(self.read_rate_element(self.squeeze_pos()));
             self.set_squeeze_pos(self.squeeze_pos() + 1);
         }
-        self.update_hasher(SpongeOp::Squeeze(length as u32));
+        let op = SpongeOp::Squeeze(length);
+        let old_count = self.increment_io_count();
+        assert_eq!(Some(&op), self.pattern().op_at(old_count));
+
+        self.increment_io_count();
+        self.update_hasher(op);
         out
     }
 

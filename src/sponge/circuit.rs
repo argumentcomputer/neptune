@@ -4,7 +4,7 @@ use crate::matrix::Matrix;
 use crate::mds::SparseMatrix;
 use crate::poseidon::{Arity, Poseidon, PoseidonConstants};
 use crate::sponge::{
-    api::{Hasher, InnerSpongeAPI, SpongeOp, IO},
+    api::{Hasher, IOPattern, InnerSpongeAPI, SpongeOp},
     vanilla::{Direction, Mode, SpongeTrait},
 };
 use crate::Strength;
@@ -30,9 +30,10 @@ where
     permutation_count: usize,
     state: PoseidonCircuit2<'a, F, A>,
     queue: VecDeque<Elt<F>>,
-    parameter: IO,
+    pattern: IOPattern,
     tag: u128,
     tag_hasher: Hasher,
+    io_count: usize,
     _c: PhantomData<C>,
 }
 
@@ -54,9 +55,10 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
             permutation_count: 0,
             state: PoseidonCircuit2::new_empty::<CS>(constants),
             queue: VecDeque::with_capacity(A::to_usize()),
-            parameter: IO::Pattern(Vec::new()),
+            pattern: IOPattern(Vec::new()),
             tag: 0,
             tag_hasher: Default::default(),
+            io_count: 0,
             _c: Default::default(),
         }
     }
@@ -231,6 +233,20 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> InnerSpongeAP
 
     fn get_tag(&self) -> u128 {
         self.tag
+    }
+
+    fn pattern(&self) -> &IOPattern {
+        &self.pattern
+    }
+
+    fn set_pattern(&mut self, pattern: IOPattern) {
+        self.pattern = pattern
+    }
+
+    fn increment_io_count(&mut self) -> usize {
+        let old_count = self.io_count;
+        self.io_count += 1;
+        old_count
     }
 }
 
@@ -425,7 +441,7 @@ mod tests {
     fn test_sponge_api_circuit_simple() {
         use crate::sponge::api::SpongeAPI;
 
-        let parameter = IO::Pattern(vec![
+        let parameter = IOPattern(vec![
             SpongeOp::Absorb(1),
             SpongeOp::Absorb(5),
             SpongeOp::Squeeze(3),
@@ -499,10 +515,11 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn test_sponge_api_circuit_failure() {
         use crate::sponge::api::SpongeAPI;
 
-        let parameter = IO::Pattern(vec![
+        let parameter = IOPattern(vec![
             SpongeOp::Absorb(1),
             SpongeOp::Absorb(5),
             SpongeOp::Squeeze(3),
@@ -535,8 +552,6 @@ mod tests {
             );
 
             let _ = SpongeAPI::squeeze(&mut sponge, 3, acc);
-
-            assert!(sponge.finish(acc).is_err());
         }
     }
 
@@ -560,7 +575,7 @@ mod tests {
         let expected_squeeze_permutations = (squeeze_count - 1) / arity;
         let expected_permutations = expected_absorb_permutations + expected_squeeze_permutations;
 
-        let parameter = IO::Pattern(vec![
+        let parameter = IOPattern(vec![
             SpongeOp::Absorb(absorb_count as u32),
             SpongeOp::Squeeze(squeeze_count as u32),
         ]);
@@ -579,9 +594,9 @@ mod tests {
 
             sponge.start(parameter.clone(), acc);
 
-            SpongeAPI::absorb(&mut sponge, absorb_count, &elts[..], acc);
+            SpongeAPI::absorb(&mut sponge, absorb_count as u32, &elts[..], acc);
 
-            let output = SpongeAPI::squeeze(&mut sponge, squeeze_count, acc);
+            let output = SpongeAPI::squeeze(&mut sponge, squeeze_count as u32, acc);
 
             sponge.finish(acc).unwrap();
 
@@ -600,9 +615,9 @@ mod tests {
                 .collect();
 
             sponge.start(parameter, acc);
-            SpongeAPI::absorb(&mut sponge, absorb_count, &elts[..], acc);
+            SpongeAPI::absorb(&mut sponge, absorb_count as u32, &elts[..], acc);
 
-            let output = SpongeAPI::squeeze(&mut sponge, squeeze_count, acc);
+            let output = SpongeAPI::squeeze(&mut sponge, squeeze_count as u32, acc);
 
             sponge.finish(acc).unwrap();
 
@@ -634,7 +649,7 @@ mod tests {
 
             let acc = &mut ns;
 
-            let parameter = IO::Pattern(vec![SpongeOp::Absorb(5), SpongeOp::Squeeze(1)]);
+            let parameter = IOPattern(vec![SpongeOp::Absorb(5), SpongeOp::Squeeze(1)]);
 
             sponge.start(parameter, acc);
 

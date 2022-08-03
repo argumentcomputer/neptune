@@ -1,6 +1,6 @@
 use crate::hash_type::HashType;
 use crate::poseidon::{Arity, Poseidon, PoseidonConstants};
-use crate::sponge::api::{Hasher, InnerSpongeAPI, SpongeOp, IO};
+use crate::sponge::api::{Hasher, IOPattern, InnerSpongeAPI, SpongeOp};
 use crate::{Error, Strength};
 use ff::PrimeField;
 use std::collections::VecDeque;
@@ -56,9 +56,10 @@ pub struct Sponge<'a, F: PrimeField, A: Arity<F>> {
     direction: Direction,
     squeeze_pos: usize,
     queue: VecDeque<F>,
-    parameter: IO,
+    pattern: IOPattern,
     tag: u128,
     tag_hasher: Hasher,
+    io_count: usize,
 }
 
 pub trait SpongeTrait<'a, F: PrimeField, A: Arity<F>>
@@ -316,9 +317,10 @@ impl<'a, F: PrimeField, A: Arity<F>> SpongeTrait<'a, F, A> for Sponge<'a, F, A> 
             squeezed: 0,
             squeeze_pos: 0,
             queue: VecDeque::with_capacity(A::to_usize()),
-            parameter: IO::Pattern(Vec::new()),
+            pattern: IOPattern(Vec::new()),
             tag: 0,
             tag_hasher: Default::default(),
+            io_count: 0,
         }
     }
 
@@ -498,6 +500,20 @@ impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
     fn get_tag(&self) -> u128 {
         self.tag
     }
+
+    fn pattern(&self) -> &IOPattern {
+        &self.pattern
+    }
+
+    fn set_pattern(&mut self, pattern: IOPattern) {
+        self.pattern = pattern
+    }
+
+    fn increment_io_count(&mut self) -> usize {
+        let old_count = self.io_count;
+        self.io_count += 1;
+        old_count
+    }
 }
 
 #[cfg(test)]
@@ -630,7 +646,7 @@ mod tests {
     fn test_sponge_api_simple() {
         use crate::sponge::api::SpongeAPI;
 
-        let parameter = IO::Pattern(vec![
+        let parameter = IOPattern(vec![
             SpongeOp::Absorb(1),
             SpongeOp::Absorb(5),
             SpongeOp::Squeeze(3),
@@ -686,10 +702,11 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn test_sponge_api_failure() {
         use crate::sponge::api::SpongeAPI;
 
-        let parameter = IO::Pattern(vec![
+        let parameter = IOPattern(vec![
             SpongeOp::Absorb(1),
             SpongeOp::Absorb(5),
             SpongeOp::Squeeze(3),
@@ -710,8 +727,6 @@ mod tests {
             );
 
             let _ = SpongeAPI::squeeze(&mut sponge, 3, acc);
-
-            assert!(sponge.finish(acc).is_err());
         }
     }
 }
