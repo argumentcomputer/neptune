@@ -132,6 +132,7 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
         self.permutation_count += 1;
         self.state
             .hash(&mut ns.namespace(|| format!("permutation {}", self.permutation_count)))?;
+
         Ok(())
     }
 
@@ -152,7 +153,7 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
     fn absorb_aux(&mut self, elt: &Self::Elt) -> Self::Elt {
         // Elt::add always returns `Ok`, so `unwrap` is safe.
         self.element(SpongeTrait::absorb_pos(self) + SpongeTrait::capacity(self))
-            .add(elt.clone())
+            .add_ref(elt)
             .unwrap()
     }
 
@@ -213,6 +214,9 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> InnerSpongeAP
     }
     fn set_squeeze_pos(&mut self, pos: usize) {
         SpongeTrait::set_squeeze_pos(self, pos);
+    }
+    fn add(a: Elt<F>, b: &Elt<F>) -> Elt<F> {
+        a.add_ref(b).unwrap()
     }
 
     fn initialize_hasher(&mut self) {
@@ -292,7 +296,7 @@ mod tests {
             .zip(&allocated_result)
             .all(|(a, b)| *a == b.val().unwrap());
 
-        let permutation_constraints = 285; // For U4.
+        let permutation_constraints = 288; // For U4.
         let permutations_per_direction = (n - 1) / A::to_usize();
         let final_absorption_permutation = 1;
         let expected_permutations = 2 * permutations_per_direction + final_absorption_permutation;
@@ -536,6 +540,81 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_sponge_api_circuit() {
+        for i in 1..3 {
+            for j in 1..3 {
+                test_sponge_api_circuit_aux::<Fr, typenum::U2>(i, j);
+            }
+        }
+    }
+
+    fn test_sponge_api_circuit_aux<F: PrimeField, A: Arity<F>>(
+        absorb_count: usize,
+        squeeze_count: usize,
+    ) {
+        use crate::sponge::api::SpongeAPI;
+
+        let arity = A::to_usize();
+        let expected_absorb_permutations = 1 + (absorb_count - 1) / arity;
+        let expected_squeeze_permutations = (squeeze_count - 1) / arity;
+        let expected_permutations = expected_absorb_permutations + expected_squeeze_permutations;
+
+        let parameter = SpongeParameter::OpSequence(vec![
+            SpongeOp::Absorb(absorb_count as u32),
+            SpongeOp::Squeeze(squeeze_count as u32),
+        ]);
+
+        let circuit_output = {
+            let p = Sponge::<Fr, typenum::U5>::api_constants(Strength::Standard);
+            let mut sponge = SpongeCircuit::new_with_constants(&p, Mode::Simplex);
+            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut ns = cs.namespace(|| "ns");
+            let acc = &mut ns;
+
+            let elts: Vec<_> =
+                std::iter::repeat(Elt::num_from_fr::<TestConstraintSystem<Fr>>(Fr::from(123)))
+                    .take(absorb_count)
+                    .collect();
+
+            sponge.start(parameter.clone(), acc);
+
+            SpongeAPI::absorb(&mut sponge, absorb_count, &elts[..], acc);
+
+            let output = SpongeAPI::squeeze(&mut sponge, squeeze_count, acc);
+
+            sponge.finish(acc).unwrap();
+
+            assert_eq!(expected_permutations, sponge.permutation_count);
+
+            output
+        };
+
+        let non_circuit_output = {
+            let p = Sponge::<Fr, typenum::U5>::api_constants(Strength::Standard);
+            let mut sponge = Sponge::new_with_constants(&p, Mode::Simplex);
+            let acc = &mut ();
+
+            let elts: Vec<_> = std::iter::repeat(Fr::from(123))
+                .take(absorb_count)
+                .collect();
+
+            sponge.start(parameter, acc);
+            SpongeAPI::absorb(&mut sponge, absorb_count, &elts[..], acc);
+
+            let output = SpongeAPI::squeeze(&mut sponge, squeeze_count, acc);
+
+            sponge.finish(acc).unwrap();
+
+            output
+        };
+
+        assert_eq!(non_circuit_output.len(), circuit_output.len());
+        for (circuit, non_circuit) in circuit_output.iter().zip(non_circuit_output) {
+            assert_eq!(circuit.val().unwrap(), non_circuit);
+        }
+    }
+
     struct S<F: PrimeField, A: Arity<F>> {
         p: PoseidonConstants<F, A>,
     }
@@ -591,6 +670,7 @@ mod tests {
 
     #[test]
     fn test_sponge_synthesis() {
+        test_sponge_synthesis_aux::<Fr, typenum::U2>();
         test_sponge_synthesis_aux::<Fr, typenum::U4>();
     }
 }

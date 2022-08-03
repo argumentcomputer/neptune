@@ -187,6 +187,16 @@ pub trait InnerSpongeAPI<F: PrimeField, A: Arity<F>> {
     fn set_absorb_pos(&mut self, pos: usize);
     fn set_squeeze_pos(&mut self, pos: usize);
 
+    fn add(a: Self::Value, b: &Self::Value) -> Self::Value;
+
+    fn initialize_state(&mut self, p_value: u128, acc: &mut Self::Acc) {
+        self.initialize_capacity(p_value, acc);
+
+        for i in 0..self.rate() {
+            self.write_rate_element(i, &Self::zero());
+        }
+    }
+
     fn initialize_hasher(&mut self);
     fn update_hasher(&mut self, op: SpongeOp);
     fn finalize_hasher(&mut self) -> u128;
@@ -202,11 +212,8 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
 
     fn start(&mut self, p: SpongeParameter, acc: &mut Self::Acc) {
         let p_value = p.value();
-        self.initialize_capacity(p_value, acc);
+        self.initialize_state(p_value, acc);
 
-        for i in 0..self.rate() {
-            self.write_rate_element(i, &Self::zero());
-        }
         self.set_absorb_pos(0);
         self.set_squeeze_pos(0);
         self.initialize_hasher();
@@ -221,7 +228,8 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
                 self.permute(acc);
                 self.set_absorb_pos(0);
             }
-            self.write_rate_element(self.absorb_pos(), element);
+            let old = self.read_rate_element(self.absorb_pos());
+            self.write_rate_element(self.absorb_pos(), &S::add(old, element));
             self.set_absorb_pos(self.absorb_pos() + 1);
         }
         self.set_squeeze_pos(rate);
@@ -246,9 +254,12 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
         out
     }
 
-    fn finish(&mut self, _: &mut Self::Acc) -> Result<(), Error> {
+    fn finish(&mut self, acc: &mut Self::Acc) -> Result<(), Error> {
         let result = self.finalize_hasher();
         let expected = self.get_tag();
+
+        // Clear state.
+        self.initialize_state(expected, acc);
 
         if result == expected {
             Ok(())
