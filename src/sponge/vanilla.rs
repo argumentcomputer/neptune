@@ -659,22 +659,22 @@ mod tests {
             assert_eq!(
                 vec![
                     scalar_from_u64s([
-                        0xba134c4ece935fbc,
-                        0xe73a1d3182eb09eb,
-                        0x2857622b451e20e2,
-                        0x4a04b345e5451f61
+                        0xd891815983f3ea1e,
+                        0xa1f7c82951d37ba6,
+                        0xfe4d3c5fa63ed71c,
+                        0x0ca887769c6aa1ae
                     ]),
                     scalar_from_u64s([
-                        0x20d01828e5f41248,
-                        0x6b2387f9b6218ed6,
-                        0x7733dfe47b8b988d,
-                        0x4150ae19ca65b43f
+                        0xc7909f76adede2c9,
+                        0x635c7b88ed65384e,
+                        0x87de07b469968b55,
+                        0x44d46d6e6c5955a1
                     ]),
                     scalar_from_u64s([
-                        0xd6b7cbcc386afe0d,
-                        0x0ae13bd1b53f84c8,
-                        0x5d58ffaabc54690b,
-                        0x391d3a2807744a01
+                        0x17867c2f5d82207b,
+                        0xa809e7e861a2580c,
+                        0xb022568089e9d532,
+                        0x65536a37b5eef0f2
                     ])
                 ],
                 output
