@@ -12,7 +12,6 @@ pub enum Error {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SpongeOp {
-    DomainSeparator(u32),
     Absorb(u32),
     Squeeze(u32),
 }
@@ -21,38 +20,17 @@ pub enum SpongeOp {
 pub struct IOPattern(pub Vec<SpongeOp>);
 
 impl IOPattern {
-    pub fn value(&self) -> u128 {
+    pub fn value(&self, domain_separator: u32) -> u128 {
         let mut hasher = Hasher::new();
 
         for op in self.0.iter() {
             hasher.update_op(*op);
         }
-        hasher.finalize()
+        hasher.finalize(domain_separator)
     }
 
     pub fn op_at(&self, i: usize) -> Option<&SpongeOp> {
         self.0.get(i)
-    }
-
-    pub fn ensure_domain_separator(self) -> Self {
-        // Check that IOPattern includes only a single terminal DomainSeparator. If none present, default to 0.
-        let domain_separator = self.0.last().and_then(|l| {
-            if let SpongeOp::DomainSeparator(_) = l {
-                Some(l)
-            } else {
-                None
-            }
-        });
-        let pattern = if domain_separator.is_none() {
-            let mut new_pattern_seq = self.0.clone();
-            new_pattern_seq.push(SpongeOp::DomainSeparator(0));
-            IOPattern(new_pattern_seq)
-        } else {
-            self
-        };
-
-        assert_eq!(1, pattern.0.iter().filter(|op| op.is_separator()).count());
-        pattern
     }
 }
 
@@ -94,7 +72,7 @@ impl Hasher {
     }
 
     fn finish_op(&mut self) {
-        if !self.current_op.is_separator() && self.current_op.count() == 0 {
+        if self.current_op.count() == 0 {
             return;
         };
         let op_value = self.current_op.value();
@@ -110,8 +88,9 @@ impl Hasher {
             .0;
     }
 
-    pub fn finalize(&mut self) -> u128 {
+    pub fn finalize(&mut self, domain_separator: u32) -> u128 {
         self.finish_op();
+        self.update(domain_separator);
         self.state
     }
 }
@@ -121,7 +100,6 @@ impl SpongeOp {
         match self {
             Self::Absorb(_) => Self::Squeeze(0),
             Self::Squeeze(_) => Self::Absorb(0),
-            _ => unimplemented!(),
         }
     }
 
@@ -129,7 +107,6 @@ impl SpongeOp {
         match self {
             Self::Absorb(n) => *n,
             Self::Squeeze(n) => *n,
-            Self::DomainSeparator(n) => *n,
         }
     }
 
@@ -141,17 +118,12 @@ impl SpongeOp {
         matches!(self, Self::Squeeze(_))
     }
 
-    pub fn is_separator(&self) -> bool {
-        matches!(self, Self::DomainSeparator(_))
-    }
-
     pub fn combine(&self, other: Self) -> Self {
         assert!(self.matches(other));
 
         match self {
             Self::Absorb(n) => Self::Absorb(n + other.count()),
             Self::Squeeze(n) => Self::Squeeze(n + other.count()),
-            _ => unimplemented!(),
         }
     }
 
@@ -169,7 +141,6 @@ impl SpongeOp {
                 assert_eq!(0, n >> 31);
                 *n
             }
-            Self::DomainSeparator(n) => *n,
         }
     }
 }
@@ -178,7 +149,8 @@ pub trait SpongeAPI<F: PrimeField, A: Arity<F>> {
     type Acc;
     type Value;
 
-    fn start(&mut self, p: IOPattern, _: &mut Self::Acc);
+    /// Optional `domain_separator` defaults to 0
+    fn start(&mut self, p: IOPattern, domain_separator: Option<u32>, _: &mut Self::Acc);
     fn absorb(&mut self, length: u32, elements: &[Self::Value], acc: &mut Self::Acc);
     fn squeeze(&mut self, length: u32, acc: &mut Self::Acc) -> Vec<Self::Value>;
     fn finish(&mut self, _: &mut Self::Acc) -> Result<(), Error>;
@@ -222,11 +194,10 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
     type Acc = <S as InnerSpongeAPI<F, A>>::Acc;
     type Value = <S as InnerSpongeAPI<F, A>>::Value;
 
-    fn start(&mut self, p: IOPattern, acc: &mut Self::Acc) {
-        let defaulted_pattern = p.ensure_domain_separator();
-        let p_value = defaulted_pattern.value();
+    fn start(&mut self, p: IOPattern, domain_separator: Option<u32>, acc: &mut Self::Acc) {
+        let p_value = p.value(domain_separator.unwrap_or(0));
 
-        self.set_pattern(defaulted_pattern);
+        self.set_pattern(p);
         self.initialize_state(p_value, acc);
 
         self.set_absorb_pos(0);
@@ -279,7 +250,7 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
         self.initialize_state(0, acc);
         let final_io_count = self.increment_io_count();
 
-        if final_io_count == self.pattern().0.len() - 1 {
+        if final_io_count == self.pattern().0.len() {
             Ok(())
         } else {
             Err(Error::ParameterUsageMismatch)
@@ -293,35 +264,30 @@ mod test {
 
     #[test]
     fn test_tag_values() {
-        let test = |expected_value: u128, pattern: IOPattern| {
-            assert_eq!(expected_value, pattern.value());
+        let test = |expected_value: u128, pattern: IOPattern, domain_separator: u32| {
+            assert_eq!(expected_value, pattern.value(domain_separator));
         };
 
-        test(0, IOPattern(vec![]));
-        test(0, IOPattern(vec![SpongeOp::DomainSeparator(0)]));
+        test(0, IOPattern(vec![]), 0);
         test(
             340282366920938463463374607431768191899,
-            IOPattern(vec![SpongeOp::DomainSeparator(123)]),
-        );
-        test(
-            340282366920938463463374607090318361668,
-            IOPattern(vec![
-                SpongeOp::Absorb(2),
-                SpongeOp::Squeeze(2),
-                SpongeOp::DomainSeparator(0),
-            ]),
-        );
-        test(
-            340282366920938463463374607090318386949,
-            IOPattern(vec![
-                SpongeOp::Absorb(2),
-                SpongeOp::Squeeze(2),
-                SpongeOp::DomainSeparator(1),
-            ]),
+            IOPattern(vec![]),
+            123,
         );
         test(
             340282366920938463463374607090318361668,
             IOPattern(vec![SpongeOp::Absorb(2), SpongeOp::Squeeze(2)]),
+            0,
+        );
+        test(
+            340282366920938463463374607090314341989,
+            IOPattern(vec![SpongeOp::Absorb(2), SpongeOp::Squeeze(2)]),
+            1,
+        );
+        test(
+            340282366920938463463374607090318361668,
+            IOPattern(vec![SpongeOp::Absorb(2), SpongeOp::Squeeze(2)]),
+            0,
         );
         test(
             340282366920938463463374607090318361668,
@@ -330,6 +296,7 @@ mod test {
                 SpongeOp::Absorb(1),
                 SpongeOp::Squeeze(2),
             ]),
+            0,
         );
         test(
             340282366920938463463374607090318361668,
@@ -339,6 +306,7 @@ mod test {
                 SpongeOp::Squeeze(1),
                 SpongeOp::Squeeze(1),
             ]),
+            0,
         );
     }
 }

@@ -638,7 +638,7 @@ mod tests {
             let mut sponge = Sponge::new_with_constants(&p, Mode::Simplex);
             let acc = &mut ();
 
-            sponge.start(parameter, acc);
+            sponge.start(parameter, None, acc);
             SpongeAPI::absorb(&mut sponge, 1, &[Fr::from(123)], acc);
             SpongeAPI::absorb(
                 &mut sponge,
@@ -698,7 +698,7 @@ mod tests {
             let mut sponge = Sponge::new_with_constants(&p, Mode::Simplex);
             let acc = &mut ();
 
-            sponge.start(parameter, acc);
+            sponge.start(parameter, None, acc);
             SpongeAPI::absorb(&mut sponge, 1, &[Fr::from(123)], acc);
             SpongeAPI::absorb(
                 &mut sponge,

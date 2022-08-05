@@ -435,7 +435,7 @@ mod tests {
             let mut ns = cs.namespace(|| "ns");
             let acc = &mut ns;
 
-            sponge.start(parameter.clone(), acc);
+            sponge.start(parameter.clone(), None, acc);
             SpongeAPI::absorb(
                 &mut sponge,
                 1,
@@ -467,7 +467,7 @@ mod tests {
             let mut sponge = Sponge::new_with_constants(&p, Mode::Simplex);
             let acc = &mut ();
 
-            sponge.start(parameter, acc);
+            sponge.start(parameter, None, acc);
             SpongeAPI::absorb(&mut sponge, 1, &[Fr::from(123)], acc);
             SpongeAPI::absorb(
                 &mut sponge,
@@ -513,7 +513,7 @@ mod tests {
             let mut ns = cs.namespace(|| "ns");
             let acc = &mut ns;
 
-            sponge.start(parameter, acc);
+            sponge.start(parameter, None, acc);
             SpongeAPI::absorb(
                 &mut sponge,
                 1,
@@ -573,7 +573,7 @@ mod tests {
                     .take(absorb_count)
                     .collect();
 
-            sponge.start(parameter.clone(), acc);
+            sponge.start(parameter.clone(), None, acc);
 
             SpongeAPI::absorb(&mut sponge, absorb_count as u32, &elts[..], acc);
 
@@ -595,7 +595,7 @@ mod tests {
                 .take(absorb_count)
                 .collect();
 
-            sponge.start(parameter, acc);
+            sponge.start(parameter, None, acc);
             SpongeAPI::absorb(&mut sponge, absorb_count as u32, &elts[..], acc);
 
             let output = SpongeAPI::squeeze(&mut sponge, squeeze_count as u32, acc);
@@ -632,7 +632,7 @@ mod tests {
 
             let parameter = IOPattern(vec![SpongeOp::Absorb(5), SpongeOp::Squeeze(1)]);
 
-            sponge.start(parameter, acc);
+            sponge.start(parameter, None, acc);
 
             SpongeAPI::absorb(
                 &mut sponge,
