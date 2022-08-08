@@ -80,13 +80,9 @@ Benchmark Poseidon over a specific field (`bls`, `pallas`, or `vesta`) and preim
 
     cargo bench arity-<preimage len>/<field name>
 
-## Future Work
+## Sponge API
 
-The following are likely areas of future work:
-
-- [x] Support for multiple GPUs.
-- [x] Support domain separation tag.
-- [x] Improve throughput (?) by using OpenCL directly.
+Neptune implements the [Secure Sponge API for Field Elements](https://hackmd.io/bHgsH6mMStCVibM_wYvb2w) and serves as its reference implementation. The [`SpongeAPI` trait](https://github.com/filecoin-project/neptune/blob/master/src/sponge/api.rs) defines the relevant API methods. See tests in source for simple examples of API usage [with circuits](https://github.com/filecoin-project/neptune/blob/master/src/sponge/circuit.rs) and [without circuits](https://github.com/filecoin-project/neptune/blob/master/src/sponge/vanilla.rs).
 
 ## History
 
