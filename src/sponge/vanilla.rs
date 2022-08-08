@@ -1,6 +1,6 @@
 use crate::hash_type::HashType;
 use crate::poseidon::{Arity, Poseidon, PoseidonConstants};
-use crate::sponge::api::{Hasher, InnerSpongeAPI, SpongeOp, SpongeParameter};
+use crate::sponge::api::{Hasher, IOPattern, InnerSpongeAPI, SpongeOp};
 use crate::{Error, Strength};
 use ff::PrimeField;
 use std::collections::VecDeque;
@@ -56,9 +56,8 @@ pub struct Sponge<'a, F: PrimeField, A: Arity<F>> {
     direction: Direction,
     squeeze_pos: usize,
     queue: VecDeque<F>,
-    parameter: SpongeParameter,
-    tag: u128,
-    tag_hasher: Hasher,
+    pattern: IOPattern,
+    io_count: usize,
 }
 
 pub trait SpongeTrait<'a, F: PrimeField, A: Arity<F>>
@@ -316,9 +315,8 @@ impl<'a, F: PrimeField, A: Arity<F>> SpongeTrait<'a, F, A> for Sponge<'a, F, A> 
             squeezed: 0,
             squeeze_pos: 0,
             queue: VecDeque::with_capacity(A::to_usize()),
-            parameter: SpongeParameter::OpSequence(Vec::new()),
-            tag: 0,
-            tag_hasher: Default::default(),
+            pattern: IOPattern(Vec::new()),
+            io_count: 0,
         }
     }
 
@@ -442,7 +440,6 @@ impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
     type Value = F;
 
     fn initialize_capacity(&mut self, tag: u128, _: &mut ()) {
-        self.tag = tag;
         let mut repr = F::Repr::default();
         repr.as_mut()[..16].copy_from_slice(&tag.to_le_bytes());
 
@@ -485,18 +482,18 @@ impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
         a + b
     }
 
-    fn initialize_hasher(&mut self) {
-        self.tag_hasher = Default::default();
-    }
-    fn update_hasher(&mut self, op: SpongeOp) {
-        self.tag_hasher.update_op(op);
-    }
-    fn finalize_hasher(&mut self) -> u128 {
-        self.tag_hasher.finalize()
+    fn pattern(&self) -> &IOPattern {
+        &self.pattern
     }
 
-    fn get_tag(&self) -> u128 {
-        self.tag
+    fn set_pattern(&mut self, pattern: IOPattern) {
+        self.pattern = pattern
+    }
+
+    fn increment_io_count(&mut self) -> usize {
+        let old_count = self.io_count;
+        self.io_count += 1;
+        old_count
     }
 }
 
@@ -630,7 +627,7 @@ mod tests {
     fn test_sponge_api_simple() {
         use crate::sponge::api::SpongeAPI;
 
-        let parameter = SpongeParameter::OpSequence(vec![
+        let parameter = IOPattern(vec![
             SpongeOp::Absorb(1),
             SpongeOp::Absorb(5),
             SpongeOp::Squeeze(3),
@@ -641,7 +638,7 @@ mod tests {
             let mut sponge = Sponge::new_with_constants(&p, Mode::Simplex);
             let acc = &mut ();
 
-            sponge.start(parameter, acc);
+            sponge.start(parameter, None, acc);
             SpongeAPI::absorb(&mut sponge, 1, &[Fr::from(123)], acc);
             SpongeAPI::absorb(
                 &mut sponge,
@@ -662,22 +659,22 @@ mod tests {
             assert_eq!(
                 vec![
                     scalar_from_u64s([
-                        0xba134c4ece935fbc,
-                        0xe73a1d3182eb09eb,
-                        0x2857622b451e20e2,
-                        0x4a04b345e5451f61
+                        0xd891815983f3ea1e,
+                        0xa1f7c82951d37ba6,
+                        0xfe4d3c5fa63ed71c,
+                        0x0ca887769c6aa1ae
                     ]),
                     scalar_from_u64s([
-                        0x20d01828e5f41248,
-                        0x6b2387f9b6218ed6,
-                        0x7733dfe47b8b988d,
-                        0x4150ae19ca65b43f
+                        0xc7909f76adede2c9,
+                        0x635c7b88ed65384e,
+                        0x87de07b469968b55,
+                        0x44d46d6e6c5955a1
                     ]),
                     scalar_from_u64s([
-                        0xd6b7cbcc386afe0d,
-                        0x0ae13bd1b53f84c8,
-                        0x5d58ffaabc54690b,
-                        0x391d3a2807744a01
+                        0x17867c2f5d82207b,
+                        0xa809e7e861a2580c,
+                        0xb022568089e9d532,
+                        0x65536a37b5eef0f2
                     ])
                 ],
                 output
@@ -686,10 +683,11 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn test_sponge_api_failure() {
         use crate::sponge::api::SpongeAPI;
 
-        let parameter = SpongeParameter::OpSequence(vec![
+        let parameter = IOPattern(vec![
             SpongeOp::Absorb(1),
             SpongeOp::Absorb(5),
             SpongeOp::Squeeze(3),
@@ -700,7 +698,7 @@ mod tests {
             let mut sponge = Sponge::new_with_constants(&p, Mode::Simplex);
             let acc = &mut ();
 
-            sponge.start(parameter, acc);
+            sponge.start(parameter, None, acc);
             SpongeAPI::absorb(&mut sponge, 1, &[Fr::from(123)], acc);
             SpongeAPI::absorb(
                 &mut sponge,
@@ -710,8 +708,6 @@ mod tests {
             );
 
             let _ = SpongeAPI::squeeze(&mut sponge, 3, acc);
-
-            assert!(sponge.finish(acc).is_err());
         }
     }
 }
