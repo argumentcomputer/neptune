@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 7.1.0 - 2022-8-8
+
+- Add Sponge API to README. (https://github.com/filecoin-project/neptune/pull/158)
+- IO pattern (https://github.com/filecoin-project/neptune/pull/157)
+- Sponge absorb add (https://github.com/filecoin-project/neptune/pull/156)
+- Add sponge circuit synthesis test and remove make_elt method. (https://github.com/filecoin-project/neptune/pull/154)
+
 ## 7.0.0 - 2022-7-21
 - Implement sponge construction. (https://github.com/filecoin-project/neptune/pull/151)
 - feat: support other fields (https://github.com/filecoin-project/neptune/pull/135)
