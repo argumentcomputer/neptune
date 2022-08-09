@@ -162,7 +162,7 @@ pub trait InnerSpongeAPI<F: PrimeField, A: Arity<F>> {
 
     fn initialize_capacity(&mut self, tag: u128, acc: &mut Self::Acc);
     fn read_rate_element(&mut self, offset: usize) -> Self::Value;
-    fn write_rate_element(&mut self, offset: usize, x: &Self::Value);
+    fn add_rate_element(&mut self, offset: usize, x: &Self::Value);
     fn permute(&mut self, acc: &mut Self::Acc);
 
     // Supplemental methods needed for a generic implementation.
@@ -178,7 +178,7 @@ pub trait InnerSpongeAPI<F: PrimeField, A: Arity<F>> {
         self.initialize_capacity(p_value, acc);
 
         for i in 0..self.rate() {
-            self.write_rate_element(i, &Self::zero());
+            self.add_rate_element(i, &Self::zero());
         }
     }
 
@@ -214,7 +214,7 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
                 self.set_absorb_pos(0);
             }
             let old = self.read_rate_element(self.absorb_pos());
-            self.write_rate_element(self.absorb_pos(), &S::add(old, element));
+            self.add_rate_element(self.absorb_pos(), &S::add(old, element));
             self.set_absorb_pos(self.absorb_pos() + 1);
         }
         let op = SpongeOp::Absorb(length);

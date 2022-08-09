@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 7.2.0 - 2022-8-9
+- Change write_rate_element to add_rate_element to agree with spec.
+
 ## 7.1.0 - 2022-8-8
 
 - Add Sponge API to README. (https://github.com/filecoin-project/neptune/pull/158)

@@ -184,7 +184,7 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> InnerSpongeAP
     fn read_rate_element(&mut self, offset: usize) -> Self::Value {
         self.element(offset + SpongeTrait::capacity(self))
     }
-    fn write_rate_element(&mut self, offset: usize, x: &Self::Value) {
+    fn add_rate_element(&mut self, offset: usize, x: &Self::Value) {
         self.set_element(offset + SpongeTrait::capacity(self), x.clone());
     }
     fn permute(&mut self, acc: &mut Self::Acc) {
