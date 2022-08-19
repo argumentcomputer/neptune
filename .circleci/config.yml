@@ -99,7 +99,7 @@ jobs:
 
   test_darwin_default_and_opencl:
     macos:
-      xcode: "12.5.0"
+      xcode: "13.4.1"
     working_directory: ~/crate
     resource_class: large
     steps:
