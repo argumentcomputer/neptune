@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::{self, AssignedCell, Layouter, Region, Value},
+    circuit::{AssignedCell, Layouter, Region, Value},
     plonk::{
         Advice, Column, ConstraintSystem, Constraints, Error, Expression, Fixed, Selector,
         VirtualCells,
@@ -16,8 +16,12 @@ use crate::{
     matrix,
     mds::generate_mds,
     poseidon::{Arity, PoseidonConstants},
-    round_numbers, Strength,
+    Strength,
 };
+
+// Indicate `Strength::Standard` and `Strength::EvenPartial` respectively.
+pub const STRENGTH_STD: bool = false;
+pub const STRENGTH_EVEN: bool = true;
 
 const ALPHA: u64 = 5;
 
@@ -30,7 +34,7 @@ where
     state: Vec<Column<Advice>>,
     rc_a: Vec<Column<Fixed>>,
     // If there is an even number of partial rounds for arity `A` (and `Strength::Standard`), we use
-    // a row optimized poseidon circuit (which performs two partial rounds per row) at the cost of
+    // a row-optimized poseidon circuit (which performs two partial rounds per row) at the cost of
     // an additional advice column `partial_sbox` and `width` number of fixed columns `rc_b`.
     partial_sbox: Option<Column<Advice>>,
     rc_b: Option<Vec<Column<Fixed>>>,
@@ -57,10 +61,10 @@ where
     }
 
     // If you have two arities `A` and `B` which you know are the same type (but where the
-    // compiler doesn't) `change_arity` can be used to convert the `A` config into the `B` config
+    // compiler doesn't) `transmute_arity` can be used to convert the `A` config into the `B` config
     // without having to call `PoseidonConfig::<F, B>::configure` (which duplicates the `A`/`B`
     // configuration in the constraint system).
-    pub fn change_arity<B: Arity<F>>(self) -> PoseidonConfig<F, B> {
+    pub fn transmute_arity<B: Arity<F>>(self) -> PoseidonConfig<F, B> {
         assert_eq!(A::to_usize(), B::to_usize());
         PoseidonConfig {
             state: self.state,
@@ -75,7 +79,7 @@ where
     }
 }
 
-pub struct PoseidonChip<F, A>
+pub struct PoseidonChip<F, A, const STRENGTH_EVEN: bool>
 where
     F: FieldExt,
     A: Arity<F>,
@@ -83,12 +87,16 @@ where
     config: PoseidonConfig<F, A>,
 }
 
-impl<F, A> PoseidonChip<F, A>
+impl<F, A, const STRENGTH_EVEN: bool> PoseidonChip<F, A, STRENGTH_EVEN>
 where
     F: FieldExt,
     A: Arity<F>,
 {
     pub fn construct(config: PoseidonConfig<F, A>) -> Self {
+        assert_eq!(config.partial_sbox.is_some(), config.rc_b.is_some());
+        if STRENGTH_EVEN {
+            assert!(config.partial_sbox.is_some());
+        }
         PoseidonChip { config }
     }
 
@@ -169,63 +177,9 @@ where
             )
         });
 
-        // If there is an odd number of partial rounds, perform one partial round per row, otherwise
-        // perform two partial rounds per row.
-        if Self::rp_is_odd() {
-            assert_eq!(advice.len(), width);
-            assert_eq!(fixed.len(), width);
-
-            // Perform one partial round.
-            meta.create_gate("partial round", |meta| {
-                let s_partial = meta.query_selector(s_partial);
-
-                let sbox_out: Vec<Expression<F>> = (0..width)
-                    .map(|i| {
-                        let word = meta.query_advice(state[i], Rotation::cur());
-                        let rc = meta.query_fixed(rc_a[i], Rotation::cur());
-                        if i == 0 {
-                            pow_5(word + rc)
-                        } else {
-                            word + rc
-                        }
-                    })
-                    .collect();
-
-                let mds_out: Vec<Expression<F>> = (0..width)
-                    .map(|col| {
-                        let mut dot_prod = sbox_out[0].clone() * mds[0][col];
-                        for row in 1..width {
-                            dot_prod = dot_prod + sbox_out[row].clone() * mds[row][col];
-                        }
-                        dot_prod
-                    })
-                    .collect();
-
-                let state_next: Vec<Expression<F>> = state
-                    .iter()
-                    .map(|col| meta.query_advice(*col, Rotation::next()))
-                    .collect();
-
-                Constraints::with_selector(
-                    s_partial,
-                    mds_out
-                        .into_iter()
-                        .zip(state_next.into_iter())
-                        .map(|(out, next)| out - next),
-                )
-            });
-
-            PoseidonConfig {
-                state,
-                partial_sbox: None,
-                rc_a,
-                rc_b: None,
-                s_full,
-                s_partial,
-                _f: PhantomData,
-                _a: PhantomData,
-            }
-        } else {
+        // If there is an even number of partial rounds, perform two partial rounds per row, otherwise
+        // perform one partial round per row.
+        let (partial_sbox, rc_b, s_partial) = if Self::rp_is_even() {
             // Add one advice column for partial round A's sbox output.
             assert_eq!(advice.len(), width + 1);
             // Two partial rounds' (A and B) round constants.
@@ -301,16 +255,63 @@ where
                 )
             });
 
-            PoseidonConfig {
-                state,
-                partial_sbox: Some(partial_sbox),
-                rc_a,
-                rc_b: Some(rc_b),
-                s_full,
-                s_partial,
-                _f: PhantomData,
-                _a: PhantomData,
-            }
+            (Some(partial_sbox), Some(rc_b), s_partial)
+        } else {
+            assert_eq!(advice.len(), width);
+            assert_eq!(fixed.len(), width);
+
+            // Perform one partial round.
+            meta.create_gate("partial round", |meta| {
+                let s_partial = meta.query_selector(s_partial);
+
+                let sbox_out: Vec<Expression<F>> = (0..width)
+                    .map(|i| {
+                        let word = meta.query_advice(state[i], Rotation::cur());
+                        let rc = meta.query_fixed(rc_a[i], Rotation::cur());
+                        if i == 0 {
+                            pow_5(word + rc)
+                        } else {
+                            word + rc
+                        }
+                    })
+                    .collect();
+
+                let mds_out: Vec<Expression<F>> = (0..width)
+                    .map(|col| {
+                        let mut dot_prod = sbox_out[0].clone() * mds[0][col];
+                        for row in 1..width {
+                            dot_prod = dot_prod + sbox_out[row].clone() * mds[row][col];
+                        }
+                        dot_prod
+                    })
+                    .collect();
+
+                let state_next: Vec<Expression<F>> = state
+                    .iter()
+                    .map(|col| meta.query_advice(*col, Rotation::next()))
+                    .collect();
+
+                Constraints::with_selector(
+                    s_partial,
+                    mds_out
+                        .into_iter()
+                        .zip(state_next.into_iter())
+                        .map(|(out, next)| out - next),
+                )
+            });
+
+            (None, None, s_partial)
+        };
+
+        PoseidonConfig {
+            state,
+            partial_sbox,
+            rc_a,
+            rc_b,
+            s_full,
+            s_partial,
+            _f: PhantomData,
+            _a: PhantomData,
         }
     }
 
@@ -322,7 +323,7 @@ where
         preimage: &[AssignedCell<F, F>],
         offset: usize,
     ) -> Result<Vec<AssignedCell<F, F>>, Error> {
-        let width = Self::width();
+        let width = A::to_usize() + 1;
 
         let mut state = Vec::<AssignedCell<F, F>>::with_capacity(width);
 
@@ -357,7 +358,7 @@ where
         rc_cols: &[Column<Fixed>],
         offset: usize,
     ) -> Result<Vec<AssignedCell<F, F>>, Error> {
-        let width = Self::width();
+        let width = A::to_usize() + 1;
         consts
             .round_constants
             .as_ref()
@@ -409,7 +410,7 @@ where
         round: usize,
         offset: usize,
     ) -> Result<Vec<AssignedCell<F, F>>, Error> {
-        let width = Self::width();
+        let width = A::to_usize() + 1;
 
         self.config.s_full.enable(region, offset)?;
         self.assign_round_constants(region, consts, round, &self.config.rc_a, offset)?;
@@ -455,7 +456,7 @@ where
         round: usize,
         offset: usize,
     ) -> Result<Vec<AssignedCell<F, F>>, Error> {
-        let width = Self::width();
+        let width = A::to_usize() + 1;
 
         self.config.s_partial.enable(region, offset)?;
         self.assign_round_constants(region, consts, round, &self.config.rc_a, offset)?;
@@ -510,7 +511,7 @@ where
         round: usize,
         offset: usize,
     ) -> Result<Vec<AssignedCell<F, F>>, Error> {
-        let width = Self::width();
+        let width = A::to_usize() + 1;
 
         let round_a = round;
         let round_b = round + 1;
@@ -623,10 +624,12 @@ where
         consts: &PoseidonConstants<F, A>,
     ) -> Result<AssignedCell<F, F>, Error> {
         let arity = A::to_usize();
-        let width = arity + 1;
-
         assert!(arity > 0);
         assert_eq!(preimage.len(), arity);
+        let width = arity + 1;
+
+        let rp_is_even = consts.partial_rounds & 1 == 0;
+        assert_eq!(rp_is_even, self.config.partial_sbox.is_some());
 
         // This chip does not support preimage padding (i.e. `preimage.len()` must equal `arity`) or
         // the sponge construction.
@@ -644,8 +647,11 @@ where
             }
         };
 
-        let rp_is_odd = Self::rp_is_odd();
-        assert_eq!(consts.partial_rounds & 1 == 1, rp_is_odd);
+        if STRENGTH_EVEN {
+            assert_eq!(consts.strength, Strength::EvenPartial);
+        } else {
+            assert_eq!(consts.strength, Strength::Standard);
+        }
 
         layouter.assign_region(
             || "poseidon",
@@ -661,18 +667,18 @@ where
                     offset += 1;
                 }
 
-                if rp_is_odd {
-                    for _ in 0..consts.partial_rounds {
-                        state =
-                            self.one_partial_round(&mut region, consts, &state, round, offset)?;
-                        round += 1;
-                        offset += 1;
-                    }
-                } else {
+                if rp_is_even {
                     for _ in 0..consts.partial_rounds / 2 {
                         state =
                             self.two_partial_rounds(&mut region, consts, &state, round, offset)?;
                         round += 2;
+                        offset += 1;
+                    }
+                } else {
+                    for _ in 0..consts.partial_rounds {
+                        state =
+                            self.one_partial_round(&mut region, consts, &state, round, offset)?;
+                        round += 1;
                         offset += 1;
                     }
                 }
@@ -688,93 +694,87 @@ where
         )
     }
 
+    pub fn witness_hash(
+        &self,
+        mut layouter: impl Layouter<F>,
+        preimage: &[Value<F>],
+        consts: &PoseidonConstants<F, A>,
+    ) -> Result<AssignedCell<F, F>, Error> {
+        let preimage = layouter.assign_region(
+            || "assign preimage",
+            |mut region| {
+                let offset = 0;
+                preimage
+                    .iter()
+                    .zip(&self.config.state)
+                    .enumerate()
+                    .map(|(i, (word, col))| {
+                        region.assign_advice(|| format!("preimage[{}]", i), *col, offset, || *word)
+                    })
+                    .collect::<Result<Vec<AssignedCell<F, F>>, Error>>()
+            },
+        )?;
+        self.hash(layouter, &preimage, consts)
+    }
+
     // Input-output columns; equality-enabled advice where a chip caller can allocate preimages and
     // copy digests from.
-    pub fn io_cols(&self) -> &[Column<Advice>] {
-        self.config.io_cols()
+    pub fn advice_eq(&self) -> &[Column<Advice>] {
+        &self.config.state
     }
 
     // An equality and constant-enabled fixed column.
-    pub fn consts_col(&self) -> &Column<Fixed> {
-        self.config.consts_col()
+    pub fn const_col(&self) -> &Column<Fixed> {
+        &self.config.rc_a[0]
     }
 
-    fn width() -> usize {
-        A::to_usize() + 1
-    }
-
-    // Returns `true` if this arity (for strength `Strength::Standard`) has an odd number of partial
-    // rounds.
-    #[inline]
-    fn rp_is_odd() -> bool {
-        // These partial round numbers were taken from the file `parameters/round_numbers.txt`.
-        // These values are hardcoded here to avoid repeated calls to `round_numbers(...)` when
-        // calculating this chips constraint system shape (i.e. row and column counts).
-        match Self::width() {
-            2 | 3 | 8..=31 | 63..=124 => true,
-            width if width <= 125 => false,
-            _ => unimplemented!("arity exceeds the maximum supported arity (125)"),
-        }
-    }
-
-    // The number of constraint system used per call to `self.hash()`.
-    #[inline]
-    pub fn num_rows() -> usize {
+    fn rp() -> usize {
         let arity = A::to_usize();
-        if arity == 0 {
-            return 0;
+        let width = arity + 1;
+        // Standard strength partial rounds.
+        let mut rp = match width {
+            2 | 3 => 55,
+            4..=7 => 56,
+            8..=15 => 57,
+            16..=31 => 59,
+            32..=37 => 60,
+            _ => unimplemented!("arity={} not supported", arity),
+        };
+        if STRENGTH_EVEN && rp & 1 == 1 {
+            rp += 1;
         }
-        let (rf, rp) = round_numbers(arity, &Strength::Standard);
-        let rp_is_odd = rp & 1 == 1;
-        if rp_is_odd {
-            rf + rp
-        } else {
-            rf + rp / 2
-        }
+        rp
     }
 
-    // The number of advice columns used by this chip.
-    #[inline]
-    pub fn num_advice_total() -> usize {
-        if A::to_usize() == 0 {
-            0
-        } else if Self::rp_is_odd() {
-            Self::width()
-        } else {
-            Self::width() + 1
-        }
+    // Returns `true` if this arity has an even number of partial rounds for the parameterized
+    // strength (`Strengh::EvenPartial` if `STRENGTH_EVEN`, otherwise `Strength::Standard`).
+    fn rp_is_even() -> bool {
+        STRENGTH_EVEN || Self::rp() & 1 == 0
     }
 
     // The number of equality-enabled advice columns used by this chip.
-    #[inline]
     pub fn num_advice_eq() -> usize {
-        if A::to_usize() == 0 {
-            0
-        } else {
-            Self::width()
+        match A::to_usize() {
+            0 => 0,
+            arity => arity + 1,
         }
     }
 
     // The number of non-equality-enabled advice columns used by this chip.
-    #[inline]
     pub fn num_advice_neq() -> usize {
-        Self::num_advice_total() - Self::num_advice_eq()
-    }
-
-    // The number of fixed columns used by this chip.
-    #[inline]
-    pub fn num_fixed_total() -> usize {
         if A::to_usize() == 0 {
             0
-        } else if Self::rp_is_odd() {
-            Self::width()
         } else {
-            2 * Self::width()
+            Self::rp_is_even() as usize
         }
     }
 
+    // The total number of advice columns used by this chip.
+    pub fn num_advice_total() -> usize {
+        Self::num_advice_eq() + Self::num_advice_neq()
+    }
+
     // The number of equality-enabled fixed columns used by this chip.
-    #[inline]
     pub fn num_fixed_eq() -> usize {
         if A::to_usize() == 0 {
             0
@@ -784,157 +784,223 @@ where
     }
 
     // The number of non-equality-enabled fixed columns used by this chip.
-    #[inline]
     pub fn num_fixed_neq() -> usize {
-        Self::num_fixed_total() - Self::num_fixed_eq()
+        let arity = A::to_usize();
+        if arity == 0 {
+            return 0;
+        }
+        let width = arity + 1;
+        if Self::rp_is_even() {
+            2 * width - 1
+        } else {
+            width - 1
+        }
+    }
+
+    // The total number of fixed columns used by this chip.
+    pub fn num_fixed_total() -> usize {
+        Self::num_fixed_eq() + Self::num_fixed_neq()
+    }
+
+    // The number of constraint system rows used per hash.
+    pub fn num_rows() -> usize {
+        let arity = A::to_usize();
+        if arity == 0 {
+            return 0;
+        }
+        let rf = 8;
+        let rp = Self::rp();
+        if STRENGTH_EVEN || rp & 1 == 0 {
+            rf + rp / 2
+        } else {
+            rf + rp
+        }
     }
 }
+
+pub type PoseidonChipStd<F, A> = PoseidonChip<F, A, STRENGTH_STD>;
+pub type PoseidonChipEven<F, A> = PoseidonChip<F, A, STRENGTH_EVEN>;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use generic_array::typenum::{Unsigned, U1, U11, U2, U3, U4, U8};
+    use generic_array::typenum::{U1, U11, U2, U4, U8};
     use halo2_proofs::{
-        arithmetic::{CurveAffine, CurveExt, FieldExt},
         circuit::SimpleFloorPlanner,
         dev::MockProver,
-        pasta::{EqAffine, Fp, Fq},
-        plonk::{
-            create_proof, keygen_pk, keygen_vk, verify_proof, Circuit, Error, Instance,
-            SingleVerifier,
-        },
+        pasta::{EqAffine, Fp},
+        plonk::{create_proof, keygen_pk, keygen_vk, verify_proof, Circuit, Error, SingleVerifier},
         poly::commitment::Params,
         transcript::{Blake2bRead, Blake2bWrite, Challenge255},
     };
     use rand::rngs::OsRng;
 
-    use crate::{round_numbers, Poseidon, Strength};
+    use crate::{Poseidon, Strength};
+
+    type TranscriptReader<'proof> = Blake2bRead<&'proof [u8], EqAffine, Challenge255<EqAffine>>;
+    type TranscriptWriter = Blake2bWrite<Vec<u8>, EqAffine, Challenge255<EqAffine>>;
+
+    struct MyCircuit<A: Arity<Fp>, const STRENGTH: bool> {
+        preimage: Vec<Value<Fp>>,
+        expected_digest: Value<Fp>,
+        _a: PhantomData<A>,
+    }
+
+    impl<A: Arity<Fp>, const STRENGTH: bool> Circuit<Fp> for MyCircuit<A, STRENGTH> {
+        type Config = PoseidonConfig<Fp, A>;
+        type FloorPlanner = SimpleFloorPlanner;
+
+        fn without_witnesses(&self) -> Self {
+            MyCircuit {
+                preimage: vec![Value::unknown(); A::to_usize()],
+                expected_digest: Value::unknown(),
+                _a: PhantomData,
+            }
+        }
+
+        fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+            let num_advice = PoseidonChip::<Fp, A, STRENGTH>::num_advice_total();
+            let num_fixed = PoseidonChip::<Fp, A, STRENGTH>::num_fixed_total();
+
+            let advice: Vec<Column<Advice>> =
+                (0..num_advice).map(|_| meta.advice_column()).collect();
+            let fixed: Vec<Column<Fixed>> = (0..num_fixed).map(|_| meta.fixed_column()).collect();
+
+            PoseidonChip::<Fp, A, STRENGTH>::configure(meta, &advice, &fixed)
+        }
+
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            layouter: impl Layouter<Fp>,
+        ) -> Result<(), Error> {
+            let consts = match STRENGTH {
+                STRENGTH_STD => PoseidonConstants::new(),
+                STRENGTH_EVEN => PoseidonConstants::new_with_strength(Strength::EvenPartial),
+            };
+            PoseidonChip::<Fp, A, STRENGTH>::construct(config)
+                .witness_hash(layouter, &self.preimage, &consts)?
+                .value()
+                .zip(self.expected_digest.as_ref())
+                .assert_if_known(|(digest, expected_digest)| digest == expected_digest);
+            Ok(())
+        }
+    }
+
+    impl<A: Arity<Fp>, const STRENGTH: bool> MyCircuit<A, STRENGTH> {
+        fn k() -> u32 {
+            // Add one row for preimage allocation.
+            let rows = PoseidonChip::<Fp, A, STRENGTH>::num_rows() + 1;
+            // Adding one to `k` ensures that we have enough rows.
+            (rows as f32).log2().ceil() as u32 + 1
+        }
+    }
+
+    fn test_poseidon_chip_inner<A: Arity<Fp>, const STRENGTH: bool>() {
+        let arity = A::to_usize();
+        let preimage: Vec<Fp> = (0..arity as u64).map(Fp::from).collect();
+
+        let consts = match STRENGTH {
+            STRENGTH_STD => PoseidonConstants::new(),
+            STRENGTH_EVEN => PoseidonConstants::new_with_strength(Strength::EvenPartial),
+        };
+
+        let digest = Poseidon::<Fp, A>::new_with_preimage(&preimage, &consts).hash();
+
+        let circ = MyCircuit::<A, STRENGTH> {
+            preimage: preimage.into_iter().map(Value::known).collect(),
+            expected_digest: Value::known(digest),
+            _a: PhantomData,
+        };
+
+        let k = MyCircuit::<A, STRENGTH>::k();
+        let prover = MockProver::run(k, &circ, vec![]).unwrap();
+        assert!(prover.verify().is_ok());
+
+        let params = Params::<EqAffine>::new(k);
+        let pk = {
+            let vk = keygen_vk(&params, &circ).expect("failed to create verifying key");
+            keygen_pk(&params, vk, &circ).expect("failed to create proving key")
+        };
+        let vk = pk.get_vk();
+
+        let mut transcript = TranscriptWriter::init(vec![]);
+        create_proof(&params, &pk, &[circ], &[&[]], &mut OsRng, &mut transcript)
+            .expect("failed to create halo2 proof");
+        let proof_bytes: Vec<u8> = transcript.finalize();
+
+        let mut transcript = TranscriptReader::init(&proof_bytes);
+        let verifier_strategy = SingleVerifier::new(&params);
+        verify_proof(&params, vk, verifier_strategy, &[&[]], &mut transcript)
+            .expect("failed to verify halo2 proof");
+    }
 
     #[test]
     fn test_poseidon_chip() {
-        struct MyCircuit<A: Arity<Fp>> {
-            preimage: Vec<Value<Fp>>,
-            expected_digest: Value<Fp>,
-            _a: PhantomData<A>,
-        }
+        test_poseidon_chip_inner::<U1, STRENGTH_STD>();
+        test_poseidon_chip_inner::<U1, STRENGTH_EVEN>();
 
-        impl<A: Arity<Fp>> Circuit<Fp> for MyCircuit<A> {
-            type Config = PoseidonConfig<Fp, A>;
-            type FloorPlanner = SimpleFloorPlanner;
+        test_poseidon_chip_inner::<U2, STRENGTH_STD>();
+        test_poseidon_chip_inner::<U2, STRENGTH_EVEN>();
 
-            fn without_witnesses(&self) -> Self {
-                MyCircuit {
-                    preimage: vec![Value::unknown(); A::to_usize()],
-                    expected_digest: Value::unknown(),
-                    _a: PhantomData,
-                }
-            }
+        test_poseidon_chip_inner::<U4, STRENGTH_STD>();
+        test_poseidon_chip_inner::<U4, STRENGTH_EVEN>();
 
-            fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
-                let num_advice = PoseidonChip::<Fp, A>::num_advice_total();
-                let num_fixed = PoseidonChip::<Fp, A>::num_fixed_total();
+        test_poseidon_chip_inner::<U8, STRENGTH_STD>();
+        test_poseidon_chip_inner::<U8, STRENGTH_EVEN>();
 
-                let advice: Vec<Column<Advice>> =
-                    (0..num_advice).map(|_| meta.advice_column()).collect();
-                let fixed: Vec<Column<Fixed>> =
-                    (0..num_fixed).map(|_| meta.fixed_column()).collect();
+        test_poseidon_chip_inner::<U11, STRENGTH_STD>();
+        test_poseidon_chip_inner::<U11, STRENGTH_EVEN>();
+    }
 
-                PoseidonChip::configure(meta, &advice, &fixed)
-            }
+    #[test]
+    fn test_poseidon_chip_round_numbers() {
+        use crate::round_numbers;
 
-            fn synthesize(
-                &self,
-                config: Self::Config,
-                mut layouter: impl Layouter<Fp>,
-            ) -> Result<(), Error> {
-                let poseidon_chip = PoseidonChip::<Fp, A>::construct(config);
+        assert_eq!(
+            round_numbers(1, &Strength::Standard).1,
+            PoseidonChip::<Fp, U1, STRENGTH_STD>::rp(),
+        );
+        assert_eq!(
+            round_numbers(1, &Strength::EvenPartial).1,
+            PoseidonChip::<Fp, U1, STRENGTH_EVEN>::rp(),
+        );
 
-                let preimage = layouter.assign_region(
-                    || "assign preimage",
-                    |mut region| {
-                        let offset = 0;
-                        self.preimage
-                            .iter()
-                            .zip(poseidon_chip.io_cols())
-                            .enumerate()
-                            .map(|(i, (word, col))| {
-                                region.assign_advice(
-                                    || format!("preimage[{}]", i),
-                                    *col,
-                                    offset,
-                                    || *word,
-                                )
-                            })
-                            .collect::<Result<Vec<AssignedCell<Fp, Fp>>, Error>>()
-                    },
-                )?;
+        assert_eq!(
+            round_numbers(2, &Strength::Standard).1,
+            PoseidonChip::<Fp, U2, STRENGTH_STD>::rp(),
+        );
+        assert_eq!(
+            round_numbers(2, &Strength::EvenPartial).1,
+            PoseidonChip::<Fp, U2, STRENGTH_EVEN>::rp(),
+        );
 
-                let consts = PoseidonConstants::<Fp, A>::new();
+        assert_eq!(
+            round_numbers(4, &Strength::Standard).1,
+            PoseidonChip::<Fp, U4, STRENGTH_STD>::rp(),
+        );
+        assert_eq!(
+            round_numbers(4, &Strength::EvenPartial).1,
+            PoseidonChip::<Fp, U4, STRENGTH_EVEN>::rp(),
+        );
 
-                poseidon_chip
-                    .hash(layouter, &preimage, &consts)?
-                    .value()
-                    .zip(self.expected_digest.as_ref())
-                    .assert_if_known(|(digest, expected_digest)| digest == expected_digest);
+        assert_eq!(
+            round_numbers(8, &Strength::Standard).1,
+            PoseidonChip::<Fp, U8, STRENGTH_STD>::rp(),
+        );
+        assert_eq!(
+            round_numbers(8, &Strength::EvenPartial).1,
+            PoseidonChip::<Fp, U8, STRENGTH_EVEN>::rp(),
+        );
 
-                Ok(())
-            }
-        }
-
-        impl<A: Arity<Fp>> MyCircuit<A> {
-            fn k() -> u32 {
-                // Add one row for preimage allocation.
-                let rows = PoseidonChip::<Fp, A>::num_rows() + 1;
-                // Adding one to `k` ensures that we have enough rows.
-                (rows as f32).log2().ceil() as u32 + 1
-            }
-        }
-
-        type TranscriptReader<'proof> = Blake2bRead<&'proof [u8], EqAffine, Challenge255<EqAffine>>;
-        type TranscriptWriter = Blake2bWrite<Vec<u8>, EqAffine, Challenge255<EqAffine>>;
-
-        fn test_poseidon_chip_inner<A: Arity<Fp>>(gen_proof: bool) {
-            let arity = A::to_usize();
-            let preimage: Vec<Fp> = (0..arity as u64).map(Fp::from).collect();
-
-            let consts = PoseidonConstants::<Fp, A>::new();
-            let digest = Poseidon::new_with_preimage(&preimage, &consts).hash();
-
-            let circ = MyCircuit::<A> {
-                preimage: preimage.into_iter().map(Value::known).collect(),
-                expected_digest: Value::known(digest),
-                _a: PhantomData,
-            };
-
-            let k = MyCircuit::<A>::k();
-            let prover = MockProver::run(k, &circ, vec![]).unwrap();
-            assert!(prover.verify().is_ok());
-
-            if gen_proof {
-                let params = Params::<EqAffine>::new(k);
-                let pk = {
-                    let vk = keygen_vk(&params, &circ).expect("failed to create verifying key");
-                    keygen_pk(&params, vk, &circ).expect("failed to create proving key")
-                };
-                let vk = pk.get_vk();
-
-                let mut transcript = TranscriptWriter::init(vec![]);
-                create_proof(&params, &pk, &[circ], &[&[]], &mut OsRng, &mut transcript)
-                    .expect("failed to create halo2 proof");
-                let proof_bytes: Vec<u8> = transcript.finalize();
-
-                let mut transcript = TranscriptReader::init(&proof_bytes);
-                let verifier_strategy = SingleVerifier::new(&params);
-                verify_proof(&params, vk, verifier_strategy, &[&[]], &mut transcript)
-                    .expect("failed to verify halo2 proof");
-            }
-        }
-
-        test_poseidon_chip_inner::<U1>(true);
-        test_poseidon_chip_inner::<U2>(true);
-        test_poseidon_chip_inner::<U4>(true);
-        test_poseidon_chip_inner::<U8>(false);
-        test_poseidon_chip_inner::<U11>(false);
+        assert_eq!(
+            round_numbers(11, &Strength::Standard).1,
+            PoseidonChip::<Fp, U11, STRENGTH_STD>::rp(),
+        );
+        assert_eq!(
+            round_numbers(11, &Strength::EvenPartial).1,
+            PoseidonChip::<Fp, U11, STRENGTH_EVEN>::rp(),
+        );
     }
 }
