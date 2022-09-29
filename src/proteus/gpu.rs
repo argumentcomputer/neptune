@@ -161,6 +161,16 @@ where
     }
 }
 
+impl<F, A> ClBatchHasher<F, A>
+where
+    F: PrimeField,
+    A: Arity<F>,
+{
+    pub(crate) fn strength(&self) -> Strength {
+        self.constants.strength()
+    }
+}
+
 const LOCAL_WORK_SIZE: usize = 256;
 impl<F, A> BatchHasher<F, A> for ClBatchHasher<F, A>
 where

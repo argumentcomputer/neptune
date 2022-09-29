@@ -95,7 +95,7 @@ impl fmt::Display for Strength {
         match self {
             Self::Standard => write!(f, "standard"),
             Self::Strengthened => write!(f, "strengthened"),
-            Self::EvenPartial => write!(f, "evenpartial"),
+            Self::EvenPartial => write!(f, "even_partial"),
         }
     }
 }
