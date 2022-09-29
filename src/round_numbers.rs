@@ -42,6 +42,16 @@ pub(crate) fn round_numbers_strengthened(arity: usize) -> (usize, usize) {
     (full_round, strengthened_partial_rounds)
 }
 
+// Returns modified standard strength round numbers where odd partial round numbers are increased by
+// one to the next larger even number.
+pub(crate) fn round_numbers_even_partial(arity: usize) -> (usize, usize) {
+    let (full_rounds, mut partial_rounds) = round_numbers_base(arity);
+    if partial_rounds & 1 == 1 {
+        partial_rounds += 1;
+    }
+    (full_rounds, partial_rounds)
+}
+
 // Returns the round numbers for a given width `t`. Here, the `security_margin` parameter does not
 // indicate that we are calculating `R_F` and `R_P` for the "strengthened" round numbers, done in
 // the function `round_numbers_strengthened()`.

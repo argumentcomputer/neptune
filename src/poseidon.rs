@@ -813,6 +813,7 @@ mod tests {
                     }
                 }
             }
+            Strength::EvenPartial => unimplemented!(),
         };
 
         let mut constant_sponge = Sponge::new_with_constants(&constant_constants, Mode::Simplex);
@@ -927,6 +928,7 @@ mod tests {
                 ]),
                 _ => unimplemented!(),
             },
+            Strength::EvenPartial => unimplemented!(),
         };
         assert_eq!(expected_constant, constant_sponge_digest.unwrap());
 
