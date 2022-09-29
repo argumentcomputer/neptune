@@ -157,6 +157,10 @@ where
     pub(crate) fn device(&self) -> Device {
         self.device.clone()
     }
+
+    pub(crate) fn strength(&self) -> Strength {
+        self.constants.strength()
+    }
 }
 
 const LOCAL_WORK_SIZE: usize = 256;

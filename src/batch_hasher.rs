@@ -48,6 +48,18 @@ where
         Self::new(device, max_batch_size)
     }
 
+    /// Create a new GPU batcher for an arbitrarily picked device and a specified strength.
+    #[cfg(any(feature = "cuda", feature = "opencl"))]
+    pub fn pick_gpu_with_strength(
+        strength: Strength,
+        max_batch_size: usize,
+    ) -> Result<Self, Error> {
+        let device = *Device::all()
+            .first()
+            .ok_or(Error::ClError(ClError::DeviceNotFound))?;
+        Self::with_strength(device, strength, max_batch_size)
+    }
+
     #[cfg(any(feature = "cuda", feature = "opencl"))]
     /// Create a new GPU batcher for a certain device.
     pub fn new(device: &Device, max_batch_size: usize) -> Result<Self, Error> {
@@ -66,6 +78,14 @@ where
             strength,
             max_batch_size,
         )?))
+    }
+
+    pub fn strength(&self) -> Strength {
+        match self {
+            Batcher::Cpu(batcher) => batcher.strength(),
+            #[cfg(any(feature = "cuda", feature = "opencl"))]
+            Batcher::OpenCl(batcher) => batcher.strength(),
+        }
     }
 }
 

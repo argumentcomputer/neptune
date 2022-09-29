@@ -585,6 +585,10 @@ where
             max_batch_size,
         }
     }
+
+    pub(crate) fn strength(&self) -> Strength {
+        self.constants.strength
+    }
 }
 impl<F, A> BatchHasher<F, A> for SimplePoseidonBatchHasher<F, A>
 where

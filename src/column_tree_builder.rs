@@ -2,7 +2,7 @@ use crate::batch_hasher::Batcher;
 use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
 use crate::tree_builder::{TreeBuilder, TreeBuilderTrait};
-use crate::{Arity, BatchHasher, NeptuneField};
+use crate::{Arity, BatchHasher, NeptuneField, Strength};
 use ff::{Field, PrimeField};
 use generic_array::{ArrayLength, GenericArray};
 
@@ -115,11 +115,16 @@ where
     ) -> Result<Self, Error> {
         let tree_builder = TreeBuilder::<F, TreeArity>::new(tree_batcher, leaf_count, 0)?;
 
+        let column_strength = column_batcher
+            .as_ref()
+            .map(Batcher::strength)
+            .unwrap_or(Strength::Standard);
+
         let builder = Self {
             leaf_count,
             data: vec![F::zero(); leaf_count],
             fill_index: 0,
-            column_constants: PoseidonConstants::<F, ColumnArity>::new(),
+            column_constants: PoseidonConstants::new_with_strength(column_strength),
             column_batcher,
             tree_builder,
         };

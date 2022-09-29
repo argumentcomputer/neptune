@@ -9,7 +9,7 @@ use ec_gpu_gen::SourceBuilder;
 #[cfg(feature = "pasta")]
 use pasta_curves::{Fp, Fq as Fv};
 
-use round_numbers::{round_numbers_base, round_numbers_strengthened};
+use round_numbers::{round_numbers_base, round_numbers_even_partial, round_numbers_strengthened};
 
 pub struct DerivedConstants {
     pub arity: usize,
@@ -124,31 +124,35 @@ fn poseidon_source(field: &str, strength: &str, derived_constants: &DerivedConst
 ///
 /// The constants can be generated based on the the arity and the strength. The `derived_constants`
 /// parameter is a list of tuples, where the first element contains the standard strength
-/// parameters, the second element is the strengthed one.
+/// parameters, the second element is the strengthed, and the third is the "even-partial" strength.
 fn generate_program_from_constants<F>(
-    derived_constants: &[(DerivedConstants, DerivedConstants)],
+    derived_constants: &[(DerivedConstants, DerivedConstants, DerivedConstants)],
 ) -> String
 where
     F: GpuName + 'static,
 {
     let mut source = vec![shared(&F::name())];
-    for (standard, _strengthened) in derived_constants {
+    for (standard, _strengthened, _even_partial) in derived_constants {
         source.push(poseidon_source(&F::name(), "standard", standard));
         #[cfg(feature = "strengthened")]
         source.push(poseidon_source(&F::name(), "strengthened", &_strengthened));
+        #[cfg(feature = "even-partial")]
+        source.push(poseidon_source(&F::name(), "even_partial", _even_partial));
     }
     source.join("\n")
 }
 
 /// Returns derived constants based on the arity.
 ///
-/// It returns both, the standard and the strengthened constants.
-fn derive_constants(arity: usize) -> (DerivedConstants, DerivedConstants) {
+/// It returns all three Poseidon constants: standard, strengthened, and even-partial.
+fn derive_constants(arity: usize) -> (DerivedConstants, DerivedConstants, DerivedConstants) {
     let (full_standard, partial_standard) = round_numbers_base(arity);
     let (full_strengthened, partial_strengthened) = round_numbers_strengthened(arity);
+    let (full_even, partial_even) = round_numbers_even_partial(arity);
     (
         DerivedConstants::new(arity, full_standard, partial_standard),
         DerivedConstants::new(arity, full_strengthened, partial_strengthened),
+        DerivedConstants::new(arity, full_even, partial_even),
     )
 }
 

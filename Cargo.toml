@@ -65,9 +65,11 @@ arity24 = []
 arity36 = []
 # With this feature set, also the strengthened version of the kernel will be compiled.
 strengthened = []
+# Compiles the "even-partial" strength GPU kernel.
+even-partial = []
 # The supported fields for Poseidon running on the GPU are specified at compile-time.
 bls = ["blstrs/gpu"]
-pasta = ["pasta_curves/gpu"]
+pasta = ["pasta_curves/gpu", "even-partial"]
 
 [workspace]
 members = [
