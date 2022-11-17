@@ -2,7 +2,7 @@
 #![allow(clippy::ptr_arg)]
 
 use ff::PrimeField;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::matrix;
 use crate::matrix::{

@@ -7,10 +7,10 @@ use crate::{matrix, quintic_s_box, BatchHasher, Strength, DEFAULT_STRENGTH};
 use crate::{round_constants, round_numbers, Error};
 use ff::PrimeField;
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
+use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use typenum::marker_traits::Unsigned;
 use typenum::*;
-use serde::{Serialize, Deserialize};
 
 /// Available arities for the Poseidon hasher.
 pub trait Arity<T>: ArrayLength<T> {
@@ -118,7 +118,7 @@ where
     pub half_full_rounds: usize,
     pub partial_rounds: usize,
     pub hash_type: HashType<F, A>,
-    //NOTE: temporalily public
+    //NOTE: temporarily public
     pub _a: PhantomData<A>,
 }
 

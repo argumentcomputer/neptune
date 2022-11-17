@@ -12,7 +12,7 @@
 /// may still express the full range of hash function types.
 use crate::{Arity, Strength};
 use ff::PrimeField;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum HashType<F: PrimeField, A: Arity<F>> {
