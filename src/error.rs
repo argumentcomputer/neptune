@@ -54,9 +54,16 @@ pub enum Error {
 }
 
 #[cfg(any(feature = "cuda", feature = "opencl"))]
-impl From<rust_gpu_tools::GPUError> for Error {
-    fn from(e: rust_gpu_tools::GPUError) -> Self {
+impl From<ec_gpu_gen::rust_gpu_tools::GPUError> for Error {
+    fn from(e: ec_gpu_gen::rust_gpu_tools::GPUError) -> Self {
         Self::GpuError(format!("GPU tools error: {}", e))
+    }
+}
+
+#[cfg(any(feature = "cuda", feature = "opencl"))]
+impl From<ec_gpu_gen::EcError> for Error {
+    fn from(e: ec_gpu_gen::EcError) -> Self {
+        Self::GpuError(format!("EC-GPU error: {}", e))
     }
 }
 

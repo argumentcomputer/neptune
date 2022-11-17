@@ -12,6 +12,7 @@ pub use error::Error;
 use ff::PrimeField;
 use generic_array::GenericArray;
 use std::fmt;
+use trait_set::trait_set;
 
 #[cfg(all(
     any(feature = "cuda", feature = "opencl"),
@@ -73,6 +74,23 @@ pub mod batch_hasher;
 
 #[cfg(any(feature = "cuda", feature = "opencl"))]
 pub mod proteus;
+
+#[cfg(not(any(feature = "cuda", feature = "opencl")))]
+trait_set! {
+   /// Use a trait alias, so that we can have different traits depending on the features.
+   ///
+   /// When `cuda` and/or `opencl` is enabled, then the field also needs to implement `GpuName`.
+   //pub trait NeptuneField = PrimeField + ec_gpu::GpuName;
+   pub trait NeptuneField = PrimeField;
+}
+
+#[cfg(any(feature = "cuda", feature = "opencl"))]
+trait_set! {
+   /// Use a trait alias, so that we can have different traits depending on the features.
+   ///
+   /// When `cuda` and/or `opencl` is enabled, then the field also needs to implement `GpuName`.
+   pub trait NeptuneField = PrimeField + ec_gpu::GpuName;
+}
 
 pub(crate) const TEST_SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,

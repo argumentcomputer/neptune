@@ -2,7 +2,7 @@ use crate::batch_hasher::Batcher;
 use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
 use crate::tree_builder::{TreeBuilder, TreeBuilderTrait};
-use crate::{Arity, BatchHasher};
+use crate::{Arity, BatchHasher, NeptuneField};
 use ff::{Field, PrimeField};
 use generic_array::{ArrayLength, GenericArray};
 
@@ -23,7 +23,7 @@ where
 
 pub struct ColumnTreeBuilder<F, ColumnArity, TreeArity>
 where
-    F: PrimeField,
+    F: NeptuneField,
     ColumnArity: Arity<F>,
     TreeArity: Arity<F>,
 {
@@ -39,7 +39,7 @@ where
 impl<F, ColumnArity, TreeArity> ColumnTreeBuilderTrait<F, ColumnArity, TreeArity>
     for ColumnTreeBuilder<F, ColumnArity, TreeArity>
 where
-    F: PrimeField,
+    F: NeptuneField,
     ColumnArity: Arity<F>,
     TreeArity: Arity<F>,
 {
@@ -104,7 +104,7 @@ fn as_generic_arrays<A: Arity<F>, F: PrimeField>(vec: &[F]) -> &[GenericArray<F,
 
 impl<F, ColumnArity, TreeArity> ColumnTreeBuilder<F, ColumnArity, TreeArity>
 where
-    F: PrimeField,
+    F: NeptuneField,
     ColumnArity: Arity<F>,
     TreeArity: Arity<F>,
 {
