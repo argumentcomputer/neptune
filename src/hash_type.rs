@@ -12,14 +12,16 @@
 /// may still express the full range of hash function types.
 use crate::{Arity, Strength};
 use ff::PrimeField;
+use serde::{Serialize, Deserialize};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum HashType<F: PrimeField, A: Arity<F>> {
     MerkleTree,
     MerkleTreeSparse(u64),
     VariableLength,
     ConstantLength(usize),
     Encryption,
+    #[serde(skip)]
     Custom(CType<F, A>),
     Sponge,
 }
@@ -64,7 +66,7 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum CType<F: PrimeField, A: Arity<F>> {
     Arbitrary(u64),
     _Phantom((F, A)),

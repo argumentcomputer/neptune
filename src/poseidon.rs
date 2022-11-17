@@ -10,6 +10,7 @@ use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArra
 use std::marker::PhantomData;
 use typenum::marker_traits::Unsigned;
 use typenum::*;
+use serde::{Serialize, Deserialize};
 
 /// Available arities for the Poseidon hasher.
 pub trait Arity<T>: ArrayLength<T> {
@@ -117,7 +118,8 @@ where
     pub half_full_rounds: usize,
     pub partial_rounds: usize,
     pub hash_type: HashType<F, A>,
-    _a: PhantomData<A>,
+    //NOTE: temporalily public
+    pub _a: PhantomData<A>,
 }
 
 #[derive(Debug, PartialEq)]

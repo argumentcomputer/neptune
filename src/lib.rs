@@ -13,6 +13,7 @@ use ff::PrimeField;
 use generic_array::GenericArray;
 use std::fmt;
 use trait_set::trait_set;
+use serde::{Serialize, Deserialize};
 
 #[cfg(all(
     any(feature = "cuda", feature = "opencl"),
@@ -92,11 +93,13 @@ trait_set! {
    pub trait NeptuneField = PrimeField + ec_gpu::GpuName;
 }
 
+mod serde_impl;
+
 pub(crate) const TEST_SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
 ];
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Strength {
     Standard,
     Strengthened,
