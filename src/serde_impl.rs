@@ -30,8 +30,8 @@ where
         state.serialize_field("psm", &self.pre_sparse_matrix)?;
         state.serialize_field("sm", &self.sparse_matrixes)?;
         state.serialize_field("s", &self.strength)?;
-        state.serialize_field("fr", &self.full_rounds)?;
-        state.serialize_field("pr", &self.partial_rounds)?;
+        state.serialize_field("rf", &self.full_rounds)?;
+        state.serialize_field("rp", &self.partial_rounds)?;
         state.serialize_field("ht", &self.hash_type)?;
         state.end()
     }
@@ -49,15 +49,15 @@ where
         #[derive(Deserialize)]
         #[serde(field_identifier, rename_all = "lowercase")]
         enum Field {
-            MDS,
-            RC,
-            CRC,
-            PSM,
-            SM,
+            Mds,
+            Rc,
+            Crc,
+            Psm,
+            Sm,
             S,
-            FR,
-            PR,
-            HT,
+            Rf,
+            Rp,
+            Ht,
         }
 
         struct PoseidonConstantsVisitor<F, A>
@@ -144,19 +144,19 @@ where
 
                 while let Some(key) = map.next_key()? {
                     match key {
-                        Field::MDS => {
+                        Field::Mds => {
                             if mds_matrices.is_some() {
                                 return Err(de::Error::duplicate_field("mds_matrices"));
                             }
                             mds_matrices = Some(map.next_value()?);
                         }
-                        Field::RC => {
+                        Field::Rc => {
                             if round_constants.is_some() {
                                 return Err(de::Error::duplicate_field("round_constants"));
                             }
                             round_constants = Some(map.next_value()?);
                         }
-                        Field::CRC => {
+                        Field::Crc => {
                             if compressed_round_constants.is_some() {
                                 return Err(de::Error::duplicate_field(
                                     "compressed_round_constants",
@@ -164,13 +164,13 @@ where
                             }
                             compressed_round_constants = Some(map.next_value()?);
                         }
-                        Field::PSM => {
+                        Field::Psm => {
                             if pre_sparse_matrix.is_some() {
                                 return Err(de::Error::duplicate_field("pre_sparse_matrix"));
                             }
                             pre_sparse_matrix = Some(map.next_value()?);
                         }
-                        Field::SM => {
+                        Field::Sm => {
                             if sparse_matrixes.is_some() {
                                 return Err(de::Error::duplicate_field("sparse_matrixes"));
                             }
@@ -182,19 +182,19 @@ where
                             }
                             strength = Some(map.next_value()?);
                         }
-                        Field::FR => {
+                        Field::Rf => {
                             if full_rounds.is_some() {
                                 return Err(de::Error::duplicate_field("full_rounds"));
                             }
                             full_rounds = Some(map.next_value()?);
                         }
-                        Field::PR => {
+                        Field::Rp => {
                             if partial_rounds.is_some() {
                                 return Err(de::Error::duplicate_field("partial_rounds"));
                             }
                             partial_rounds = Some(map.next_value()?);
                         }
-                        Field::HT => {
+                        Field::Ht => {
                             if hash_type.is_some() {
                                 return Err(de::Error::duplicate_field("hash_type"));
                             }
@@ -237,7 +237,7 @@ where
             }
         }
 
-        const FIELDS: &'static [&'static str] = &["
+        const FIELDS: &[&str] = &["
 	  mds_matrices,
 	  round_constants,
 	  compressed_round_constants,

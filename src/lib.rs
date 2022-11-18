@@ -11,9 +11,9 @@ use blstrs::Scalar as Fr;
 pub use error::Error;
 use ff::PrimeField;
 use generic_array::GenericArray;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use trait_set::trait_set;
-use serde::{Serialize, Deserialize};
 
 #[cfg(all(
     any(feature = "cuda", feature = "opencl"),

@@ -118,8 +118,7 @@ where
     pub half_full_rounds: usize,
     pub partial_rounds: usize,
     pub hash_type: HashType<F, A>,
-    //NOTE: temporarily public
-    pub _a: PhantomData<A>,
+    pub(crate) _a: PhantomData<A>,
 }
 
 #[derive(Debug, PartialEq)]
