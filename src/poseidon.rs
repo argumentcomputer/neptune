@@ -7,6 +7,7 @@ use crate::{matrix, quintic_s_box, BatchHasher, Strength, DEFAULT_STRENGTH};
 use crate::{round_constants, round_numbers, Error};
 use ff::PrimeField;
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
+use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use typenum::marker_traits::Unsigned;
 use typenum::*;
@@ -105,7 +106,7 @@ where
     A: Arity<F>,
 {
     pub mds_matrices: MdsMatrices<F>,
-    pub round_constants: Vec<F>,
+    pub round_constants: Option<Vec<F>>,
     pub compressed_round_constants: Vec<F>,
     pub pre_sparse_matrix: Matrix<F>,
     pub sparse_matrixes: Vec<SparseMatrix<F>>,
@@ -117,7 +118,7 @@ where
     pub half_full_rounds: usize,
     pub partial_rounds: usize,
     pub hash_type: HashType<F, A>,
-    _a: PhantomData<A>,
+    pub(crate) _a: PhantomData<A>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -206,7 +207,7 @@ where
 
         Self {
             mds_matrices,
-            round_constants,
+            round_constants: Some(round_constants),
             compressed_round_constants,
             pre_sparse_matrix,
             sparse_matrixes,
