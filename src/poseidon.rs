@@ -106,7 +106,7 @@ where
     A: Arity<F>,
 {
     pub mds_matrices: MdsMatrices<F>,
-    pub round_constants: Vec<F>,
+    pub round_constants: Option<Vec<F>>,
     pub compressed_round_constants: Vec<F>,
     pub pre_sparse_matrix: Matrix<F>,
     pub sparse_matrixes: Vec<SparseMatrix<F>>,
@@ -207,7 +207,7 @@ where
 
         Self {
             mds_matrices,
-            round_constants,
+            round_constants: Some(round_constants),
             compressed_round_constants,
             pre_sparse_matrix,
             sparse_matrixes,

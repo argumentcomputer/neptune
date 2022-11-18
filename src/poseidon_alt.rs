@@ -49,6 +49,8 @@ where
     let pre_round_keys = p
         .constants
         .round_constants
+        .as_ref()
+        .unwrap()
         .iter()
         .skip(p.constants_offset)
         .map(Some);
@@ -132,6 +134,8 @@ pub fn full_round_dynamic<F, A>(
     let pre_round_keys = p
         .constants
         .round_constants
+        .as_ref()
+        .unwrap()
         .iter()
         .skip(p.constants_offset)
         .map(|x| {
@@ -148,6 +152,8 @@ pub fn full_round_dynamic<F, A>(
         let post_vec = p
             .constants
             .round_constants
+            .as_ref()
+            .unwrap()
             .iter()
             .skip(
                 p.constants_offset
@@ -227,11 +233,14 @@ where
     F: PrimeField,
     A: Arity<F>,
 {
-    for (element, round_constant) in p
-        .elements
-        .iter_mut()
-        .zip(p.constants.round_constants.iter().skip(p.constants_offset))
-    {
+    for (element, round_constant) in p.elements.iter_mut().zip(
+        p.constants
+            .round_constants
+            .as_ref()
+            .unwrap()
+            .iter()
+            .skip(p.constants_offset),
+    ) {
         element.add_assign(round_constant);
     }
 

@@ -1,6 +1,4 @@
 use ff::PrimeField;
-use generic_array::typenum;
-use pasta_curves::pallas::Scalar as S1;
 use serde::{
     de::{self, Deserializer, MapAccess, SeqAccess, Visitor},
     ser::{SerializeStruct, Serializer},
@@ -8,7 +6,6 @@ use serde::{
 };
 use std::fmt;
 use std::marker::PhantomData;
-use typenum::Unsigned;
 
 use crate::hash_type::HashType;
 use crate::poseidon::PoseidonConstants;
@@ -23,9 +20,8 @@ where
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("PoseidonConstants", 9)?;
+        let mut state = serializer.serialize_struct("PoseidonConstants", 8)?;
         state.serialize_field("mds", &self.mds_matrices)?;
-        state.serialize_field("rc", &self.round_constants)?;
         state.serialize_field("crc", &self.compressed_round_constants)?;
         state.serialize_field("psm", &self.pre_sparse_matrix)?;
         state.serialize_field("sm", &self.sparse_matrixes)?;
@@ -50,7 +46,6 @@ where
         #[serde(field_identifier, rename_all = "lowercase")]
         enum Field {
             Mds,
-            Rc,
             Crc,
             Psm,
             Sm,
@@ -87,34 +82,31 @@ where
                 let mds_matrices = seq
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(0, &self))?;
-                let round_constants = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(1, &self))?;
                 let compressed_round_constants = seq
                     .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(2, &self))?;
+                    .ok_or_else(|| de::Error::invalid_length(1, &self))?;
                 let pre_sparse_matrix = seq
                     .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(3, &self))?;
+                    .ok_or_else(|| de::Error::invalid_length(2, &self))?;
                 let sparse_matrixes = seq
                     .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(4, &self))?;
+                    .ok_or_else(|| de::Error::invalid_length(3, &self))?;
                 let strength = seq
                     .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(5, &self))?;
+                    .ok_or_else(|| de::Error::invalid_length(4, &self))?;
                 let full_rounds = seq
                     .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(6, &self))?;
+                    .ok_or_else(|| de::Error::invalid_length(5, &self))?;
                 let partial_rounds = seq
                     .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(7, &self))?;
+                    .ok_or_else(|| de::Error::invalid_length(6, &self))?;
                 let hash_type: HashType<F, A> = seq
                     .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(8, &self))?;
+                    .ok_or_else(|| de::Error::invalid_length(7, &self))?;
 
                 Ok(PoseidonConstants {
                     mds_matrices,
-                    round_constants,
+                    round_constants: None,
                     compressed_round_constants,
                     pre_sparse_matrix,
                     sparse_matrixes,
@@ -133,7 +125,6 @@ where
                 V: MapAccess<'de>,
             {
                 let mut mds_matrices = None;
-                let mut round_constants = None;
                 let mut compressed_round_constants = None;
                 let mut pre_sparse_matrix = None;
                 let mut sparse_matrixes = None;
@@ -149,12 +140,6 @@ where
                                 return Err(de::Error::duplicate_field("mds_matrices"));
                             }
                             mds_matrices = Some(map.next_value()?);
-                        }
-                        Field::Rc => {
-                            if round_constants.is_some() {
-                                return Err(de::Error::duplicate_field("round_constants"));
-                            }
-                            round_constants = Some(map.next_value()?);
                         }
                         Field::Crc => {
                             if compressed_round_constants.is_some() {
@@ -205,8 +190,6 @@ where
 
                 let mds_matrices =
                     mds_matrices.ok_or_else(|| de::Error::missing_field("mds_matrices"))?;
-                let round_constants =
-                    round_constants.ok_or_else(|| de::Error::missing_field("round_constants"))?;
                 let compressed_round_constants = compressed_round_constants
                     .ok_or_else(|| de::Error::missing_field("compressed_round_constants"))?;
                 let pre_sparse_matrix = pre_sparse_matrix
@@ -222,7 +205,7 @@ where
                     hash_type.ok_or_else(|| de::Error::missing_field("hash_type"))?;
                 Ok(PoseidonConstants {
                     mds_matrices,
-                    round_constants,
+                    round_constants: None,
                     compressed_round_constants,
                     pre_sparse_matrix,
                     sparse_matrixes,
@@ -239,7 +222,6 @@ where
 
         const FIELDS: &[&str] = &["
 	  mds_matrices,
-	  round_constants,
 	  compressed_round_constants,
 	  pre_sparse_matrix,
 	  sparse_matrixes,
@@ -262,15 +244,44 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use typenum::U1;
+    use crate::Poseidon;
+    use blstrs::Scalar as Fr;
+    use ff::Field;
+    use generic_array::typenum;
+    use pasta_curves::pallas::Scalar as S1;
+    use typenum::{U1, U2};
 
     #[test]
-    fn serde_roundtrip_constants() {
-        let constants = PoseidonConstants::<S1, U1>::new();
+    fn serde_roundtrip() {
+        let mut constants = PoseidonConstants::<S1, U1>::new();
+        constants.round_constants = None;
 
         assert_eq!(
             constants,
             serde_json::from_slice(&serde_json::to_vec(&constants).unwrap()).unwrap()
         );
+    }
+    #[test]
+    fn serde_hash_blstrs() {
+        let constants = PoseidonConstants::<Fr, U2>::new();
+        let constants2 = serde_json::from_slice(&serde_json::to_vec(&constants).unwrap()).unwrap();
+        let test_arity = 2;
+        let preimage = vec![<Fr as Field>::one(); test_arity];
+        let mut h1 = Poseidon::<Fr, U2>::new_with_preimage(&preimage, &constants);
+        let mut h2 = Poseidon::<Fr, U2>::new_with_preimage(&preimage, &constants2);
+
+        assert_eq!(h1.hash(), h2.hash())
+    }
+
+    #[test]
+    fn serde_hash_pallas() {
+        let constants = PoseidonConstants::<S1, U2>::new();
+        let constants2 = serde_json::from_slice(&serde_json::to_vec(&constants).unwrap()).unwrap();
+        let test_arity = 2;
+        let preimage = vec![<S1 as Field>::one(); test_arity];
+        let mut h1 = Poseidon::<S1, U2>::new_with_preimage(&preimage, &constants);
+        let mut h2 = Poseidon::<S1, U2>::new_with_preimage(&preimage, &constants2);
+
+        assert_eq!(h1.hash(), h2.hash())
     }
 }
