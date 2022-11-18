@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 8.0.0
+- fix: update to newer ec-gpu version (https://github.com/filecoin-project/neptune/pull/164)
+- chore: fix CI MacOS build (https://github.com/filecoin-project/neptune/pull/161)
+
 ## 7.2.0 - 2022-8-9
 - Change write_rate_element to add_rate_element to agree with spec.
 
