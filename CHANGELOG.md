@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 8.1.0
+- Implement serde for PoseidonConstants (https://github.com/filecoin-project/neptune/pull/165)
+
 ## 8.0.0
 - fix: update to newer ec-gpu version (https://github.com/filecoin-project/neptune/pull/164)
 - chore: fix CI MacOS build (https://github.com/filecoin-project/neptune/pull/161)
