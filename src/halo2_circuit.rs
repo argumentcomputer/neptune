@@ -360,6 +360,8 @@ where
         let width = Self::width();
         consts
             .round_constants
+            .as_ref()
+            .expect("round_constants are set")
             .iter()
             .skip(round * width)
             .take(width)
@@ -414,6 +416,8 @@ where
 
         let round_consts = consts
             .round_constants
+            .as_ref()
+            .expect("round_constants are set")
             .iter()
             .skip(round * width)
             .take(width);
@@ -458,6 +462,8 @@ where
 
         let round_consts = consts
             .round_constants
+            .as_ref()
+            .expect("round_constants are set")
             .iter()
             .skip(round * width)
             .take(width);
@@ -527,12 +533,16 @@ where
 
         let round_consts_a = consts
             .round_constants
+            .as_ref()
+            .expect("round_constants are set")
             .iter()
             .skip(round_a * width)
             .take(width);
 
         let round_consts_b = consts
             .round_constants
+            .as_ref()
+            .expect("round_constants are set")
             .iter()
             .skip(round_b * width)
             .take(width);
