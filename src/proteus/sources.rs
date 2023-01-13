@@ -4,8 +4,8 @@ mod round_numbers;
 
 #[cfg(feature = "bls")]
 use blstrs::Scalar as Fr;
-use ec_gpu::GpuField;
-use ec_gpu_gen::Limb;
+use ec_gpu::GpuName;
+use ec_gpu_gen::SourceBuilder;
 #[cfg(feature = "pasta")]
 use pasta_curves::{Fp, Fq as Fv};
 
@@ -125,21 +125,20 @@ fn poseidon_source(field: &str, strength: &str, derived_constants: &DerivedConst
 /// The constants can be generated based on the the arity and the strength. The `derived_constants`
 /// parameter is a list of tuples, where the first element contains the standard strength
 /// parameters, the second element is the strengthed, and the third is the "even-partial" strength.
-fn generate_program_from_constants<F, L>(
-    field_name: &str,
+/// parameters, the second element is the strengthed one.
+fn generate_program_from_constants<F>(
     derived_constants: &[(DerivedConstants, DerivedConstants, DerivedConstants)],
 ) -> String
-where
-    F: GpuField,
-    L: Limb,
+    where
+        F: GpuName + 'static,
 {
-    let mut source = vec![ec_gpu_gen::field::<F, L>(field_name), shared(field_name)];
+    let mut source = vec![shared(&F::name())];
     for (standard, _strengthened, _even_partial) in derived_constants {
-        source.push(poseidon_source(field_name, "standard", standard));
+        source.push(poseidon_source(&F::name(), "standard", standard));
         #[cfg(feature = "strengthened")]
-        source.push(poseidon_source(field_name, "strengthened", &_strengthened));
+        source.push(poseidon_source(&F::name(), "strengthened", &_strengthened));
         #[cfg(feature = "even-partial")]
-        source.push(poseidon_source(field_name, "even_partial", _even_partial));
+        source.push(poseidon_source(&F::name(), "even_partial", _even_partial));
     }
     source.join("\n")
 }
@@ -161,38 +160,37 @@ fn derive_constants(arity: usize) -> (DerivedConstants, DerivedConstants, Derive
 /// Returns the kernels source based on the set feature flags.
 ///
 /// Kernels for certain arities are enabled by feature flags.
-pub fn generate_program<L>() -> String
-where
-    L: Limb,
-{
+pub fn generate_program() -> SourceBuilder {
     #[cfg(any(feature = "bls", feature = "pasta"))]
-    let derived_constants = vec![
+        let derived_constants = vec![
         #[cfg(feature = "arity2")]
-        derive_constants(2),
+            derive_constants(2),
         #[cfg(feature = "arity4")]
-        derive_constants(4),
+            derive_constants(4),
         #[cfg(feature = "arity8")]
-        derive_constants(8),
+            derive_constants(8),
         #[cfg(feature = "arity11")]
-        derive_constants(11),
+            derive_constants(11),
         #[cfg(feature = "arity16")]
-        derive_constants(16),
+            derive_constants(16),
         #[cfg(feature = "arity24")]
-        derive_constants(24),
+            derive_constants(24),
         #[cfg(feature = "arity36")]
-        derive_constants(36),
+            derive_constants(36),
     ];
 
-    let source = vec![
-        ec_gpu_gen::common(),
-        // Those field names below, need to match the ones pass into `kernel_name()` in
-        // `proteus::gpu::ClBatchHasher::hash`.
-        #[cfg(feature = "bls")]
-        generate_program_from_constants::<Fr, L>("Fr", &derived_constants),
-        #[cfg(feature = "pasta")]
-        generate_program_from_constants::<Fp, L>("Fp", &derived_constants),
-        #[cfg(feature = "pasta")]
-        generate_program_from_constants::<Fv, L>("Fv", &derived_constants),
-    ];
-    source.join("\n")
+    let source_builder = SourceBuilder::new();
+
+    #[cfg(feature = "bls")]
+        let source_builder = source_builder
+        .add_field::<Fr>()
+        .append_source(generate_program_from_constants::<Fr>(&derived_constants));
+    #[cfg(feature = "pasta")]
+        let source_builder = source_builder
+        .add_field::<Fp>()
+        .add_field::<Fv>()
+        .append_source(generate_program_from_constants::<Fp>(&derived_constants))
+        .append_source(generate_program_from_constants::<Fv>(&derived_constants));
+
+    source_builder
 }

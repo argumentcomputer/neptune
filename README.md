@@ -35,18 +35,14 @@ If you make changes to the spec in `neptune`, you must make those same changes t
 
 ## Environment variables
 
- - `NEPTUNE_DEFAULT_GPU=<unique-id>` allows you to select the default GPU that tree-builder is going to run on given its unique ID.
+ - `EC_GPU_FRAMEWORK=<cuda | opencl>` allows to select whether the CUDA or OpenCL implementation should be used. If not set, `cuda` will be used if available.
 
-(The unique ID is the UUID or the hexadecimal Bus-ID that can be found through `nvidia-smi`, `rocm-smi`, `lspci` and etc.)
+ - `EC_GPU_CUDA_NVCC_ARGS`
 
- - `NEPTUNE_GPU_FRAMEWORK=<cuda | opencl>` allows to select whether the CUDA or OpenCL implementation should be used. If not set, `cuda` will be used if available.
-
- - `NEPTUNE_CUDA_NVCC_ARGS`
-
-By default the CUDA kernel is compiled for several architectures, which may take a long time. `BELLMAN_CUDA_NVCC_ARGS` can be used to override those arguments. The input and output file will still be automatically set.
+By default the CUDA kernel is compiled for several architectures, which may take a long time. `EC_GPU_CUDA_NVCC_ARGS` can be used to override those arguments. The input and output file will still be automatically set.
 
     // Example for compiling the kernel for only the Turing architecture
-    NEPTUNE_CUDA_NVCC_ARGS="--fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75"
+    EC_GPU_CUDA_NVCC_ARGS="--fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75"
 
 ## Rust feature flags
 

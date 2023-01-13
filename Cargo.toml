@@ -1,7 +1,7 @@
 [package]
 name = "neptune"
 description = "Poseidon hashing over BLS12-381 for Filecoin."
-version = "7.2.0"
+version = "8.1.0"
 authors = ["porcuquine <porcuquine@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -10,12 +10,12 @@ resolver = "2"
 
 [dependencies]
 lazy_static = "1.4.0"
-bellperson = { version = "0.22", default-features = false }
+bellperson = { version = "0.24", default-features = false }
 blake2s_simd = "0.5"
-blstrs = { version = "0.5.0", optional = true }
+blstrs = { version = "0.6.0", optional = true }
 byteorder = "1"
-ec-gpu = { version = "0.1.0", optional = true }
-ec-gpu-gen = { version = "0.3.0", default-features = false, optional = true }
+ec-gpu = { version = "0.2.0", optional = true }
+ec-gpu-gen = { version = "0.5.0", optional = true }
 ff = "0.12.0"
 generic-array = "0.14.4"
 itertools = { version = "0.8.0" }
@@ -23,26 +23,24 @@ log = "0.4.8"
 halo2_proofs = "0.2.0"
 # `halo2_proofs` does not expose the feature `pasta_curves/gpu`, thus we must also import
 # `pasta_curves/gpu` when building with `neptune/pasta`.
-pasta_curves = { version = "0.4.0", optional = true }
+pasta_curves = { version = "0.5.1", features = ["serde"], package = "fil_pasta_curves", optional = true }
 rust-gpu-tools = { version = "0.5.0", default-features = false, optional = true }
+trait-set = "0.3.0"
+serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
-blstrs = { version = "0.5.0" }
+blstrs = "0.6.1"
 criterion = "0.3"
 rand = "0.8.0"
-sha2 = "0.9"
-tempdir = "0.3"
 rand_xorshift = "0.3.0"
 serde_json = "1.0.53"
+sha2 = "0.9"
 
 [build-dependencies]
-blstrs = "0.5.0"
-ec-gpu = { version = "0.1.0", optional = true }
-ec-gpu-gen = { version = "0.3.0", default-features = false, optional = true }
-execute = "0.2.9"
-hex = "0.4"
-pasta_curves = "0.4.0"
-sha2 = "0.9"
+blstrs = "0.6.1"
+ec-gpu = { version = "0.2.0", optional = true }
+ec-gpu-gen = { version = "0.5.0", optional = true }
+pasta_curves = { version = "0.5.1", package = "fil_pasta_curves" }
 
 [[bench]]
 name = "hash"
@@ -58,8 +56,8 @@ codegen-units = 1
 
 [features]
 default = [ "bellperson/default" ]
-cuda = ["rust-gpu-tools/cuda", "blstrs/gpu", "ec-gpu-gen/cuda", "ec-gpu"]
-opencl = ["rust-gpu-tools/opencl", "blstrs/gpu", "ec-gpu-gen/opencl", "ec-gpu"]
+cuda = ["ec-gpu-gen/cuda", "ec-gpu", "pasta_curves/gpu"]
+opencl = ["ec-gpu-gen/opencl", "ec-gpu", "pasta_curves/gpu"]
 # The supported arities for Poseidon running on the GPU are specified at compile-time.
 arity2 = []
 arity4 = []
@@ -72,7 +70,6 @@ arity36 = []
 strengthened = []
 # Compiles the "even-partial" strength GPU kernel.
 even-partial = []
-wasm = [ "bellperson/wasm" ]
 # The supported fields for Poseidon running on the GPU are specified at compile-time.
 bls = ["blstrs/gpu"]
 pasta = ["pasta_curves/gpu", "even-partial"]

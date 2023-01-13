@@ -1,13 +1,14 @@
 use crate::batch_hasher::Batcher;
 use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
-use crate::{Arity, BatchHasher, Strength};
+use crate::{Arity, BatchHasher, Strength, NeptuneField};
+
 use ff::{Field, PrimeField};
 use generic_array::GenericArray;
 
 pub trait TreeBuilderTrait<F, TreeArity>
 where
-    F: PrimeField,
+    F: NeptuneField,
     TreeArity: Arity<F>,
 {
     fn add_leaves(&mut self, leaves: &[F]) -> Result<(), Error>;
@@ -18,7 +19,7 @@ where
 
 pub struct TreeBuilder<F, TreeArity>
 where
-    F: PrimeField,
+    F: NeptuneField,
     TreeArity: Arity<F>,
 {
     pub leaf_count: usize,
@@ -32,7 +33,7 @@ where
 
 impl<F, TreeArity> TreeBuilderTrait<F, TreeArity> for TreeBuilder<F, TreeArity>
 where
-    F: PrimeField,
+    F: NeptuneField,
     TreeArity: Arity<F>,
 {
     fn add_leaves(&mut self, leaves: &[F]) -> Result<(), Error> {
@@ -85,7 +86,7 @@ fn as_generic_arrays<A: Arity<F>, F: PrimeField>(vec: &[F]) -> &[GenericArray<F,
 
 impl<F, TreeArity> TreeBuilder<F, TreeArity>
 where
-    F: PrimeField,
+    F: NeptuneField,
     TreeArity: Arity<F>,
 {
     pub fn new(

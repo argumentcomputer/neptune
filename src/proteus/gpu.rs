@@ -1,14 +1,12 @@
-use super::program;
 use super::sources::{generate_program, DerivedConstants};
 use crate::error::{ClError, Error};
 use crate::hash_type::HashType;
 use crate::poseidon::PoseidonConstants;
-use crate::{Arity, BatchHasher, Strength, DEFAULT_STRENGTH};
-use ec_gpu::GpuField;
+use crate::{Arity, BatchHasher, NeptuneField, Strength, DEFAULT_STRENGTH};
+use ec_gpu_gen::rust_gpu_tools::{program_closures, Device, Program};
 use ff::{Field, PrimeField};
 use generic_array::{typenum, ArrayLength, GenericArray};
 use log::info;
-use rust_gpu_tools::{program_closures, Device, Program};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use typenum::{U11, U2, U8};
@@ -19,9 +17,9 @@ use blstrs::Scalar as Fr;
 use pasta_curves::{Fp, Fq as Fv};
 
 #[cfg(feature = "cuda")]
-use rust_gpu_tools::cuda;
+use ec_gpu_gen::rust_gpu_tools::cuda;
 #[cfg(feature = "opencl")]
-use rust_gpu_tools::opencl;
+use ec_gpu_gen::rust_gpu_tools::opencl;
 use std::ffi::c_void;
 
 #[derive(Debug)]
@@ -62,7 +60,7 @@ where
 
 pub struct ClBatchHasher<F, A>
 where
-    F: PrimeField,
+    F: NeptuneField,
     A: Arity<F>,
 {
     device: Device,
@@ -74,7 +72,7 @@ where
 
 impl<F, A> GpuConstants<F, A>
 where
-    F: PrimeField,
+    F: NeptuneField,
     A: Arity<F>,
 {
     fn strength(&self) -> Strength {
@@ -102,16 +100,16 @@ where
     }
 
     /// Returns the name of the kernel that can be be called with those contants
-    fn kernel_name(&self, field_name: &str) -> String {
+    fn kernel_name(&self) -> String {
         let arity = A::to_usize();
         let strength = self.strength();
-        format!("hash_preimages_{}_{}_{}", field_name, arity, strength)
+        format!("hash_preimages_{}_{}_{}", F::name(), arity, strength)
     }
 }
 
 impl<F, A> ClBatchHasher<F, A>
 where
-    F: PrimeField + GpuField,
+    F: NeptuneField,
     A: Arity<F>,
 {
     /// Create a new `GPUBatchHasher` and initialize it with state corresponding with its `A`.
@@ -125,7 +123,7 @@ where
         max_batch_size: usize,
     ) -> Result<Self, Error> {
         let constants = GpuConstants(PoseidonConstants::<F, A>::new_with_strength(strength));
-        let program = program::program(device)?;
+        let program = ec_gpu_gen::program!(device)?;
 
         // Allocate the buffer only once and re-use it in the hashing steps
         let constants_buffer = match program {
@@ -174,7 +172,7 @@ where
 const LOCAL_WORK_SIZE: usize = 256;
 impl<F, A> BatchHasher<F, A> for ClBatchHasher<F, A>
 where
-    F: PrimeField,
+    F: NeptuneField,
     A: Arity<F>,
 {
     fn hash(&mut self, preimages: &[GenericArray<F, A>]) -> Result<Vec<F>, Error> {
@@ -188,24 +186,7 @@ where
         let global_work_size = calc_global_work_size(batch_size, local_work_size);
         let num_hashes = preimages.len();
 
-        // Only one case can possibly ever match.
-        let mut maybe_kernel_name = None;
-        // Those field names below, that are passed into `kernel_name()`, need to match the ones
-        // in `proteus::source::generate_program`.
-        #[cfg(feature = "bls")]
-        if TypeId::of::<F>() == TypeId::of::<Fr>() {
-            maybe_kernel_name = Some(self.constants.kernel_name("Fr"));
-        }
-        #[cfg(feature = "pasta")]
-        if TypeId::of::<F>() == TypeId::of::<Fp>() {
-            maybe_kernel_name = Some(self.constants.kernel_name("Fp"));
-        }
-        #[cfg(feature = "pasta")]
-        if TypeId::of::<F>() == TypeId::of::<Fv>() {
-            maybe_kernel_name = Some(self.constants.kernel_name("Fv"));
-        }
-        let kernel_name = maybe_kernel_name
-            .ok_or_else(|| Error::GpuError("No kernel found for the given field.".to_string()))?;
+        let kernel_name = self.constants.kernel_name();
 
         let closures = program_closures!(|program, _args| -> Result<Vec<F>, Error> {
             let kernel = program.create_kernel(&kernel_name, global_work_size, local_work_size)?;

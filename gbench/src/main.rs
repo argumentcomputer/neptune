@@ -1,5 +1,6 @@
 use blstrs::Scalar as Fr;
-use ec_gpu::GpuField;
+use ec_gpu::GpuName;
+use ec_gpu_gen::rust_gpu_tools::{Device, UniqueId};
 use ff::PrimeField;
 use generic_array::sequence::GenericSequence;
 use generic_array::typenum::{U11, U8};
@@ -8,14 +9,13 @@ use log::info;
 use neptune::column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait};
 use neptune::{batch_hasher::Batcher, BatchHasher};
 use pasta_curves::{Fp, Fq as Fv};
-use rust_gpu_tools::{Device, UniqueId};
 use std::convert::TryFrom;
 use std::str::FromStr;
 use std::thread;
 use std::time::Instant;
 use structopt::StructOpt;
 
-fn bench_column_building<F: PrimeField + GpuField>(
+fn bench_column_building<F: PrimeField + GpuName>(
     device: &Device,
     log_prefix: &str,
     max_column_batch_size: usize,
