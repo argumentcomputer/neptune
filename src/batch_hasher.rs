@@ -83,7 +83,7 @@ where
 
 impl<F, A> Batcher<F, A>
 where
-    F: PrimeField,
+    F: PrimeField + ec_gpu::GpuName,
     A: Arity<F>,
 {
     pub fn strength(&self) -> Strength {

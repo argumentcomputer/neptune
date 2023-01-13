@@ -161,7 +161,7 @@ where
 
 impl<F, A> ClBatchHasher<F, A>
 where
-    F: PrimeField,
+    F: PrimeField + ec_gpu::GpuName,
     A: Arity<F>,
 {
     pub(crate) fn strength(&self) -> Strength {

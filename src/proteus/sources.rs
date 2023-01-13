@@ -125,12 +125,11 @@ fn poseidon_source(field: &str, strength: &str, derived_constants: &DerivedConst
 /// The constants can be generated based on the the arity and the strength. The `derived_constants`
 /// parameter is a list of tuples, where the first element contains the standard strength
 /// parameters, the second element is the strengthed, and the third is the "even-partial" strength.
-/// parameters, the second element is the strengthed one.
 fn generate_program_from_constants<F>(
     derived_constants: &[(DerivedConstants, DerivedConstants, DerivedConstants)],
 ) -> String
-    where
-        F: GpuName + 'static,
+where
+    F: GpuName + 'static,
 {
     let mut source = vec![shared(&F::name())];
     for (standard, _strengthened, _even_partial) in derived_constants {
@@ -162,31 +161,31 @@ fn derive_constants(arity: usize) -> (DerivedConstants, DerivedConstants, Derive
 /// Kernels for certain arities are enabled by feature flags.
 pub fn generate_program() -> SourceBuilder {
     #[cfg(any(feature = "bls", feature = "pasta"))]
-        let derived_constants = vec![
+    let derived_constants = vec![
         #[cfg(feature = "arity2")]
-            derive_constants(2),
+        derive_constants(2),
         #[cfg(feature = "arity4")]
-            derive_constants(4),
+        derive_constants(4),
         #[cfg(feature = "arity8")]
-            derive_constants(8),
+        derive_constants(8),
         #[cfg(feature = "arity11")]
-            derive_constants(11),
+        derive_constants(11),
         #[cfg(feature = "arity16")]
-            derive_constants(16),
+        derive_constants(16),
         #[cfg(feature = "arity24")]
-            derive_constants(24),
+        derive_constants(24),
         #[cfg(feature = "arity36")]
-            derive_constants(36),
+        derive_constants(36),
     ];
 
     let source_builder = SourceBuilder::new();
 
     #[cfg(feature = "bls")]
-        let source_builder = source_builder
+    let source_builder = source_builder
         .add_field::<Fr>()
         .append_source(generate_program_from_constants::<Fr>(&derived_constants));
     #[cfg(feature = "pasta")]
-        let source_builder = source_builder
+    let source_builder = source_builder
         .add_field::<Fp>()
         .add_field::<Fv>()
         .append_source(generate_program_from_constants::<Fp>(&derived_constants))

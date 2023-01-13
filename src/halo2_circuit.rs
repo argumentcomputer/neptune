@@ -361,6 +361,8 @@ where
         let width = A::to_usize() + 1;
         consts
             .round_constants
+            .as_ref()
+            .unwrap()
             .iter()
             .skip(round * width)
             .take(width)
@@ -415,6 +417,8 @@ where
 
         let round_consts = consts
             .round_constants
+            .as_ref()
+            .unwrap()
             .iter()
             .skip(round * width)
             .take(width);
@@ -459,6 +463,8 @@ where
 
         let round_consts = consts
             .round_constants
+            .as_ref()
+            .unwrap()
             .iter()
             .skip(round * width)
             .take(width);
@@ -528,12 +534,16 @@ where
 
         let round_consts_a = consts
             .round_constants
+            .as_ref()
+            .unwrap()
             .iter()
             .skip(round_a * width)
             .take(width);
 
         let round_consts_b = consts
             .round_constants
+            .as_ref()
+            .unwrap()
             .iter()
             .skip(round_b * width)
             .take(width);

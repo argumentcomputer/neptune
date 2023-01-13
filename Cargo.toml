@@ -23,7 +23,7 @@ log = "0.4.8"
 halo2_proofs = "0.2.0"
 # `halo2_proofs` does not expose the feature `pasta_curves/gpu`, thus we must also import
 # `pasta_curves/gpu` when building with `neptune/pasta`.
-pasta_curves = { version = "0.5.1", features = ["serde"], package = "fil_pasta_curves", optional = true }
+pasta_curves = { version = "0.5.1", features = ["serde"], package = "fil_pasta_curves" }
 rust-gpu-tools = { version = "0.5.0", default-features = false, optional = true }
 trait-set = "0.3.0"
 serde = { version = "1.0", features = ["derive"] }

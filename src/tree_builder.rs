@@ -1,7 +1,7 @@
 use crate::batch_hasher::Batcher;
 use crate::error::Error;
 use crate::poseidon::{Poseidon, PoseidonConstants};
-use crate::{Arity, BatchHasher, Strength, NeptuneField};
+use crate::{Arity, BatchHasher, NeptuneField, Strength};
 
 use ff::{Field, PrimeField};
 use generic_array::GenericArray;
