@@ -449,26 +449,6 @@ pub fn enforce_zero<CS: ConstraintSystem<F>, F: PrimeField>(
     Ok(())
 }
 
-#[test]
-fn test_num_zero() {
-    use blstrs::Scalar as Fr;
-    {
-        let mut cs = TestConstraintSystem::<Fr>::new();
-
-        let n = AllocatedNum::alloc(&mut cs, || Ok(Fr::from(3u64))).unwrap();
-        enforce_zero(&mut cs, &n).unwrap();
-
-        assert!(!cs.is_satisfied());
-    }
-    {
-        let mut cs = TestConstraintSystem::<Fr>::new();
-
-        let n = AllocatedNum::alloc(&mut cs, || Ok(Fr::zero())).unwrap();
-        enforce_zero(&mut cs, &n).unwrap();
-        assert!(cs.is_satisfied());
-    }
-}
-
 /// Create circuit for Poseidon hash, returning an unallocated `Num` at the cost of one constraint.
 pub fn poseidon_hash_allocated<CS, Scalar, A>(
     mut cs: CS,
@@ -1032,4 +1012,25 @@ mod tests {
         assert!(res.is_num());
         assert_eq!(fr(59), res.val().unwrap());
     }
+
+    #[test]
+    fn test_num_zero() {
+        use blstrs::Scalar as Fr;
+        {
+            let mut cs = TestConstraintSystem::<Fr>::new();
+
+            let n = AllocatedNum::alloc(&mut cs, || Ok(Fr::from(3u64))).unwrap();
+            enforce_zero(&mut cs, &n).unwrap();
+
+            assert!(!cs.is_satisfied());
+        }
+        {
+            let mut cs = TestConstraintSystem::<Fr>::new();
+
+            let n = AllocatedNum::alloc(&mut cs, || Ok(Fr::zero())).unwrap();
+            enforce_zero(&mut cs, &n).unwrap();
+            assert!(cs.is_satisfied());
+        }
+    }
+
 }
