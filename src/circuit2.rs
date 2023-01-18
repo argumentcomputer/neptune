@@ -783,8 +783,7 @@ mod tests {
                 let mut p = Poseidon::<Fr, A>::new_with_preimage(&fr_data, &constants);
                 let expected: Fr = p.hash_in_mode(HashMode::Correct);
 
-                let expected_constraints_calculated =
-                    expected_constraints_calculated + 1;
+                let expected_constraints_calculated = expected_constraints_calculated + 1;
                 let expected_constraints = expected_constraints + 1;
 
                 assert!(cs.is_satisfied(), "constraints not satisfied");
