@@ -10,6 +10,7 @@ use bellperson::gadgets::num::{self, AllocatedNum};
 use bellperson::{ConstraintSystem, LinearCombination, SynthesisError};
 use ff::{Field, PrimeField};
 use std::marker::PhantomData;
+use bellperson::gadgets::test::TestConstraintSystem;
 
 /// Similar to `num::Num`, we use `Elt` to accumulate both values and linear combinations, then eventually
 /// extract into a `num::AllocatedNum`, enforcing that the linear combination corresponds to the result.
@@ -433,6 +434,45 @@ where
     }
 }
 
+pub fn enforce_zero<CS: ConstraintSystem<F>, F: PrimeField>(
+    mut cs: CS,
+    a: &AllocatedNum<F>,
+) -> Result<(), SynthesisError> {
+
+    // Constrain a * 1 = 0
+    cs.enforce(
+        || "enforce zero constraint",
+        |lc| lc + a.get_variable(),
+        |lc| lc + CS::one(),
+        |lc| lc,
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_num_zero() {
+    use blstrs::Scalar as Fr;
+    {
+        let mut cs = TestConstraintSystem::<Fr>::new();
+
+        let n = AllocatedNum::alloc(&mut cs, || Ok(Fr::from(3u64))).unwrap();
+        enforce_zero(&mut cs, &n).unwrap();
+
+        assert!(!cs.is_satisfied());
+    }
+    {
+        let mut cs = TestConstraintSystem::<Fr>::new();
+
+        let n = AllocatedNum::alloc(&mut cs, || Ok(Fr::zero())).unwrap();
+        enforce_zero(&mut cs, &n).unwrap();
+        assert!(cs.is_satisfied());
+    }
+}
+
+
+
+
 /// Create circuit for Poseidon hash, returning an unallocated `Num` at the cost of one constraint.
 pub fn poseidon_hash_allocated<CS, Scalar, A>(
     mut cs: CS,
@@ -457,6 +497,7 @@ where
             let allocated = AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
                 Ok(Scalar::zero())
             })?;
+            enforce_zero(cs.namespace(|| format!("assert zero padding {}", i)), &allocated)?;
             let elt = Elt::Allocated(allocated);
             elements.push(elt);
         }
@@ -788,8 +829,10 @@ mod tests {
                 let mut p = Poseidon::<Fr, A>::new_with_preimage(&fr_data, &constants);
                 let expected: Fr = p.hash_in_mode(HashMode::Correct);
 
-                let expected_constraints_calculated = expected_constraints_calculated + 1;
-                let expected_constraints = expected_constraints + 1;
+                let zero_padding_cost = constants.arity() - data.len();
+
+                let expected_constraints_calculated = expected_constraints_calculated + 1 + zero_padding_cost;
+                let expected_constraints = expected_constraints + 1 + zero_padding_cost;
 
                 assert!(cs.is_satisfied(), "constraints not satisfied");
 
