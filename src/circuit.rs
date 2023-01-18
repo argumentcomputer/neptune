@@ -390,7 +390,7 @@ where
     elements.extend(preimage.into_iter().map(Elt::Allocated));
 
     if let HashType::ConstantLength(length) = constants.hash_type {
-        assert!(length == arity, "length must be equal to arity");
+        assert!(length == arity, "Length must be equal to arity since no padding is provided. Check circuit2.rs for optimized and complete imlpementation");
     }
 
     let mut p = PoseidonCircuit::new(elements, constants);

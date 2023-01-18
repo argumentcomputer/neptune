@@ -1032,5 +1032,4 @@ mod tests {
             assert!(cs.is_satisfied());
         }
     }
-
 }
