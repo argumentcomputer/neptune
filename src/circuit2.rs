@@ -7,10 +7,10 @@ use crate::mds::SparseMatrix;
 use crate::poseidon::{Arity, PoseidonConstants};
 use bellperson::gadgets::boolean::Boolean;
 use bellperson::gadgets::num::{self, AllocatedNum};
+use bellperson::gadgets::test::TestConstraintSystem;
 use bellperson::{ConstraintSystem, LinearCombination, SynthesisError};
 use ff::{Field, PrimeField};
 use std::marker::PhantomData;
-use bellperson::gadgets::test::TestConstraintSystem;
 
 /// Similar to `num::Num`, we use `Elt` to accumulate both values and linear combinations, then eventually
 /// extract into a `num::AllocatedNum`, enforcing that the linear combination corresponds to the result.
@@ -438,7 +438,6 @@ pub fn enforce_zero<CS: ConstraintSystem<F>, F: PrimeField>(
     mut cs: CS,
     a: &AllocatedNum<F>,
 ) -> Result<(), SynthesisError> {
-
     // Constrain a * 1 = 0
     cs.enforce(
         || "enforce zero constraint",
@@ -470,9 +469,6 @@ fn test_num_zero() {
     }
 }
 
-
-
-
 /// Create circuit for Poseidon hash, returning an unallocated `Num` at the cost of one constraint.
 pub fn poseidon_hash_allocated<CS, Scalar, A>(
     mut cs: CS,
@@ -497,7 +493,10 @@ where
             let allocated = AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
                 Ok(Scalar::zero())
             })?;
-            enforce_zero(cs.namespace(|| format!("assert zero padding {}", i)), &allocated)?;
+            enforce_zero(
+                cs.namespace(|| format!("assert zero padding {}", i)),
+                &allocated,
+            )?;
             let elt = Elt::Allocated(allocated);
             elements.push(elt);
         }
@@ -831,7 +830,8 @@ mod tests {
 
                 let zero_padding_cost = constants.arity() - data.len();
 
-                let expected_constraints_calculated = expected_constraints_calculated + 1 + zero_padding_cost;
+                let expected_constraints_calculated =
+                    expected_constraints_calculated + 1 + zero_padding_cost;
                 let expected_constraints = expected_constraints + 1 + zero_padding_cost;
 
                 assert!(cs.is_satisfied(), "constraints not satisfied");
