@@ -374,7 +374,7 @@ where
 
 /// Create legacy circuit for Poseidon hash. If possible, prefer the equivalent 'optimal' alternatives.
 pub fn poseidon_hash<CS, Scalar, A>(
-    mut cs: CS,
+    cs: CS,
     preimage: Vec<AllocatedNum<Scalar>>,
     constants: &PoseidonConstants<Scalar, A>,
 ) -> Result<AllocatedNum<Scalar>, SynthesisError>
@@ -390,15 +390,7 @@ where
     elements.extend(preimage.into_iter().map(Elt::Allocated));
 
     if let HashType::ConstantLength(length) = constants.hash_type {
-        assert!(length <= arity, "illegal length: constants are malformed");
-        // Add zero-padding.
-        for i in 0..(arity - length) {
-            let allocated = AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
-                Ok(Scalar::zero())
-            })?;
-            let elt = Elt::Allocated(allocated);
-            elements.push(elt);
-        }
+        assert!(length == arity, "length must be equal to arity");
     }
 
     let mut p = PoseidonCircuit::new(elements, constants);
@@ -646,8 +638,6 @@ mod tests {
         test_poseidon_hash_aux::<typenum::U16>(Strength::Strengthened, 821, false);
         test_poseidon_hash_aux::<typenum::U24>(Strength::Strengthened, 1069, false);
         test_poseidon_hash_aux::<typenum::U36>(Strength::Strengthened, 1445, false);
-
-        test_poseidon_hash_aux::<typenum::U15>(Strength::Standard, 730, true);
     }
 
     fn test_poseidon_hash_aux<A>(
