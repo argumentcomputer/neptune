@@ -182,7 +182,8 @@ where
     /// - 128 bit of security;
     /// - Constant-Input-Length Hashing domain separation ([`HashType`]).
     ///
-    /// It is assumed that input `length` is equal or less than [`Arity`].
+    /// Instantiated [`PoseidonConstants`] still calculates internal constants based on [`Arity`], but calculation of
+    /// [`HashType::domain_tag`] is based on input `length`.
     ///
     /// # Example
     ///
@@ -200,9 +201,6 @@ where
     /// assert_eq!(constants.hash_type, HashType::<Fp, U2>::ConstantLength(preimage_length));
     /// ```
     pub fn new_constant_length(length: usize) -> Self {
-        let arity = A::to_usize();
-        assert!(length <= arity);
-
         Self::new_with_strength_and_type(DEFAULT_STRENGTH, HashType::ConstantLength(length))
     }
 
@@ -464,7 +462,9 @@ where
                     }
                 })
             }
-            HashType::MerkleTreeSparse(_) => panic!("Merkle Tree (with some empty leaves) hashes are not yet supported."),
+            HashType::MerkleTreeSparse(_) => {
+                panic!("Merkle Tree (with some empty leaves) hashes are not yet supported.")
+            }
             HashType::VariableLength => panic!("variable-length hashes are not yet supported."),
             _ => {
                 assert_eq!(preimage.len(), A::to_usize(), "Invalid preimage size");
