@@ -25,6 +25,7 @@ pub const STRENGTH_EVEN: bool = true;
 
 const ALPHA: u64 = 5;
 
+/// Columns and selectors required for [`PoseidonChip`]
 #[derive(Clone, Debug)]
 pub struct PoseidonConfig<F, A>
 where
@@ -79,6 +80,24 @@ where
     }
 }
 
+/// Halo2 chip for Poseidon hashing. It uses variable number of advice ([`halo2_proofs::plonk::Advice`]) and
+/// fixed ([`halo2_proofs::plonk::Fixed`]) columns ([`halo2_proofs::plonk::Column`]), depending on specified [`Arity`] and [`Strength`].
+///
+/// High-level Halo2 circuit that involves Halo2 Poseidon chip should use variable `k` (number of rows in the system of constraints),
+/// which depends on [`Arity`] and [`Strength`], computed according to following algorithm:
+///
+/// ```
+/// use halo2_proofs::arithmetic::FieldExt;
+/// use neptune::halo2_circuit::PoseidonChip;
+/// use neptune::Arity;
+///
+/// fn k<F: FieldExt, A: Arity<F>, const STRENGTH: bool>() -> u32 {
+///     // Add one row for preimage allocation.
+///     let rows = PoseidonChip::<F, A, STRENGTH>::num_rows() + 1;
+///     // Adding one to `k` ensures that we have enough rows.
+///     (rows as f32).log2().ceil() as u32 + 1
+/// }
+/// ```
 pub struct PoseidonChip<F, A, const STRENGTH_EVEN: bool>
 where
     F: FieldExt,
@@ -92,6 +111,7 @@ where
     F: FieldExt,
     A: Arity<F>,
 {
+    /// Constructs instance of [`PoseidonChip`] using [`PoseidonConfig`]
     pub fn construct(config: PoseidonConfig<F, A>) -> Self {
         assert_eq!(config.partial_sbox.is_some(), config.rc_b.is_some());
         if STRENGTH_EVEN {
@@ -100,10 +120,12 @@ where
         PoseidonChip { config }
     }
 
-    // # Side Effects
-    //
-    // - `advice[..width]` will be equality constrained.
-    // - `fixed[0]` will be equality constrained.
+    /// Defines gates for [`PoseidonChip`] and returns instance of [`PoseidonConfig`]
+    ///
+    /// # Side Effects
+    ///
+    /// - `advice[..width]` will be equality constrained.
+    /// - `fixed[0]` will be equality constrained.
     #[allow(clippy::needless_collect)]
     pub fn configure(
         meta: &mut ConstraintSystem<F>,
@@ -617,6 +639,93 @@ where
         self.assign_state(region, &output_state_b, round_b + 1, offset + 1)
     }
 
+    /// Computes Poseidon hash using previously assigned preimage and provided [`PoseidonConstants`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use halo2_proofs::pasta::{EqAffine, Fp};
+    /// use halo2_proofs::plonk::{Circuit, ConstraintSystem, Error, Column, Advice};
+    /// use halo2_proofs::dev::MockProver;
+    /// use halo2_proofs::circuit::{SimpleFloorPlanner, AssignedCell, Layouter, Value};
+    /// use generic_array::typenum::U2;
+    /// use neptune::poseidon::PoseidonConstants;
+    /// use neptune::halo2_circuit::{PoseidonChip, PoseidonConfig, STRENGTH_STD};
+    ///
+    /// struct TestCircuit {
+    ///     preimage: [Fp; 2],
+    /// }
+    ///
+    /// impl Circuit<Fp> for TestCircuit {
+    ///     type Config = (PoseidonConfig<Fp, U2>, [Column<Advice>; 2]);
+    ///     type FloorPlanner = SimpleFloorPlanner;
+    ///
+    ///     fn without_witnesses(&self) -> Self {
+    ///         todo!()
+    ///     }
+    ///
+    ///     fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+    ///         let adv1 = meta.advice_column();
+    ///         let adv2 = meta.advice_column();
+    ///         let adv3 = meta.advice_column();
+    ///
+    ///         let fixed1 = meta.fixed_column();
+    ///         let fixed2 = meta.fixed_column();
+    ///         let fixed3 = meta.fixed_column();
+    ///
+    ///         let poseidon_config = PoseidonChip::<Fp, U2, STRENGTH_STD>::configure(
+    ///             meta,
+    ///             &[adv1, adv2, adv3],
+    ///             &[fixed1, fixed2, fixed3],
+    ///         );
+    ///
+    ///         (poseidon_config, [adv1, adv2])
+    ///     }
+    ///
+    ///     fn synthesize(
+    ///         &self,
+    ///         config: Self::Config,
+    ///         mut layouter: impl Layouter<Fp>,
+    ///     ) -> Result<(), Error> {
+    ///
+    ///         let constants = PoseidonConstants::<Fp, U2>::new();
+    ///
+    ///         let preimage = Value::known(self.preimage.clone()).transpose_array();
+    ///
+    ///         let assigned_preimage = layouter.assign_region(
+    ///             || "assign preimage",
+    ///             |mut region| {
+    ///                 let offset = 0;
+    ///                 preimage
+    ///                     .iter()
+    ///                     .zip(&config.1)
+    ///                     .enumerate()
+    ///                     .map(|(i, (word, col))| {
+    ///                         region.assign_advice(|| format!("preimage[{}]", i), *col, offset, || *word)
+    ///                      })
+    ///                      .collect::<Result<Vec<AssignedCell<Fp, Fp>>, Error>>()
+    ///              },
+    ///         )?;
+    ///
+    ///         let chip = PoseidonChip::<Fp, U2, STRENGTH_STD>::construct(config.0);
+    ///
+    ///         let _digest = chip.hash(
+    ///             layouter.namespace(|| "hash"),
+    ///             &assigned_preimage,
+    ///             &constants
+    ///         )?;
+    ///
+    ///         Ok(())
+    ///     }
+    /// }
+    ///
+    /// let circuit = TestCircuit {
+    ///     preimage: [Fp::from(u64::MAX), Fp::from(u64::MAX)],
+    /// };
+    ///
+    /// let prover = MockProver::run(7, &circuit, vec![]).expect("couldn't run mock prover");
+    /// assert!(prover.verify().is_ok());
+    /// ```
     pub fn hash(
         &self,
         mut layouter: impl Layouter<F>,
@@ -694,6 +803,72 @@ where
         )
     }
 
+    /// Loads preimage into the chip / circuit and performs its hashing at once.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use halo2_proofs::arithmetic::FieldExt;
+    /// use halo2_proofs::pasta::{EqAffine, Fp};
+    /// use halo2_proofs::plonk::{Circuit, ConstraintSystem, Error};
+    /// use halo2_proofs::dev::MockProver;
+    /// use halo2_proofs::circuit::{SimpleFloorPlanner, Layouter, Value};
+    /// use generic_array::typenum::U2;
+    /// use neptune::poseidon::PoseidonConstants;
+    /// use neptune::halo2_circuit::{PoseidonChip, PoseidonConfig, STRENGTH_STD};
+    ///
+    /// struct TestCircuit {
+    ///     preimage: [Fp; 2],
+    /// }
+    ///
+    /// impl Circuit<Fp> for TestCircuit {
+    ///     type Config = PoseidonConfig<Fp, U2>;
+    ///     type FloorPlanner = SimpleFloorPlanner;
+    ///
+    ///     fn without_witnesses(&self) -> Self {
+    ///         todo!()
+    ///     }
+    ///
+    ///     fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+    ///         let adv1 = meta.advice_column();
+    ///         let adv2 = meta.advice_column();
+    ///         let adv3 = meta.advice_column();
+    ///
+    ///         let fixed1 = meta.fixed_column();
+    ///         let fixed2 = meta.fixed_column();
+    ///         let fixed3 = meta.fixed_column();
+    ///
+    ///         PoseidonChip::<Fp, U2, STRENGTH_STD>::configure(
+    ///             meta,
+    ///             &[adv1, adv2, adv3],
+    ///             &[fixed1, fixed2, fixed3]
+    ///         )
+    ///     }
+    ///
+    ///     fn synthesize(&self, config: Self::Config, mut layouter: impl Layouter<Fp>) -> Result<(), Error> {
+    ///         let chip = PoseidonChip::<Fp, U2, STRENGTH_STD>::construct(config);
+    ///
+    ///         let constants = PoseidonConstants::<Fp, U2>::new();
+    ///
+    ///         let preimage = Value::known(self.preimage.clone()).transpose_array();
+    ///
+    ///         let digest = chip.witness_hash(
+    ///             layouter.namespace(|| "witness_hash"),
+    ///             &preimage,
+    ///             &constants,
+    ///         )?;
+    ///
+    ///         Ok(())
+    ///     }
+    /// }
+    ///
+    /// let circuit = TestCircuit {
+    ///     preimage: [Fp::from(u64::MAX), Fp::from(u64::MAX)],
+    /// };
+    ///
+    /// let prover = MockProver::run(7, &circuit, vec![]).expect("couldn't run mock prover");
+    /// assert!(prover.verify().is_ok());
+    /// ```
     pub fn witness_hash(
         &self,
         mut layouter: impl Layouter<F>,
@@ -717,13 +892,98 @@ where
         self.hash(layouter, &preimage, consts)
     }
 
-    // Input-output columns; equality-enabled advice where a chip caller can allocate preimages and
-    // copy digests from.
+    /// Gets so called "input-output" columns (state columns); equality-enabled advice where a chip caller
+    /// can allocate preimages and copy digests from.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use halo2_proofs::arithmetic::FieldExt;
+    /// # use halo2_proofs::pasta::{EqAffine, Fp};
+    /// # use halo2_proofs::plonk::{Circuit, ConstraintSystem, Error};
+    /// # use halo2_proofs::dev::MockProver;
+    /// # use halo2_proofs::circuit::{SimpleFloorPlanner, Layouter, Value, AssignedCell};
+    /// # use generic_array::typenum::U2;
+    /// # use neptune::poseidon::PoseidonConstants;
+    /// # use neptune::halo2_circuit::{PoseidonChip, PoseidonConfig, STRENGTH_STD};
+    /// #
+    /// # struct TestCircuit {
+    /// #    preimage: [Fp; 2],
+    /// # }
+    /// #
+    /// # impl Circuit<Fp> for TestCircuit {
+    /// #    type Config = PoseidonConfig<Fp, U2>;
+    /// #    type FloorPlanner = SimpleFloorPlanner;
+    /// #
+    /// #    fn without_witnesses(&self) -> Self {
+    /// #        todo!()
+    /// #    }
+    /// #
+    /// #    fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+    /// #        let adv1 = meta.advice_column();
+    /// #        let adv2 = meta.advice_column();
+    /// #        let adv3 = meta.advice_column();
+    /// #
+    /// #        let fixed1 = meta.fixed_column();
+    /// #        let fixed2 = meta.fixed_column();
+    /// #        let fixed3 = meta.fixed_column();
+    /// #
+    /// #        PoseidonChip::<Fp, U2, STRENGTH_STD>::configure(
+    /// #            meta,
+    /// #            &[adv1, adv2, adv3],
+    /// #            &[fixed1, fixed2, fixed3]
+    /// #        )
+    /// #    }
+    /// #
+    /// #    fn synthesize(
+    /// #        &self,
+    /// #        config: Self::Config,
+    /// #        mut layouter: impl Layouter<Fp>,
+    /// #    ) -> Result<(), Error> {
+    /// #        let constants = PoseidonConstants::<Fp, U2>::new();
+    /// #
+    /// #        let preimage = Value::known(self.preimage.clone()).transpose_array();
+    /// #
+    /// // Consider `synthesize` function; we create instance of Poseidon chip and load preimage into it
+    /// let chip = PoseidonChip::<Fp, U2, STRENGTH_STD>::construct(config);
+    ///
+    /// let assigned_preimage = layouter.assign_region(
+    ///     || "assign preimage",
+    ///     |mut region| {
+    ///         let offset = 0;
+    ///         preimage
+    ///             .iter()
+    ///             .zip(chip.advice_eq()) // getting IO columns for loading preimage into chip
+    ///             .enumerate()
+    ///             .map(|(i, (word, col))| {
+    ///                 region.assign_advice(|| format!("preimage[{}]", i), *col, offset, || *word)
+    ///             })
+    ///             .collect::<Result<Vec<AssignedCell<Fp, Fp>>, Error>>()
+    ///         },
+    /// )?;
+    /// #
+    /// #        let _digest = chip.hash(
+    /// #            layouter.namespace(|| "hash"),
+    /// #            &assigned_preimage,
+    /// #            &constants
+    /// #        )?;
+    /// #
+    /// #        Ok(())
+    /// #     }
+    /// # }
+    /// #
+    /// # let circuit = TestCircuit {
+    /// #    preimage: [Fp::from(u64::MAX), Fp::from(u64::MAX)],
+    /// # };
+    /// #
+    /// # let prover = MockProver::run(7, &circuit, vec![]).expect("couldn't run mock prover");
+    /// # assert!(prover.verify().is_ok());
+    /// ```
     pub fn advice_eq(&self) -> &[Column<Advice>] {
         &self.config.state
     }
 
-    // An equality and constant-enabled fixed column.
+    /// Gets equality and constant-enabled fixed column. It is assumed to be used for storing [`crate::hash_type::HashType::domain_tag`].
     pub fn const_col(&self) -> &Column<Fixed> {
         &self.config.rc_a[0]
     }
@@ -747,12 +1007,24 @@ where
     }
 
     // Returns `true` if this arity has an even number of partial rounds for the parameterized
-    // strength (`Strengh::EvenPartial` if `STRENGTH_EVEN`, otherwise `Strength::Standard`).
+    // strength (`Strength::EvenPartial` if `STRENGTH_EVEN`, otherwise `Strength::Standard`).
     fn rp_is_even() -> bool {
         STRENGTH_EVEN || Self::rp() & 1 == 0
     }
 
-    // The number of equality-enabled advice columns used by this chip.
+    /// Gets the number of equality-enabled advice columns used by this chip. It can be useful for high-level
+    /// circuits/chips to ensure that they provide enough columns for [`PoseidonChip`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use halo2_proofs::pasta::{EqAffine, Fp};
+    /// use generic_array::typenum::U2;
+    /// use neptune::halo2_circuit::{PoseidonChip, STRENGTH_STD};
+    ///
+    /// let num_adv_eq = PoseidonChip::<Fp, U2, STRENGTH_STD>::num_advice_eq();
+    /// assert_eq!(num_adv_eq, 3);
+    /// ```
     pub fn num_advice_eq() -> usize {
         match A::to_usize() {
             0 => 0,
@@ -760,7 +1032,22 @@ where
         }
     }
 
-    // The number of non-equality-enabled advice columns used by this chip.
+    /// Gets the number of non-equality-enabled advice columns used by this chip. It can be either 0 or 1
+    /// depending on [`Arity`] and [`Strength`] parameters.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use halo2_proofs::pasta::{EqAffine, Fp};
+    /// use generic_array::typenum::U2;
+    /// use neptune::halo2_circuit::{PoseidonChip, STRENGTH_STD, STRENGTH_EVEN};
+    ///
+    /// let num_adv_neq = PoseidonChip::<Fp, U2, STRENGTH_STD>::num_advice_neq();
+    /// assert_eq!(num_adv_neq, 0);
+    ///
+    /// let num_adv_neq = PoseidonChip::<Fp, U2, STRENGTH_EVEN>::num_advice_neq();
+    /// assert_eq!(num_adv_neq, 1);
+    /// ```
     pub fn num_advice_neq() -> usize {
         if A::to_usize() == 0 {
             0
@@ -769,12 +1056,41 @@ where
         }
     }
 
-    // The total number of advice columns used by this chip.
+    /// Gets the total number of advice columns used by this chip, depending on [`Arity`] and [`Strength`] parameters.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use halo2_proofs::pasta::{EqAffine, Fp};
+    /// use generic_array::typenum::U2;
+    /// use neptune::halo2_circuit::{PoseidonChip, STRENGTH_STD, STRENGTH_EVEN};
+    ///
+    /// let num_adv_total = PoseidonChip::<Fp, U2, STRENGTH_STD>::num_advice_total();
+    /// assert_eq!(num_adv_total, 3);
+    ///
+    /// let num_adv_total = PoseidonChip::<Fp, U2, STRENGTH_EVEN>::num_advice_total();
+    /// assert_eq!(num_adv_total, 4);
+    /// ```
     pub fn num_advice_total() -> usize {
         Self::num_advice_eq() + Self::num_advice_neq()
     }
 
-    // The number of equality-enabled fixed columns used by this chip.
+    /// Gets the number of equality-enabled fixed columns used by this chip.
+    /// If [`Arity`] is 0, it is also 0, otherwise it is 1.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use halo2_proofs::pasta::{EqAffine, Fp};
+    /// use generic_array::typenum::{U0, U2};
+    /// use neptune::halo2_circuit::{PoseidonChip, STRENGTH_STD, STRENGTH_EVEN};
+    ///
+    /// let num_fixed_eq = PoseidonChip::<Fp, U0, STRENGTH_STD>::num_fixed_eq();
+    /// assert_eq!(num_fixed_eq, 0);
+    ///
+    /// let num_fixed_eq = PoseidonChip::<Fp, U2, STRENGTH_STD>::num_fixed_eq();
+    /// assert_eq!(num_fixed_eq, 1);
+    /// ```
     pub fn num_fixed_eq() -> usize {
         if A::to_usize() == 0 {
             0
@@ -783,7 +1099,19 @@ where
         }
     }
 
-    // The number of non-equality-enabled fixed columns used by this chip.
+    /// Gets the number of non-equality-enabled fixed columns used by this chip,
+    /// depending on [`Arity`] and [`Strength`] parameters.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use halo2_proofs::pasta::{EqAffine, Fp};
+    /// use generic_array::typenum::U2;
+    /// use neptune::halo2_circuit::{PoseidonChip, STRENGTH_EVEN};
+    ///
+    /// let num_fixed_neq = PoseidonChip::<Fp, U2, STRENGTH_EVEN>::num_fixed_neq();
+    /// assert_eq!(num_fixed_neq, 5);
+    /// ```
     pub fn num_fixed_neq() -> usize {
         let arity = A::to_usize();
         if arity == 0 {
@@ -797,12 +1125,33 @@ where
         }
     }
 
-    // The total number of fixed columns used by this chip.
+    /// Gets the total number of fixed columns used by this chip, depending on [`Arity`] and [`Strength`] parameters.
+    ///
+    /// # Example
+    /// ```
+    /// use halo2_proofs::pasta::{EqAffine, Fp};
+    /// use generic_array::typenum::U2;
+    /// use neptune::halo2_circuit::{PoseidonChip, STRENGTH_EVEN};
+    ///
+    /// let num_fixed_total = PoseidonChip::<Fp, U2, STRENGTH_EVEN>::num_fixed_total();
+    /// assert_eq!(num_fixed_total, 6);
+    /// ```
     pub fn num_fixed_total() -> usize {
         Self::num_fixed_eq() + Self::num_fixed_neq()
     }
 
-    // The number of constraint system rows used per hash.
+    /// Gets the number of constraint system rows used per hash.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use halo2_proofs::pasta::{EqAffine, Fp};
+    /// use generic_array::typenum::U2;
+    /// use neptune::halo2_circuit::{PoseidonChip, STRENGTH_EVEN};
+    ///
+    /// let num_rows = PoseidonChip::<Fp, U2, STRENGTH_EVEN>::num_rows();
+    /// assert_eq!(num_rows, 36);
+    /// ```
     pub fn num_rows() -> usize {
         let arity = A::to_usize();
         if arity == 0 {
