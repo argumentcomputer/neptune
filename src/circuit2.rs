@@ -7,6 +7,7 @@ use crate::mds::SparseMatrix;
 use crate::poseidon::{Arity, PoseidonConstants};
 use bellperson::gadgets::boolean::Boolean;
 use bellperson::gadgets::num::{self, AllocatedNum};
+use bellperson::gadgets::test::TestConstraintSystem;
 use bellperson::{ConstraintSystem, LinearCombination, SynthesisError};
 use ff::{Field, PrimeField};
 use std::marker::PhantomData;
@@ -435,7 +436,7 @@ where
 
 /// Create circuit for Poseidon hash, returning an unallocated `Num` at the cost of one constraint.
 pub fn poseidon_hash_allocated<CS, Scalar, A>(
-    mut cs: CS,
+    cs: CS,
     preimage: Vec<AllocatedNum<Scalar>>,
     constants: &PoseidonConstants<Scalar, A>,
 ) -> Result<AllocatedNum<Scalar>, SynthesisError>
@@ -453,11 +454,8 @@ where
     if let HashType::ConstantLength(length) = constants.hash_type {
         assert!(length <= arity, "illegal length: constants are malformed");
         // Add zero-padding.
-        for i in 0..(arity - length) {
-            let allocated = AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
-                Ok(Scalar::zero())
-            })?;
-            let elt = Elt::Allocated(allocated);
+        for _ in 0..(arity - length) {
+            let elt = Elt::Num(num::Num::zero());
             elements.push(elt);
         }
     }
@@ -469,7 +467,7 @@ where
 
 /// Create circuit for Poseidon hash, minimizing constraints by returning an unallocated `Num`.
 pub fn poseidon_hash_num<CS, Scalar, A>(
-    mut cs: CS,
+    cs: CS,
     preimage: Vec<AllocatedNum<Scalar>>,
     constants: &PoseidonConstants<Scalar, A>,
 ) -> Result<num::Num<Scalar>, SynthesisError>
@@ -487,11 +485,8 @@ where
     if let HashType::ConstantLength(length) = constants.hash_type {
         assert!(length <= arity, "illegal length: constants are malformed");
         // Add zero-padding.
-        for i in 0..(arity - length) {
-            let allocated = AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
-                Ok(Scalar::zero())
-            })?;
-            let elt = Elt::Allocated(allocated);
+        for _ in 0..(arity - length) {
+            let elt = Elt::Num(num::Num::zero());
             elements.push(elt);
         }
     }
