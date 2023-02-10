@@ -202,7 +202,7 @@ mod tests {
             let columns: Vec<GenericArray<Fr, U11>> =
                 (0..effective_batch_size).map(|_| constant_column).collect();
 
-            let _ = builder.add_columns(columns.as_slice()).unwrap();
+            builder.add_columns(columns.as_slice()).unwrap();
             total_columns += columns.len();
         }
 

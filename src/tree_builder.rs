@@ -292,7 +292,7 @@ mod tests {
                     .map(|_| constant_element)
                     .collect();
 
-                let _ = builder.add_leaves(leaves.as_slice()).unwrap();
+                builder.add_leaves(leaves.as_slice()).unwrap();
                 total_leaves += leaves.len();
             }
 
