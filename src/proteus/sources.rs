@@ -1,4 +1,5 @@
 // This is a hack to make it possible to include this file also in build.rs.
+#[allow(clippy::duplicate_mod)]
 #[path = "../round_numbers.rs"]
 mod round_numbers;
 
