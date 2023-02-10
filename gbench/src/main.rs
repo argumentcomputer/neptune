@@ -55,7 +55,7 @@ fn bench_column_building<F: PrimeField + GpuName>(
         let columns: Vec<GenericArray<F, U11>> =
             (0..effective_batch_size).map(|_| constant_column).collect();
 
-        let _ = builder.add_columns(columns.as_slice()).unwrap();
+        builder.add_columns(columns.as_slice()).unwrap();
         total_columns += columns.len();
     }
     println!();
@@ -84,13 +84,11 @@ fn bench_column_building<F: PrimeField + GpuName>(
     assert_eq!(
         expected_size,
         res.len(),
-        "{}: result tree was not expected size",
-        log_prefix
+        "{log_prefix}: result tree was not expected size"
     );
     assert_eq!(
         expected_root, computed_root,
-        "{}: computed root was not the expected one",
-        log_prefix
+        "{log_prefix}: computed root was not the expected one"
     );
 
     res[res.len() - 1]
@@ -168,7 +166,7 @@ fn main() {
     let mut threads = Vec::new();
     for device in devices {
         threads.push(thread::spawn(move || {
-            let log_prefix = format!("GPU[{:?}]", device);
+            let log_prefix = format!("GPU[{device:?}]");
             for i in 0..3 {
                 info!("{} --> Run {}", log_prefix, i);
                 match field {

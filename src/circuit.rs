@@ -175,19 +175,19 @@ where
 
         for i in 1..self.constants.full_rounds / 2 {
             self.full_round(
-                cs.namespace(|| format!("initial full round {}", i)),
+                cs.namespace(|| format!("initial full round {i}")),
                 false,
                 false,
             )?;
         }
 
         for i in 0..self.constants.partial_rounds {
-            self.partial_round(cs.namespace(|| format!("partial round {}", i)))?;
+            self.partial_round(cs.namespace(|| format!("partial round {i}")))?;
         }
 
         for i in 0..(self.constants.full_rounds / 2) - 1 {
             self.full_round(
-                cs.namespace(|| format!("final full round {}", i)),
+                cs.namespace(|| format!("final full round {i}")),
                 false,
                 false,
             )?;
@@ -249,7 +249,7 @@ where
                     );
                 } else {
                     self.elements[i] = quintic_s_box_pre_add(
-                        cs.namespace(|| format!("quintic s-box {}", i)),
+                        cs.namespace(|| format!("quintic s-box {i}")),
                         &self.elements[i],
                         pre_round_key,
                         post_round_key,
@@ -257,7 +257,7 @@ where
                 }
             } else {
                 self.elements[i] = quintic_s_box(
-                    cs.namespace(|| format!("quintic s-box {}", i)),
+                    cs.namespace(|| format!("quintic s-box {i}")),
                     &self.elements[i],
                     post_round_key,
                 )?;

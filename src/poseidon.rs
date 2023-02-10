@@ -136,7 +136,7 @@ use HashMode::{Correct, OptimizedDynamic, OptimizedStatic};
 
 pub const DEFAULT_HASH_MODE: HashMode = OptimizedStatic;
 
-impl<'a, F, A> PoseidonConstants<F, A>
+impl<F, A> PoseidonConstants<F, A>
 where
     F: PrimeField,
     A: Arity<F>,
