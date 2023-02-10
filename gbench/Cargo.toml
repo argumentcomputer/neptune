@@ -8,19 +8,19 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 lazy_static = "1.4.0"
-bellperson = { version = "0.24.0", default-features = false }
+bellperson = { version = "0.24.1", default-features = false }
 blake2s_simd = "0.5"
 byteorder = "1"
 env_logger = "0.7.1"
-ff = "0.12.0"
-generic-array = "0.14.4"
-log = "0.4.8"
+ff = "0.12.1"
+generic-array = "0.14.6"
+log = "0.4.17"
 neptune = { path = "../", default-features = false, features = ["arity8", "arity11", "bls", "pasta"] }
 structopt = { version = "0.3", default-features = false }
 blstrs = { version = "0.6.1", features = ["gpu"] }
-pasta_curves = { version = "0.5.1", features = ["gpu"], package = "fil_pasta_curves" }
+pasta_curves = { version = "0.5.2", features = ["gpu"], package = "fil_pasta_curves" }
 ec-gpu = "0.2.0"
-ec-gpu-gen = "0.5.0"
+ec-gpu-gen = "0.5.1"
 
 [features]
 default = ["opencl"]
