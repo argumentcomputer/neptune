@@ -162,7 +162,7 @@ mod tests {
         assert_eq!(expected_encryption_standard, encryption_standard,);
 
         for index in 1..=256 {
-            let custom = HashType::Custom::<Fr, U8>(CType::Arbitrary(index as u64));
+            let custom = HashType::Custom::<Fr, U8>(CType::Arbitrary(index));
             let standard_custom = custom.domain_tag();
 
             let expected_standard_custom = scalar_from_u64s([
