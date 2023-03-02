@@ -15,31 +15,14 @@ bellperson = { git = "https://github.com/leonardoalt/bellperson", default-featur
 blake2s_simd = "0.5"
 blstrs = { version = "0.6.1", optional = true }
 byteorder = "1"
-ec-gpu = { version = "0.2.0", optional = true }
-<<<<<<< HEAD
-ec-gpu-gen = { version = "0.5.2", optional = true }
-ff = "0.12.1"
-generic-array = "0.14.6"
-itertools = { version = "0.8.2" }
-log = "0.4.17"
-pasta_curves = { version = "0.5.2", features = ["serde"], package = "fil_pasta_curves" }
-||||||| parent of cb2b839 (bump_ff)
-ec-gpu-gen = { version = "0.5.0", optional = true }
 ff = "0.12.0"
 generic-array = "0.14.4"
 itertools = { version = "0.8.0" }
-log = "0.4.8"
-pasta_curves = { version = "0.5.1", features = ["serde"], package = "fil_pasta_curves" }
-=======
-ec-gpu-gen = { version = "0.5.0", optional = true }
-ff = "0.13.0"
-generic-array = "0.14.4"
-itertools = { version = "0.8.0" }
-log = "0.4.8"
+ec-gpu = { version = "0.2.0", optional = true }
+ec-gpu-gen = { version = "0.5.2", optional = true }
 #pasta_curves = { version = "0.5.1", features = ["serde"], package = "fil_pasta_curves" }
 #pasta_curves = { path = "../fil_pasta_curves", features = ["serde"], package = "fil_pasta_curves" }
 pasta_curves = { git = "https://github.com/leonardoalt/fil_pasta_curves/", features = ["serde"], package = "fil_pasta_curves" }
->>>>>>> cb2b839 (bump_ff)
 trait-set = "0.3.0"
 serde = { version = "1.0", features = ["derive"] }
 
@@ -55,9 +38,7 @@ sha2 = "0.9"
 blstrs = "0.6.1"
 ec-gpu = { version = "0.2.0", optional = true }
 ec-gpu-gen = { version = "0.5.0", optional = true }
-#pasta_curves = { version = "0.5.1", package = "fil_pasta_curves" }
-#pasta_curves = { path = "../fil_pasta_curves", features = ["serde"], package = "fil_pasta_curves" }
-pasta_curves = { git = "https://github.com/leonardoalt/fil_pasta_curves/", features = ["serde"], package = "fil_pasta_curves" }
+pasta_curves = { version = "0.5.0", features = ["serde"] }
 
 [[bench]]
 name = "hash"
