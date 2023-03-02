@@ -79,7 +79,7 @@ pub fn mat_mul<F: PrimeField>(a: &Matrix<F>, b: &Matrix<F>) -> Option<Matrix<F>>
 }
 
 fn vec_mul<F: PrimeField>(a: &[F], b: &[F]) -> F {
-    a.iter().zip(b).fold(F::zero(), |mut acc, (v1, v2)| {
+    a.iter().zip(b).fold(F::ZERO, |mut acc, (v1, v2)| {
         let mut tmp = *v1;
         tmp.mul_assign(v2);
         acc.add_assign(&tmp);
@@ -118,7 +118,7 @@ pub fn left_apply_matrix<F: PrimeField>(m: &Matrix<F>, v: &[F]) -> Vec<F> {
         "Matrix can only be applied to vector of same size."
     );
 
-    let mut result = vec![F::zero(); v.len()];
+    let mut result = vec![F::ZERO; v.len()];
 
     for (result, row) in result.iter_mut().zip(m.iter()) {
         for (mat_val, vec_val) in row.iter().zip(v) {
@@ -139,7 +139,7 @@ pub fn apply_matrix<F: PrimeField>(m: &Matrix<F>, v: &[F]) -> Vec<F> {
         "Matrix can only be applied to vector of same size."
     );
 
-    let mut result = vec![F::zero(); v.len()];
+    let mut result = vec![F::ZERO; v.len()];
     for (j, val) in result.iter_mut().enumerate() {
         for (i, row) in m.iter().enumerate() {
             let mut tmp = row[j];
@@ -167,18 +167,18 @@ pub fn transpose<F: PrimeField>(matrix: &Matrix<F>) -> Matrix<F> {
 
 #[allow(clippy::needless_range_loop)]
 pub fn make_identity<F: PrimeField>(size: usize) -> Matrix<F> {
-    let mut result = vec![vec![F::zero(); size]; size];
+    let mut result = vec![vec![F::ZERO; size]; size];
     for i in 0..size {
-        result[i][i] = F::one();
+        result[i][i] = F::ONE;
     }
     result
 }
 
 pub fn kronecker_delta<F: PrimeField>(i: usize, j: usize) -> F {
     if i == j {
-        F::one()
+        F::ONE
     } else {
-        F::zero()
+        F::ZERO
     }
 }
 
@@ -227,7 +227,7 @@ fn eliminate<F: PrimeField>(
     column: usize,
     shadow: &mut Matrix<F>,
 ) -> Option<Matrix<F>> {
-    let zero = F::zero();
+    let zero = F::ZERO;
     let pivot_index = (0..rows(matrix))
         .find(|&i| matrix[i][column] != zero && (0..column).all(|j| matrix[i][j] == zero))?;
 

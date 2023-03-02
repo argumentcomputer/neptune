@@ -64,7 +64,7 @@ pub(crate) fn compress_round_constants<F: PrimeField>(
             let mut inverted = apply_matrix(inverse_matrix, &acc);
 
             partial_keys.push(inverted[0]);
-            inverted[0] = F::zero();
+            inverted[0] = F::ZERO;
 
             vec_add(previous_round_keys, &inverted)
         });
@@ -92,7 +92,7 @@ pub(crate) fn compress_round_constants<F: PrimeField>(
         let pk = inv[0];
 
         // M^-1(T) - pk (kinda)
-        inv[0] = F::zero();
+        inv[0] = F::ZERO;
 
         // (M^-1(T) - pk) - I
         let result_key = vec_add(initial_round_keys, &inv);
@@ -108,7 +108,7 @@ pub(crate) fn compress_round_constants<F: PrimeField>(
         ////////////////////////////////////////////////////////////////////////////////
         // Shared between branches, arbitrary initial state representing the output of a previous round's S-Box layer.
         // X
-        let initial_state = vec![F::one(); width];
+        let initial_state = vec![F::ONE; width];
 
         ////////////////////////////////////////////////////////////////////////////////
         // Compute one step with the given (unpreprocessed) constants.
