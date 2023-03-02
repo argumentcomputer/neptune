@@ -55,7 +55,7 @@ impl<Scalar: PrimeField> Elt<Scalar> {
                 if enforce {
                     cs.enforce(
                         || "enforce num allocation preserves lc".to_string(),
-                        |_| num.lc(Scalar::one()),
+                        |_| num.lc(Scalar::ONE),
                         |lc| lc + CS::one(),
                         |lc| lc + v.get_variable(),
                     );
@@ -74,7 +74,7 @@ impl<Scalar: PrimeField> Elt<Scalar> {
 
     pub fn lc(&self) -> LinearCombination<Scalar> {
         match self {
-            Self::Num(num) => num.lc(Scalar::one()),
+            Self::Num(num) => num.lc(Scalar::ONE),
             Self::Allocated(v) => LinearCombination::<Scalar>::zero() + v.get_variable(),
         }
     }
@@ -119,8 +119,8 @@ impl<Scalar: PrimeField> Elt<Scalar> {
                     AllocatedNum::alloc(&mut cs.namespace(|| "squared num"), || Ok(tmp))?;
                 cs.enforce(
                     || "squaring constraint",
-                    |_| num.lc(Scalar::one()),
-                    |_| num.lc(Scalar::one()),
+                    |_| num.lc(Scalar::ONE),
+                    |_| num.lc(Scalar::ONE),
                     |lc| lc + allocated.get_variable(),
                 );
                 Ok(allocated)
@@ -225,7 +225,7 @@ where
         match self.constants.hash_type {
             HashType::ConstantLength(_) | HashType::Encryption => {
                 for elt in self.elements[self.pos..].iter_mut() {
-                    *elt = Elt::num_from_fr::<CS>(Scalar::zero());
+                    *elt = Elt::num_from_fr::<CS>(Scalar::ZERO);
                 }
                 self.pos = self.elements.len();
             }
@@ -413,7 +413,7 @@ where
     }
 
     fn initial_elements<CS: ConstraintSystem<Scalar>>() -> Vec<Elt<Scalar>> {
-        std::iter::repeat(Elt::num_from_fr::<CS>(Scalar::zero()))
+        std::iter::repeat(Elt::num_from_fr::<CS>(Scalar::ZERO))
             .take(A::to_usize() + 1)
             .collect()
     }

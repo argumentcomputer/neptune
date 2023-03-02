@@ -254,7 +254,7 @@ where
             if i == 0 {
                 constants.domain_tag
             } else {
-                F::zero()
+                F::ZERO
             }
         });
         Poseidon {
@@ -276,7 +276,7 @@ where
                     if i == 0 {
                         constants.domain_tag
                     } else if i > preimage.len() {
-                        F::zero()
+                        F::ZERO
                     } else {
                         preimage[i - 1]
                     }
@@ -321,7 +321,7 @@ where
     /// Restore the initial state
     pub fn reset(&mut self) {
         self.reset_offsets();
-        self.elements[1..].iter_mut().for_each(|l| *l = F::zero());
+        self.elements[1..].iter_mut().for_each(|l| *l = F::ZERO);
         self.elements[0] = self.constants.domain_tag;
     }
 
@@ -372,7 +372,7 @@ where
         match self.constants.hash_type {
             HashType::ConstantLength(_) | HashType::Encryption => {
                 for elt in self.elements[self.pos..].iter_mut() {
-                    *elt = F::zero();
+                    *elt = F::ZERO;
                 }
                 self.pos = self.elements.len();
             }
@@ -518,7 +518,7 @@ where
     /// exploits the fact that our MDS matrices are symmetric by construction.
     #[allow(clippy::ptr_arg)]
     pub(crate) fn product_mds_with_matrix(&mut self, matrix: &Matrix<F>) {
-        let mut result = GenericArray::<F, A::ConstantsSize>::generate(|_| F::zero());
+        let mut result = GenericArray::<F, A::ConstantsSize>::generate(|_| F::ZERO);
 
         for (j, val) in result.iter_mut().enumerate() {
             for (i, row) in matrix.iter().enumerate() {
@@ -533,7 +533,7 @@ where
 
     // Sparse matrix in this context means one of the form, M''.
     fn product_mds_with_sparse_matrix(&mut self, sparse_matrix: &SparseMatrix<F>) {
-        let mut result = GenericArray::<F, A::ConstantsSize>::generate(|_| F::zero());
+        let mut result = GenericArray::<F, A::ConstantsSize>::generate(|_| F::ZERO);
 
         // First column is dense.
         for (i, val) in sparse_matrix.w_hat.iter().enumerate() {

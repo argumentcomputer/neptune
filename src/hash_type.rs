@@ -46,7 +46,7 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
             // NOTE: in order to leave room for future `Strength` tags,
             // we make identifier a multiple of 2^40 rather than 2^32.
             HashType::Custom(ref ctype) => ctype.domain_tag(),
-            HashType::Sponge => F::zero(),
+            HashType::Sponge => F::ZERO,
         }
     }
 
