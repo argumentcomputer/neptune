@@ -11,6 +11,7 @@ use ec_gpu_gen::rust_gpu_tools::Device;
 use ff::PrimeField;
 use generic_array::GenericArray;
 
+#[allow(clippy::large_enum_variant)]
 pub enum Batcher<F, A>
 where
     F: NeptuneField,

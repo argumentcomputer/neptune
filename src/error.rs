@@ -56,14 +56,14 @@ pub enum Error {
 #[cfg(any(feature = "cuda", feature = "opencl"))]
 impl From<ec_gpu_gen::rust_gpu_tools::GPUError> for Error {
     fn from(e: ec_gpu_gen::rust_gpu_tools::GPUError) -> Self {
-        Self::GpuError(format!("GPU tools error: {}", e))
+        Self::GpuError(format!("GPU tools error: {e}"))
     }
 }
 
 #[cfg(any(feature = "cuda", feature = "opencl"))]
 impl From<ec_gpu_gen::EcError> for Error {
     fn from(e: ec_gpu_gen::EcError) -> Self {
-        Self::GpuError(format!("EC-GPU error: {}", e))
+        Self::GpuError(format!("EC-GPU error: {e}"))
     }
 }
 
@@ -77,10 +77,10 @@ impl fmt::Display for Error {
                 "The size of the buffer cannot be greater than the hash arity."
             ),
             Error::IndexOutOfBounds => write!(f, "The referenced index is outs of bounds."),
-            Error::GpuError(s) => write!(f, "GPU Error: {}", s),
+            Error::GpuError(s) => write!(f, "GPU Error: {s}"),
             #[cfg(any(feature = "cuda", feature = "opencl"))]
-            Error::ClError(e) => write!(f, "OpenCL Error: {}", e),
-            Error::Other(s) => write!(f, "{}", s),
+            Error::ClError(e) => write!(f, "OpenCL Error: {e}"),
+            Error::Other(s) => write!(f, "{s}"),
         }
     }
 }

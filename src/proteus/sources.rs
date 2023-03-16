@@ -1,4 +1,5 @@
 // This is a hack to make it possible to include this file also in build.rs.
+#[allow(clippy::duplicate_mod)]
 #[path = "../round_numbers.rs"]
 mod round_numbers;
 
@@ -135,7 +136,7 @@ where
     for (standard, _strengthened) in derived_constants {
         source.push(poseidon_source(&F::name(), "standard", standard));
         #[cfg(feature = "strengthened")]
-        source.push(poseidon_source(&F::name(), "strengthened", &_strengthened));
+        source.push(poseidon_source(&F::name(), "strengthened", _strengthened));
     }
     source.join("\n")
 }
