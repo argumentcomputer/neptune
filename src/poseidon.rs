@@ -21,10 +21,10 @@ pub trait Arity<T>: ArrayLength<T> {
 }
 
 macro_rules! impl_arity {
-    ($($a:ty => $b:ty),*) => {
+    ($($a:ty),*) => {
         $(
             impl<F: PrimeField> Arity<F> for $a {
-                type ConstantsSize = $b;
+                type ConstantsSize = Add1<$a>;
 
                 fn tag() -> F {
                     F::from((1 << <$a as Unsigned>::to_usize()) - 1)
@@ -44,42 +44,8 @@ impl<F: PrimeField> Arity<F> for U0 {
 }
 
 impl_arity!(
-    U1 => U2,
-    U2 => U3,
-    U3 => U4,
-    U4 => U5,
-    U5 => U6,
-    U6 => U7,
-    U7 => U8,
-    U8 => U9,
-    U9 => U10,
-    U10 => U11,
-    U11 => U12,
-    U12 => U13,
-    U13 => U14,
-    U14 => U15,
-    U15 => U16,
-    U16 => U17,
-    U17 => U18,
-    U18 => U19,
-    U19 => U20,
-    U20 => U21,
-    U21 => U22,
-    U22 => U23,
-    U23 => U24,
-    U24 => U25,
-    U25 => U26,
-    U26 => U27,
-    U27 => U28,
-    U28 => U29,
-    U29 => U30,
-    U30 => U31,
-    U31 => U32,
-    U32 => U33,
-    U33 => U34,
-    U34 => U35,
-    U35 => U36,
-    U36 => U37
+    U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12, U13, U14, U15, U16, U17, U18, U19, U20, U21,
+    U22, U23, U24, U25, U26, U27, U28, U29, U30, U31, U32, U33, U34, U35, U36
 );
 
 /// The `Poseidon` structure will accept a number of inputs equal to the arity.
