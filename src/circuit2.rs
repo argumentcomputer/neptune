@@ -27,11 +27,11 @@ impl<Scalar: PrimeField> From<AllocatedNum<Scalar>> for Elt<Scalar> {
 }
 
 impl<Scalar: PrimeField> Elt<Scalar> {
-    pub fn is_allocated(&self) -> bool {
+    pub const fn is_allocated(&self) -> bool {
         matches!(self, Self::Allocated(_))
     }
 
-    pub fn is_num(&self) -> bool {
+    pub const fn is_num(&self) -> bool {
         matches!(self, Self::Num(_))
     }
 

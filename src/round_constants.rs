@@ -166,7 +166,7 @@ impl Iterator for Grain {
 
 #[allow(dead_code)]
 #[inline]
-fn bool_to_u8(bit: bool, offset: usize) -> u8 {
+const fn bool_to_u8(bit: bool, offset: usize) -> u8 {
     if bit {
         1u8 << offset
     } else {
