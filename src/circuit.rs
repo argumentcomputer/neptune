@@ -55,11 +55,11 @@ enum Elt<Scalar: PrimeField> {
 }
 
 impl<Scalar: PrimeField> Elt<Scalar> {
-    fn is_allocated(&self) -> bool {
+    const fn is_allocated(&self) -> bool {
         matches!(self, Self::Allocated(_))
     }
 
-    fn is_num(&self) -> bool {
+    const fn is_num(&self) -> bool {
         matches!(self, Self::Num(_))
     }
 

@@ -53,7 +53,7 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
     /// Some HashTypes require more testing so are not yet supported, since they are not yet needed.
     /// As and when needed, support can be added, along with tests to ensure the initial implementation
     /// is sound.
-    pub fn is_supported(&self) -> bool {
+    pub const fn is_supported(&self) -> bool {
         match self {
             HashType::MerkleTree => true,
             HashType::MerkleTreeSparse(_) => false,
@@ -73,7 +73,7 @@ pub enum CType<F: PrimeField, A: Arity<F>> {
 }
 
 impl<F: PrimeField, A: Arity<F>> CType<F, A> {
-    fn identifier(&self) -> u64 {
+    const fn identifier(&self) -> u64 {
         match self {
             CType::Arbitrary(id) => *id,
             CType::_Phantom(_) => panic!("_Phantom is not a real custom tag type."),

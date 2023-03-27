@@ -20,7 +20,7 @@ structopt = { version = "0.3", default-features = false }
 blstrs = { version = "0.6.1", features = ["gpu"] }
 pasta_curves = { version = "0.5.2", features = ["gpu"], package = "fil_pasta_curves" }
 ec-gpu = "0.2.0"
-ec-gpu-gen = "0.5.1"
+ec-gpu-gen = "0.5.2"
 
 [features]
 default = ["opencl"]

@@ -96,25 +96,25 @@ impl Hasher {
 }
 
 impl SpongeOp {
-    pub fn reset(&self) -> Self {
+    pub const fn reset(&self) -> Self {
         match self {
             Self::Absorb(_) => Self::Squeeze(0),
             Self::Squeeze(_) => Self::Absorb(0),
         }
     }
 
-    pub fn count(&self) -> u32 {
+    pub const fn count(&self) -> u32 {
         match self {
             Self::Absorb(n) => *n,
             Self::Squeeze(n) => *n,
         }
     }
 
-    pub fn is_absorb(&self) -> bool {
+    pub const fn is_absorb(&self) -> bool {
         matches!(self, Self::Absorb(_))
     }
 
-    pub fn is_squeeze(&self) -> bool {
+    pub const fn is_squeeze(&self) -> bool {
         matches!(self, Self::Squeeze(_))
     }
 
@@ -127,7 +127,7 @@ impl SpongeOp {
         }
     }
 
-    pub fn matches(&self, other: Self) -> bool {
+    pub const fn matches(&self, other: Self) -> bool {
         self.is_absorb() == other.is_absorb()
     }
 

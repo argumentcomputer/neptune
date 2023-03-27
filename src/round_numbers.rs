@@ -15,7 +15,7 @@ const M: usize = 128;
 // The number of S-boxes (also called the "cost") given by equation (14) in the Poseidon paper:
 // `cost = t * R_F + R_P`.
 #[inline]
-fn n_sboxes(t: usize, rf: usize, rp: usize) -> usize {
+const fn n_sboxes(t: usize, rf: usize, rp: usize) -> usize {
     t * rf + rp
 }
 
