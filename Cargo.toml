@@ -5,7 +5,7 @@ version = "8.1.0"
 authors = ["porcuquine <porcuquine@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/filecoin-project/neptune"
+repository = "https://github.com/lurk-lab/neptune"
 resolver = "2"
 
 [dependencies]
