@@ -774,7 +774,7 @@ mod tests {
 
             {
                 let mut cs = TestConstraintSystem::<Fr>::new();
-                let mut fr_data = vec![Fr::zero(); preimage_length];
+                let mut fr_data = vec![Fr::ZERO; preimage_length];
                 let data: Vec<AllocatedNum<Fr>> = data(&mut cs, &mut fr_data);
 
                 let out = poseidon_hash_allocated(&mut cs, data.clone(), &constants)
@@ -809,7 +809,7 @@ mod tests {
 
             {
                 let mut cs = TestConstraintSystem::<Fr>::new();
-                let mut fr_data = vec![Fr::zero(); preimage_length];
+                let mut fr_data = vec![Fr::ZERO; preimage_length];
                 let data: Vec<AllocatedNum<Fr>> = data(&mut cs, &mut fr_data);
 
                 let out =

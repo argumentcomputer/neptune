@@ -562,7 +562,7 @@ mod tests {
                 1,
                 res.unwrap()
                     .iter()
-                    .filter(|&row| row[i] != Fr::zero())
+                    .filter(|&row| row[i] != Fr::ZERO)
                     .count()
             );
         }

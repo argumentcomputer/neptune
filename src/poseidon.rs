@@ -368,7 +368,7 @@ where
     ///
     /// assert_eq!(poseidon.elements.len(), 9);
     /// for index in 1..9 {
-    ///     assert_eq!(poseidon.elements[index], Fp::zero());
+    ///     assert_eq!(poseidon.elements[index], Fp::ZERO);
     /// }
     /// ```
     pub fn new(constants: &'a PoseidonConstants<F, A>) -> Self {
@@ -411,7 +411,7 @@ where
     /// assert_eq!(constants.width(), 3);
     /// assert_eq!(poseidon.elements.len(), constants.width());
     /// assert_eq!(poseidon.elements[1], Fp::from(u64::MAX));
-    /// assert_eq!(poseidon.elements[2], Fp::zero());
+    /// assert_eq!(poseidon.elements[2], Fp::ZERO);
     /// ```
     pub fn new_with_preimage(preimage: &[F], constants: &'a PoseidonConstants<F, A>) -> Self {
         let elements = match constants.hash_type {
@@ -477,7 +477,7 @@ where
     ///
     /// assert_eq!(poseidon.elements.len(), constants.width());
     /// assert_eq!(poseidon.elements[1], Fp::from(u64::MAX));
-    /// assert_eq!(poseidon.elements[2], Fp::zero());
+    /// assert_eq!(poseidon.elements[2], Fp::ZERO);
     ///
     /// let preimage = vec![Fp::from(u64::MIN), Fp::from(u64::MIN)];
     /// poseidon.set_preimage(&preimage);
@@ -520,14 +520,14 @@ where
     ///
     /// let mut poseidon = Poseidon::<Fp, U2>::new(&constants);
     /// assert_eq!(poseidon.elements.len(), constants.width());
-    /// assert_eq!(poseidon.elements[1], Fp::zero());
-    /// assert_eq!(poseidon.elements[2], Fp::zero());
+    /// assert_eq!(poseidon.elements[1], Fp::ZERO);
+    /// assert_eq!(poseidon.elements[2], Fp::ZERO);
     ///
     /// let pos = poseidon.input(Fp::from(u64::MAX)).expect("can't add one more element");
     ///
     /// assert_eq!(pos, 1);
     /// assert_eq!(poseidon.elements[1], Fp::from(u64::MAX));
-    /// assert_eq!(poseidon.elements[2], Fp::zero());
+    /// assert_eq!(poseidon.elements[2], Fp::ZERO);
     ///
     /// let pos = poseidon.input(Fp::from(u64::MAX)).expect("can't add one more element");
     ///
@@ -571,7 +571,7 @@ where
     ///
     /// let digest = poseidon.hash_in_mode(HashMode::Correct);
     ///
-    /// assert_ne!(digest, Fp::zero()); // digest has `Fp` type
+    /// assert_ne!(digest, Fp::ZERO); // digest has `Fp` type
     /// ```
     pub fn hash_in_mode(&mut self, mode: HashMode) -> F {
         let res = match mode {
@@ -603,7 +603,7 @@ where
     ///
     /// let digest = poseidon.hash();
     ///
-    /// assert_ne!(digest, Fp::zero()); // digest has `Fp` type
+    /// assert_ne!(digest, Fp::ZERO); // digest has `Fp` type
     /// ```
     pub fn hash(&mut self) -> F {
         self.hash_in_mode(DEFAULT_HASH_MODE)
@@ -686,7 +686,7 @@ where
     ///
     /// let digest = poseidon.hash_optimized_static();
     ///
-    /// assert_ne!(digest, Fp::zero()); // digest has `Fp` type
+    /// assert_ne!(digest, Fp::ZERO); // digest has `Fp` type
     /// ```
     pub fn hash_optimized_static(&mut self) -> F {
         // The first full round should use the initial constants.
@@ -916,7 +916,7 @@ mod tests {
     #[test]
     fn reset() {
         let test_arity = 2;
-        let preimage = vec![<Fr as Field>::one(); test_arity];
+        let preimage = vec![<Fr as Field>::ONE; test_arity];
         let constants = PoseidonConstants::new();
         let mut h = Poseidon::<Fr, U2>::new_with_preimage(&preimage, &constants);
         h.hash();
@@ -931,9 +931,9 @@ mod tests {
     #[test]
     fn hash_det() {
         let test_arity = 2;
-        let mut preimage = vec![Fr::zero(); test_arity];
+        let mut preimage = vec![Fr::ZERO; test_arity];
         let constants = PoseidonConstants::new();
-        preimage[0] = <Fr as Field>::one();
+        preimage[0] = <Fr as Field>::ONE;
 
         let mut h = Poseidon::<Fr, U2>::new_with_preimage(&preimage, &constants);
 
@@ -945,9 +945,9 @@ mod tests {
 
     #[test]
     fn hash_arity_3() {
-        let mut preimage = [Fr::zero(); 3];
+        let mut preimage = [Fr::ZERO; 3];
         let constants = PoseidonConstants::new();
-        preimage[0] = <Fr as Field>::one();
+        preimage[0] = <Fr as Field>::ONE;
 
         let mut h = Poseidon::<Fr, typenum::U3>::new_with_preimage(&preimage, &constants);
 

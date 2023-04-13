@@ -683,7 +683,7 @@ mod tests {
             };
             let mut i = 0;
 
-            let mut fr_data = vec![Fr::zero(); preimage_length];
+            let mut fr_data = vec![Fr::ZERO; preimage_length];
             let data: Vec<AllocatedNum<Fr>> = (0..preimage_length)
                 .enumerate()
                 .map(|_| {

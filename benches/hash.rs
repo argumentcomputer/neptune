@@ -150,7 +150,7 @@ where
 
     let mut group = c.benchmark_group(format!("arity-{}", arity));
 
-    let preimage = vec![Fr::one(); arity];
+    let preimage = vec![Fr::ONE; arity];
     let consts = PoseidonConstants::<Fr, A>::new();
     group.bench_function("bls", |b| {
         b.iter(|| Poseidon::new_with_preimage(&preimage, &consts).hash())
