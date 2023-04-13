@@ -361,6 +361,7 @@ where
     /// use neptune::poseidon::PoseidonConstants;
     /// use neptune::poseidon::Poseidon;
     /// use pasta_curves::Fp;
+    /// use ff::Field;
     /// use generic_array::typenum::U8;
     ///
     /// let constants: PoseidonConstants<Fp, U8> = PoseidonConstants::new();
@@ -399,6 +400,7 @@ where
     /// use neptune::poseidon::PoseidonConstants;
     /// use neptune::poseidon::Poseidon;
     /// use pasta_curves::Fp;
+    /// use ff::Field;
     /// use generic_array::typenum::U2;
     ///
     /// let preimage_set_length = 1;
@@ -468,6 +470,7 @@ where
     /// use neptune::poseidon::PoseidonConstants;
     /// use neptune::poseidon::Poseidon;
     /// use pasta_curves::Fp;
+    /// use ff::Field;
     /// use generic_array::typenum::U2;
     ///
     /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new_constant_length(1);
@@ -514,6 +517,7 @@ where
     /// use neptune::poseidon::PoseidonConstants;
     /// use neptune::poseidon::Poseidon;
     /// use pasta_curves::Fp;
+    /// use ff::Field;
     /// use generic_array::typenum::U2;
     ///
     /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new_constant_length(1);
@@ -561,6 +565,7 @@ where
     /// use neptune::poseidon::{HashMode, PoseidonConstants};
     /// use neptune::poseidon::Poseidon;
     /// use pasta_curves::Fp;
+    /// use ff::Field;
     /// use generic_array::typenum::U2;
     ///
     /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new();
@@ -593,6 +598,7 @@ where
     /// use neptune::poseidon::PoseidonConstants;
     /// use neptune::poseidon::Poseidon;
     /// use pasta_curves::Fp;
+    /// use ff::Field;
     /// use generic_array::typenum::U2;
     ///
     /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new();
@@ -641,6 +647,7 @@ where
     /// use neptune::poseidon::PoseidonConstants;
     /// use neptune::poseidon::Poseidon;
     /// use pasta_curves::Fp;
+    /// use ff::Field;
     /// use generic_array::typenum::U2;
     ///
     /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new();
@@ -676,6 +683,7 @@ where
     /// use neptune::poseidon::PoseidonConstants;
     /// use neptune::poseidon::Poseidon;
     /// use pasta_curves::Fp;
+    /// use ff::Field;
     /// use generic_array::typenum::U2;
     ///
     /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new();
