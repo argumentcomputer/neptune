@@ -7,7 +7,6 @@ edition = "2018"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-lazy_static = "1.4.0"
 bellperson = { version = "0.24.1", default-features = false }
 blake2s_simd = "0.5"
 byteorder = "1"

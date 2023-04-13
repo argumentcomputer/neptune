@@ -9,7 +9,6 @@ repository = "https://github.com/lurk-lab/neptune"
 resolver = "2"
 
 [dependencies]
-lazy_static = "1.4.0"
 bellperson = { version = "0.24", default-features = false }
 blake2s_simd = "0.5"
 blstrs = { version = "0.6.1", optional = true }
