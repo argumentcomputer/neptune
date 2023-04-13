@@ -10,19 +10,17 @@ resolver = "2"
 
 [dependencies]
 lazy_static = "1.4.0"
-#bellperson = { version = "0.24", default-features = false }
-bellperson = { git = "https://github.com/leonardoalt/bellperson", default-features = false }
+bellperson = { version = "0.24", default-features = false }
 blake2s_simd = "0.5"
 blstrs = { version = "0.6.1", optional = true }
 byteorder = "1"
-ff = "0.12.0"
-generic-array = "0.14.4"
-itertools = { version = "0.8.0" }
 ec-gpu = { version = "0.2.0", optional = true }
 ec-gpu-gen = { version = "0.5.2", optional = true }
-#pasta_curves = { version = "0.5.1", features = ["serde"], package = "fil_pasta_curves" }
-#pasta_curves = { path = "../fil_pasta_curves", features = ["serde"], package = "fil_pasta_curves" }
-pasta_curves = { git = "https://github.com/leonardoalt/fil_pasta_curves/", features = ["serde"], package = "fil_pasta_curves" }
+ff = "0.13"
+generic-array = "0.14.6"
+itertools = { version = "0.8.2" }
+log = "0.4.17"
+pasta_curves = { version = "0.5", features = ["serde"] }
 trait-set = "0.3.0"
 serde = { version = "1.0", features = ["derive"] }
 
@@ -37,8 +35,8 @@ sha2 = "0.9"
 [build-dependencies]
 blstrs = "0.6.1"
 ec-gpu = { version = "0.2.0", optional = true }
-ec-gpu-gen = { version = "0.5.0", optional = true }
-pasta_curves = { version = "0.5.0", features = ["serde"] }
+ec-gpu-gen = { version = "0.5.2", optional = true }
+pasta_curves = { version = "0.5", features = ["serde"] }
 
 [[bench]]
 name = "hash"
@@ -74,3 +72,11 @@ pasta = ["pasta_curves/gpu"]
 members = [
   "gbench",
 ]
+
+[patch.crates-io]
+## DO NOT COMMIT
+bellperson =  {git = "https://github.com/huitseeker/bellperson", branch="update-ff-group" }
+blstrs = { git = "https://github.com/huitseeker/blstrs", branch="WIP-0.13", features = ["__private_bench"] }
+ec-gpu = { git = "https://github.com/filecoin-project/ec-gpu/", branch="upgrade-ff-013" }
+ec-gpu-gen = { git = "https://github.com/filecoin-project/ec-gpu/", branch="upgrade-ff-013" }
+## DO NOT COMMIT
