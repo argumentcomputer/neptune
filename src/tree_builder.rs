@@ -243,7 +243,11 @@ where
     }
 }
 
-#[cfg(all(any(feature = "cuda", feature = "opencl"), not(target_os = "macos")))]
+#[cfg(all(
+    feature = "bls",
+    any(feature = "cuda", feature = "opencl"),
+    not(target_os = "macos")
+))]
 #[cfg(test)]
 mod tests {
     use super::*;
