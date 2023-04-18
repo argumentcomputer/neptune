@@ -61,7 +61,7 @@ where
 
     fn reset(&mut self) {
         self.fill_index = 0;
-        self.data.iter_mut().for_each(|place| *place = F::zero());
+        self.data.iter_mut().for_each(|place| *place = F::ZERO);
     }
 }
 
@@ -95,7 +95,7 @@ where
     ) -> Result<Self, Error> {
         let builder = Self {
             leaf_count,
-            data: vec![F::zero(); leaf_count],
+            data: vec![F::ZERO; leaf_count],
             fill_index: 0,
             tree_constants: PoseidonConstants::<F, TreeArity>::new(),
             tree_batcher,
@@ -117,7 +117,7 @@ where
         let intermediate_tree_size = self.tree_size(0) + self.leaf_count;
         let arity = TreeArity::to_usize();
 
-        let mut tree_data = vec![F::zero(); intermediate_tree_size];
+        let mut tree_data = vec![F::ZERO; intermediate_tree_size];
 
         tree_data[0..self.leaf_count].copy_from_slice(&self.data);
 
@@ -243,7 +243,11 @@ where
     }
 }
 
-#[cfg(all(any(feature = "cuda", feature = "opencl"), not(target_os = "macos")))]
+#[cfg(all(
+    feature = "bls",
+    any(feature = "cuda", feature = "opencl"),
+    not(target_os = "macos")
+))]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -282,7 +286,7 @@ mod tests {
             let mut builder = TreeBuilder::<Fr, U8>::new(batcher, leaves, rows_to_discard).unwrap();
 
             // Simplify computing the expected root.
-            let constant_element = Fr::zero();
+            let constant_element = Fr::ZERO;
 
             let effective_batch_size = usize::min(batch_size, max_leaf_batch_size);
 

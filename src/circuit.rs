@@ -83,7 +83,7 @@ impl<Scalar: PrimeField> Elt<Scalar> {
                 if enforce {
                     cs.enforce(
                         || "enforce num allocation preserves lc".to_string(),
-                        |_| num.lc(Scalar::one()),
+                        |_| num.lc(Scalar::ONE),
                         |lc| lc + CS::one(),
                         |lc| lc + v.get_variable(),
                     );
@@ -102,7 +102,7 @@ impl<Scalar: PrimeField> Elt<Scalar> {
 
     fn lc(&self) -> LinearCombination<Scalar> {
         match self {
-            Self::Num(num) => num.lc(Scalar::one()),
+            Self::Num(num) => num.lc(Scalar::ONE),
             Self::Allocated(v) => LinearCombination::<Scalar>::zero() + v.get_variable(),
         }
     }
@@ -683,7 +683,7 @@ mod tests {
             };
             let mut i = 0;
 
-            let mut fr_data = vec![Fr::zero(); preimage_length];
+            let mut fr_data = vec![Fr::ZERO; preimage_length];
             let data: Vec<AllocatedNum<Fr>> = (0..preimage_length)
                 .enumerate()
                 .map(|_| {

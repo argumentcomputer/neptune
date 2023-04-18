@@ -157,12 +157,12 @@ fn make_prime<F: PrimeField>(m: &Matrix<F>) -> Matrix<F> {
         .enumerate()
         .map(|(i, row)| match i {
             0 => {
-                let mut new_row = vec![F::zero(); row.len()];
-                new_row[0] = F::one();
+                let mut new_row = vec![F::ZERO; row.len()];
+                new_row[0] = F::ONE;
                 new_row
             }
             _ => {
-                let mut new_row = vec![F::zero(); row.len()];
+                let mut new_row = vec![F::ZERO; row.len()];
                 new_row[1..].copy_from_slice(&row[1..]);
                 new_row
             }
@@ -184,9 +184,9 @@ fn make_double_prime<F: PrimeField>(m: &Matrix<F>, m_hat_inv: &Matrix<F>) -> Mat
                 new_row
             }
             _ => {
-                let mut new_row = vec![F::zero(); row.len()];
+                let mut new_row = vec![F::ZERO; row.len()];
                 new_row[0] = w_hat[i - 1];
-                new_row[i] = F::one();
+                new_row[i] = F::ONE;
                 new_row
             }
         })

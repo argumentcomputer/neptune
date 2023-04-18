@@ -361,6 +361,7 @@ where
     /// use neptune::poseidon::PoseidonConstants;
     /// use neptune::poseidon::Poseidon;
     /// use pasta_curves::Fp;
+    /// use ff::Field;
     /// use generic_array::typenum::U8;
     ///
     /// let constants: PoseidonConstants<Fp, U8> = PoseidonConstants::new();
@@ -368,7 +369,7 @@ where
     ///
     /// assert_eq!(poseidon.elements.len(), 9);
     /// for index in 1..9 {
-    ///     assert_eq!(poseidon.elements[index], Fp::zero());
+    ///     assert_eq!(poseidon.elements[index], Fp::ZERO);
     /// }
     /// ```
     pub fn new(constants: &'a PoseidonConstants<F, A>) -> Self {
@@ -376,7 +377,7 @@ where
             if i == 0 {
                 constants.domain_tag
             } else {
-                F::zero()
+                F::ZERO
             }
         });
         Poseidon {
@@ -399,6 +400,7 @@ where
     /// use neptune::poseidon::PoseidonConstants;
     /// use neptune::poseidon::Poseidon;
     /// use pasta_curves::Fp;
+    /// use ff::Field;
     /// use generic_array::typenum::U2;
     ///
     /// let preimage_set_length = 1;
@@ -411,7 +413,7 @@ where
     /// assert_eq!(constants.width(), 3);
     /// assert_eq!(poseidon.elements.len(), constants.width());
     /// assert_eq!(poseidon.elements[1], Fp::from(u64::MAX));
-    /// assert_eq!(poseidon.elements[2], Fp::zero());
+    /// assert_eq!(poseidon.elements[2], Fp::ZERO);
     /// ```
     pub fn new_with_preimage(preimage: &[F], constants: &'a PoseidonConstants<F, A>) -> Self {
         let elements = match constants.hash_type {
@@ -422,7 +424,7 @@ where
                     if i == 0 {
                         constants.domain_tag
                     } else if i > preimage.len() {
-                        F::zero()
+                        F::ZERO
                     } else {
                         preimage[i - 1]
                     }
@@ -468,6 +470,7 @@ where
     /// use neptune::poseidon::PoseidonConstants;
     /// use neptune::poseidon::Poseidon;
     /// use pasta_curves::Fp;
+    /// use ff::Field;
     /// use generic_array::typenum::U2;
     ///
     /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new_constant_length(1);
@@ -477,7 +480,7 @@ where
     ///
     /// assert_eq!(poseidon.elements.len(), constants.width());
     /// assert_eq!(poseidon.elements[1], Fp::from(u64::MAX));
-    /// assert_eq!(poseidon.elements[2], Fp::zero());
+    /// assert_eq!(poseidon.elements[2], Fp::ZERO);
     ///
     /// let preimage = vec![Fp::from(u64::MIN), Fp::from(u64::MIN)];
     /// poseidon.set_preimage(&preimage);
@@ -494,7 +497,7 @@ where
     /// Restore the initial state
     pub fn reset(&mut self) {
         self.reset_offsets();
-        self.elements[1..].iter_mut().for_each(|l| *l = F::zero());
+        self.elements[1..].iter_mut().for_each(|l| *l = F::ZERO);
         self.elements[0] = self.constants.domain_tag;
     }
 
@@ -514,20 +517,21 @@ where
     /// use neptune::poseidon::PoseidonConstants;
     /// use neptune::poseidon::Poseidon;
     /// use pasta_curves::Fp;
+    /// use ff::Field;
     /// use generic_array::typenum::U2;
     ///
     /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new_constant_length(1);
     ///
     /// let mut poseidon = Poseidon::<Fp, U2>::new(&constants);
     /// assert_eq!(poseidon.elements.len(), constants.width());
-    /// assert_eq!(poseidon.elements[1], Fp::zero());
-    /// assert_eq!(poseidon.elements[2], Fp::zero());
+    /// assert_eq!(poseidon.elements[1], Fp::ZERO);
+    /// assert_eq!(poseidon.elements[2], Fp::ZERO);
     ///
     /// let pos = poseidon.input(Fp::from(u64::MAX)).expect("can't add one more element");
     ///
     /// assert_eq!(pos, 1);
     /// assert_eq!(poseidon.elements[1], Fp::from(u64::MAX));
-    /// assert_eq!(poseidon.elements[2], Fp::zero());
+    /// assert_eq!(poseidon.elements[2], Fp::ZERO);
     ///
     /// let pos = poseidon.input(Fp::from(u64::MAX)).expect("can't add one more element");
     ///
@@ -561,6 +565,7 @@ where
     /// use neptune::poseidon::{HashMode, PoseidonConstants};
     /// use neptune::poseidon::Poseidon;
     /// use pasta_curves::Fp;
+    /// use ff::Field;
     /// use generic_array::typenum::U2;
     ///
     /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new();
@@ -571,7 +576,7 @@ where
     ///
     /// let digest = poseidon.hash_in_mode(HashMode::Correct);
     ///
-    /// assert_ne!(digest, Fp::zero()); // digest has `Fp` type
+    /// assert_ne!(digest, Fp::ZERO); // digest has `Fp` type
     /// ```
     pub fn hash_in_mode(&mut self, mode: HashMode) -> F {
         let res = match mode {
@@ -593,6 +598,7 @@ where
     /// use neptune::poseidon::PoseidonConstants;
     /// use neptune::poseidon::Poseidon;
     /// use pasta_curves::Fp;
+    /// use ff::Field;
     /// use generic_array::typenum::U2;
     ///
     /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new();
@@ -603,7 +609,7 @@ where
     ///
     /// let digest = poseidon.hash();
     ///
-    /// assert_ne!(digest, Fp::zero()); // digest has `Fp` type
+    /// assert_ne!(digest, Fp::ZERO); // digest has `Fp` type
     /// ```
     pub fn hash(&mut self) -> F {
         self.hash_in_mode(DEFAULT_HASH_MODE)
@@ -621,7 +627,7 @@ where
         match self.constants.hash_type {
             HashType::ConstantLength(_) | HashType::Encryption => {
                 for elt in self.elements[self.pos..].iter_mut() {
-                    *elt = F::zero();
+                    *elt = F::ZERO;
                 }
                 self.pos = self.elements.len();
             }
@@ -641,6 +647,7 @@ where
     /// use neptune::poseidon::PoseidonConstants;
     /// use neptune::poseidon::Poseidon;
     /// use pasta_curves::Fp;
+    /// use ff::Field;
     /// use generic_array::typenum::U2;
     ///
     /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new();
@@ -676,6 +683,7 @@ where
     /// use neptune::poseidon::PoseidonConstants;
     /// use neptune::poseidon::Poseidon;
     /// use pasta_curves::Fp;
+    /// use ff::Field;
     /// use generic_array::typenum::U2;
     ///
     /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new();
@@ -686,7 +694,7 @@ where
     ///
     /// let digest = poseidon.hash_optimized_static();
     ///
-    /// assert_ne!(digest, Fp::zero()); // digest has `Fp` type
+    /// assert_ne!(digest, Fp::ZERO); // digest has `Fp` type
     /// ```
     pub fn hash_optimized_static(&mut self) -> F {
         // The first full round should use the initial constants.
@@ -819,7 +827,7 @@ where
     /// exploits the fact that our MDS matrices are symmetric by construction.
     #[allow(clippy::ptr_arg)]
     pub(crate) fn product_mds_with_matrix(&mut self, matrix: &Matrix<F>) {
-        let mut result = GenericArray::<F, A::ConstantsSize>::generate(|_| F::zero());
+        let mut result = GenericArray::<F, A::ConstantsSize>::generate(|_| F::ZERO);
 
         for (j, val) in result.iter_mut().enumerate() {
             for (i, row) in matrix.iter().enumerate() {
@@ -834,7 +842,7 @@ where
 
     // Sparse matrix in this context means one of the form, M''.
     fn product_mds_with_sparse_matrix(&mut self, sparse_matrix: &SparseMatrix<F>) {
-        let mut result = GenericArray::<F, A::ConstantsSize>::generate(|_| F::zero());
+        let mut result = GenericArray::<F, A::ConstantsSize>::generate(|_| F::ZERO);
 
         // First column is dense.
         for (i, val) in sparse_matrix.w_hat.iter().enumerate() {
@@ -916,7 +924,7 @@ mod tests {
     #[test]
     fn reset() {
         let test_arity = 2;
-        let preimage = vec![<Fr as Field>::one(); test_arity];
+        let preimage = vec![<Fr as Field>::ONE; test_arity];
         let constants = PoseidonConstants::new();
         let mut h = Poseidon::<Fr, U2>::new_with_preimage(&preimage, &constants);
         h.hash();
@@ -931,9 +939,9 @@ mod tests {
     #[test]
     fn hash_det() {
         let test_arity = 2;
-        let mut preimage = vec![Fr::zero(); test_arity];
+        let mut preimage = vec![Fr::ZERO; test_arity];
         let constants = PoseidonConstants::new();
-        preimage[0] = <Fr as Field>::one();
+        preimage[0] = <Fr as Field>::ONE;
 
         let mut h = Poseidon::<Fr, U2>::new_with_preimage(&preimage, &constants);
 
@@ -945,9 +953,9 @@ mod tests {
 
     #[test]
     fn hash_arity_3() {
-        let mut preimage = [Fr::zero(); 3];
+        let mut preimage = [Fr::ZERO; 3];
         let constants = PoseidonConstants::new();
-        preimage[0] = <Fr as Field>::one();
+        preimage[0] = <Fr as Field>::ONE;
 
         let mut h = Poseidon::<Fr, typenum::U3>::new_with_preimage(&preimage, &constants);
 

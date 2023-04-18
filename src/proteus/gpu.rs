@@ -190,7 +190,7 @@ where
                 .arg(&(preimages.len() as i32))
                 .run()?;
 
-            let mut frs = vec![F::zero(); num_hashes];
+            let mut frs = vec![F::ZERO; num_hashes];
             program.read_into_buffer(&result_buffer, &mut frs)?;
             Ok(frs.to_vec())
         });
