@@ -85,3 +85,33 @@ jobs:
         with:
           command: fmt
           args: --all --check
+
+  # Runs the test suite on a self-hosted GPU machine with CUDA enabled
+  gpu:
+    runs-on: self-hosted
+    env:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITITES: compute,utility
+      # The `compute`/`sm` number corresponds to the Nvidia GPU architecture
+      # In this case, the self-hosted machine uses the Ampere architecture
+      # See https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/
+      EC_GPU_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_86 --generate-code=arch=compute_86,code=sm_86
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+      - uses: Swatinem/rust-cache@v2
+      - name: Install GPU deps
+        run: |
+          apt-get update
+          apt-get install ocl-icd-opencl-dev --yes
+        # Check we have access to the machine's Nvidia drivers
+      - run: nvidia-smi
+        # Check that CUDA is installed with a driver-compatible version
+        # This must also be compatible with the GPU architecture, see above link
+      - run: nvcc --version
+        # Check that we can access the OpenCL headers
+      - run: clinfo
+      - name: CUDA tests
+        run: |
+          cargo test --no-default-features --features cuda,pasta,bls,arity2,arity4,arity8,arity11,arity16,arity24,arity36
+      
