@@ -43,6 +43,7 @@ compile_error!("The `cuda` and `opencl` features need the `bls` and/or `pasta` f
 /// Poseidon circuit
 pub mod circuit;
 pub mod circuit2;
+pub mod circuit2_witness;
 pub mod error;
 mod matrix;
 mod mds;
