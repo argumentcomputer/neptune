@@ -1,6 +1,7 @@
 /// The `circuit2` module implements the optimal Poseidon hash circuit.
 use std::ops::{AddAssign, MulAssign};
 
+use crate::circuit2_witness::poseidon_hash_allocated_witness;
 use crate::hash_type::HashType;
 use crate::matrix::Matrix;
 use crate::mds::SparseMatrix;
@@ -434,9 +435,9 @@ where
     }
 }
 
-/// Create circuit for Poseidon hash, returning an unallocated `Num` at the cost of one constraint.
+/// Create circuit for Poseidon hash, returning an allocated `Num` at the cost of one constraint.
 pub fn poseidon_hash_allocated<CS, Scalar, A>(
-    cs: CS,
+    mut cs: CS,
     preimage: Vec<AllocatedNum<Scalar>>,
     constants: &PoseidonConstants<Scalar, A>,
 ) -> Result<AllocatedNum<Scalar>, SynthesisError>
@@ -445,24 +446,41 @@ where
     Scalar: PrimeField,
     A: Arity<Scalar>,
 {
-    let arity = A::to_usize();
-    let tag_element = Elt::num_from_fr::<CS>(constants.domain_tag);
-    let mut elements = Vec::with_capacity(arity + 1);
-    elements.push(tag_element);
-    elements.extend(preimage.into_iter().map(Elt::Allocated));
+    poseidon_hash_allocated_mut(&mut cs, preimage, constants)
+}
 
-    if let HashType::ConstantLength(length) = constants.hash_type {
-        assert!(length <= arity, "illegal length: constants are malformed");
-        // Add zero-padding.
-        for _ in 0..(arity - length) {
-            let elt = Elt::Num(num::Num::zero());
-            elements.push(elt);
+/// Create circuit for Poseidon hash, returning an allocated `Num` at the cost of one constraint.
+pub fn poseidon_hash_allocated_mut<CS, Scalar, A>(
+    cs: &mut CS,
+    preimage: Vec<AllocatedNum<Scalar>>,
+    constants: &PoseidonConstants<Scalar, A>,
+) -> Result<AllocatedNum<Scalar>, SynthesisError>
+where
+    CS: ConstraintSystem<Scalar>,
+    Scalar: PrimeField,
+    A: Arity<Scalar>,
+{
+    if cs.is_witness_generator() {
+        poseidon_hash_allocated_witness(cs, &preimage, constants)
+    } else {
+        let arity = A::to_usize();
+        let tag_element = Elt::num_from_fr::<CS>(constants.domain_tag);
+        let mut elements = Vec::with_capacity(arity + 1);
+        elements.push(tag_element);
+        elements.extend(preimage.into_iter().map(Elt::Allocated));
+
+        if let HashType::ConstantLength(length) = constants.hash_type {
+            assert!(length <= arity, "illegal length: constants are malformed");
+            // Add zero-padding.
+            for _ in 0..(arity - length) {
+                let elt = Elt::Num(num::Num::zero());
+                elements.push(elt);
+            }
         }
+        let mut p = PoseidonCircuit2::new(elements, constants);
+
+        p.hash_to_allocated(cs)
     }
-
-    let mut p = PoseidonCircuit2::new(elements, constants);
-
-    p.hash_to_allocated(cs)
 }
 
 /// Create circuit for Poseidon hash, minimizing constraints by returning an unallocated `Num`.
@@ -557,7 +575,6 @@ where
         let mut tmp = elt.val().ok_or(SynthesisError::AssignmentMissing)?;
         tmp.add_assign(&to_add);
         tmp = tmp.square();
-
         Ok(tmp)
     })?;
 
