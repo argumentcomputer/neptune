@@ -2,6 +2,7 @@
 use std::ops::{AddAssign, MulAssign};
 
 use crate::circuit2::poseidon_hash_allocated;
+use crate::circuit2_witness::poseidon_hash_allocated_witness;
 use crate::hash_type::HashType;
 use crate::matrix::Matrix;
 use crate::mds::SparseMatrix;
@@ -30,7 +31,7 @@ impl CircuitType {
 
 /// Convenience function to potentially ease upgrade transition from legacy to optimal circuits.
 pub fn poseidon_hash_circuit<CS, Scalar, A>(
-    cs: CS,
+    cs: &mut CS,
     circuit_type: CircuitType,
     preimage: Vec<AllocatedNum<Scalar>>,
     constants: &PoseidonConstants<Scalar, A>,

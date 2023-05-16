@@ -10,7 +10,7 @@ resolver = "2"
 rust-version = "1.62.1"
 
 [dependencies]
-bellperson = { version = "0.25", default-features = false }
+bellperson = { git = "https://github.com/filecoin-project/bellperson", rev = "bd31feeb88565e66aaf0f2a28c15f4f0a7284710" }
 blake2s_simd = "0.5"
 blstrs = { version = "0.7.0", optional = true }
 byteorder = "1"
