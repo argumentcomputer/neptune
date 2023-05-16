@@ -76,7 +76,7 @@ members = [
 
 # Dependencies that should be kept in sync through the whole workspace
 [workspace.dependencies]
-bellperson = { version = "0.25", default-features = false }
+bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "master" }
 blake2s_simd = "0.5"
 blstrs = { version = "0.7.0" }
 ff = "0.13.0"
