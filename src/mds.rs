@@ -1,6 +1,7 @@
 // Allow `&Matrix` in function signatures.
 #![allow(clippy::ptr_arg)]
 
+use abomonation_derive::Abomonation;
 use ff::PrimeField;
 use serde::{Deserialize, Serialize};
 
@@ -8,6 +9,7 @@ use crate::matrix;
 use crate::matrix::{
     apply_matrix, invert, is_identity, is_invertible, is_square, mat_mul, minor, transpose, Matrix,
 };
+use crate::unsafe_serde;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MdsMatrices<F: PrimeField> {
@@ -17,6 +19,39 @@ pub struct MdsMatrices<F: PrimeField> {
     pub m_hat_inv: Matrix<F>,
     pub m_prime: Matrix<F>,
     pub m_double_prime: Matrix<F>,
+}
+
+impl<F: PrimeField> abomonation::Abomonation for MdsMatrices<F> {
+    unsafe fn entomb<W: std::io::Write>(&self, bytes: &mut W) -> std::io::Result<()> {
+        unsafe_serde::entomb_vec_vec_F(&self.m, bytes)?;
+        unsafe_serde::entomb_vec_vec_F(&self.m_inv, bytes)?;
+        unsafe_serde::entomb_vec_vec_F(&self.m_hat, bytes)?;
+        unsafe_serde::entomb_vec_vec_F(&self.m_hat_inv, bytes)?;
+        unsafe_serde::entomb_vec_vec_F(&self.m_prime, bytes)?;
+        unsafe_serde::entomb_vec_vec_F(&self.m_double_prime, bytes)?;
+        Ok(())
+    }
+
+    unsafe fn exhume<'a, 'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+        let bytes = unsafe_serde::exhume_vec_vec_F(&mut self.m, bytes)?;
+        let bytes = unsafe_serde::exhume_vec_vec_F(&mut self.m_inv, bytes)?;
+        let bytes = unsafe_serde::exhume_vec_vec_F(&mut self.m_hat, bytes)?;
+        let bytes = unsafe_serde::exhume_vec_vec_F(&mut self.m_hat_inv, bytes)?;
+        let bytes = unsafe_serde::exhume_vec_vec_F(&mut self.m_prime, bytes)?;
+        let bytes = unsafe_serde::exhume_vec_vec_F(&mut self.m_double_prime, bytes)?;
+        Some(bytes)
+    }
+
+    fn extent(&self) -> usize {
+        let mut size = 0;
+        size += unsafe_serde::extent_vec_vec_F(&self.m);
+        size += unsafe_serde::extent_vec_vec_F(&self.m_inv);
+        size += unsafe_serde::extent_vec_vec_F(&self.m_hat);
+        size += unsafe_serde::extent_vec_vec_F(&self.m_hat_inv);
+        size += unsafe_serde::extent_vec_vec_F(&self.m_prime);
+        size += unsafe_serde::extent_vec_vec_F(&self.m_double_prime);
+        size
+    }
 }
 
 pub fn create_mds_matrices<F: PrimeField>(t: usize) -> MdsMatrices<F> {
@@ -45,7 +80,7 @@ pub fn derive_mds_matrices<F: PrimeField>(m: Matrix<F>) -> MdsMatrices<F> {
 /// This means its first row and column are each dense, and the interior matrix
 /// (minor to the element in both the row and column) is the identity.
 /// We will pluralize this compact structure `sparse_matrixes` to distinguish from `sparse_matrices` from which they are created.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Abomonation)]
 pub struct SparseMatrix<F: PrimeField> {
     /// `w_hat` is the first column of the M'' matrix. It will be directly multiplied (scalar product) with a row of state elements.
     pub w_hat: Vec<F>,

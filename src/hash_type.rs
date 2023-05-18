@@ -11,6 +11,8 @@
 /// `Strength` with `HashType` so that hashes with `Strength` other than `Standard` (currently only `Strengthened`)
 /// may still express the full range of hash function types.
 use crate::{Arity, Strength};
+use abomonation::Abomonation;
+use abomonation_derive::Abomonation;
 use ff::PrimeField;
 use serde::{Deserialize, Serialize};
 
@@ -24,6 +26,65 @@ pub enum HashType<F: PrimeField, A: Arity<F>> {
     #[serde(skip)]
     Custom(CType<F, A>),
     Sponge,
+}
+
+impl<F: PrimeField, A: Arity<F>> Abomonation for HashType<F, A> {
+    #[inline]
+    unsafe fn entomb<W: std::io::Write>(&self, write: &mut W) -> std::io::Result<()> { 
+        match *self {
+            HashType::MerkleTree => {},
+            HashType::MerkleTreeSparse(bitmask) => {
+                bitmask.entomb(write)?;
+            },
+            HashType::VariableLength => {},
+            HashType::ConstantLength(length) => {
+                length.entomb(write);
+            },
+            HashType::Encryption => {},
+            HashType::Custom(_) => unimplemented!(),
+            HashType::Sponge => {},
+        };
+        Ok(()) 
+    }
+
+    #[inline]
+    unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+        match *self {
+            HashType::MerkleTree => {},
+            HashType::MerkleTreeSparse(mut bitmask) => {
+                let temp = bytes;
+                bytes = bitmask.exhume(temp)?;
+            },
+            HashType::VariableLength => {},
+            HashType::ConstantLength(mut length) => {
+                let temp = bytes;
+                bytes = length.exhume(temp)?;
+            },
+            HashType::Encryption => {},
+            HashType::Custom(_) => unimplemented!(),
+            HashType::Sponge => {},
+        }
+        Some(bytes) 
+    }
+
+    #[inline]
+    fn extent(&self) -> usize { 
+        let mut size = 0;
+        match *self { 
+            HashType::MerkleTree => {},
+            HashType::MerkleTreeSparse(bitmask) => {
+                size += bitmask.extent();
+            },
+            HashType::VariableLength => {},
+            HashType::ConstantLength(length) => {
+                size += length.extent();
+            },
+            HashType::Encryption => {},
+            HashType::Custom(_) => unimplemented!(),
+            HashType::Sponge => {},
+        }
+        size
+     }
 }
 
 impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
