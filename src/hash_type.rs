@@ -38,7 +38,7 @@ impl<F: PrimeField, A: Arity<F>> Abomonation for HashType<F, A> {
             },
             HashType::VariableLength => {},
             HashType::ConstantLength(length) => {
-                length.entomb(write);
+                length.entomb(write)?;
             },
             HashType::Encryption => {},
             HashType::Custom(_) => unimplemented!(),

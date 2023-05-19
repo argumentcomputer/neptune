@@ -59,7 +59,7 @@ pub unsafe fn entomb_F<F: PrimeField, W: Write>(_f: &F, _bytes: &mut W) -> std::
 /// this is **incredibly, INCREDIBLY** dangerous
 #[inline]
 pub unsafe fn exhume_F<'a, 'b, F: PrimeField>(
-    f: &mut F,
+    _f: &mut F,
     bytes: &'a mut [u8],
 ) -> Option<&'a mut [u8]> {
     Some(bytes)
@@ -124,16 +124,47 @@ macro_rules! vec_abomonate {
     };
 }
 
-
-vec_abomonate!(
-    entomb_vec_F,
-    exhume_vec_F,
-    extent_vec_F,
-    entomb_F,
-    exhume_F,
-    extent_F,
-    F
-);
+#[inline]
+pub unsafe fn entomb_vec_F<F: PrimeField, W: Write>(
+    this: &Vec<F>,
+    write: &mut W,
+) -> std::io::Result<()> {
+    write.write_all(typed_to_bytes(&this[..]))?;
+    for element in this.iter() {
+        entomb_F(element, write)?;
+    }
+    Ok(())
+}
+#[inline]
+pub unsafe fn exhume_vec_F<'a, 'b, F: PrimeField>(
+    this: &'a mut Vec<F>,
+    bytes: &'b mut [u8],
+) -> Option<&'b mut [u8]> {
+    let binary_len = this.len() * size_of::<F>();
+    if binary_len > bytes.len() {
+        None
+    } else {
+        let (mine, mut rest) = bytes.split_at_mut(binary_len);
+        let slice = std::slice::from_raw_parts_mut(mine.as_mut_ptr() as *mut F, this.len());
+        std::ptr::write(
+            this,
+            Vec::from_raw_parts(slice.as_mut_ptr(), this.len(), this.len()),
+        );
+        for element in this.iter_mut() {
+            let temp = rest;
+            rest = exhume_F(element, temp)?;
+        }
+        Some(rest)
+    }
+}
+#[inline]
+pub fn extent_vec_F<F: PrimeField>(this: &Vec<F>) -> usize {
+    let mut sum = size_of::<F>() * this.len();
+    for element in this.iter() {
+        sum += extent_F(element);
+    }
+    sum
+}
 
 encode_decode!(
     entomb_vec_F,
@@ -143,15 +174,47 @@ encode_decode!(
     Vec<F>
 );
 
-vec_abomonate!(
-    entomb_vec_vec_F,
-    exhume_vec_vec_F,
-    extent_vec_vec_F,
-    entomb_vec_F,
-    exhume_vec_F,
-    extent_vec_F,
-    Vec<F>
-);
+#[inline]
+pub unsafe fn entomb_vec_vec_F<F: PrimeField, W: Write>(
+    this: &Vec<Vec<F>>,
+    write: &mut W,
+) -> std::io::Result<()> {
+    write.write_all(typed_to_bytes(&this[..]))?;
+    for element in this.iter() {
+        entomb_vec_F(element, write)?;
+    }
+    Ok(())
+}
+#[inline]
+pub unsafe fn exhume_vec_vec_F<'a, 'b, F: PrimeField>(
+    this: &'a mut Vec<Vec<F>>,
+    bytes: &'b mut [u8],
+) -> Option<&'b mut [u8]> {
+    let binary_len = this.len() * size_of::<Vec<F>>();
+    if binary_len > bytes.len() {
+        None
+    } else {
+        let (mine, mut rest) = bytes.split_at_mut(binary_len);
+        let slice = std::slice::from_raw_parts_mut(mine.as_mut_ptr() as *mut Vec<F>, this.len());
+        std::ptr::write(
+            this,
+            Vec::from_raw_parts(slice.as_mut_ptr(), this.len(), this.len()),
+        );
+        for element in this.iter_mut() {
+            let temp = rest;
+            rest = exhume_vec_F(element, temp)?;
+        }
+        Some(rest)
+    }
+}
+#[inline]
+pub fn extent_vec_vec_F<F: PrimeField>(this: &Vec<Vec<F>>) -> usize {
+    let mut sum = size_of::<Vec<F>>() * this.len();
+    for element in this.iter() {
+        sum += extent_vec_F(element);
+    }
+    sum
+}
 
 encode_decode!(
     entomb_vec_vec_F,
@@ -203,8 +266,10 @@ pub unsafe fn exhume_sparse_matrix_F<'a, 'b, F: PrimeField>(
     this: &'a mut SparseMatrix<F>,
     mut bytes: &'b mut [u8],
 ) -> Option<&'b mut [u8]> {
-    let temp = bytes; bytes = exhume_vec_F(&mut this.w_hat, temp)?;
-    let temp = bytes; bytes = exhume_vec_F(&mut this.v_rest, temp)?;
+    let temp = bytes;
+    bytes = exhume_vec_F(&mut this.w_hat, temp)?;
+    let temp = bytes;
+    bytes = exhume_vec_F(&mut this.v_rest, temp)?;
     Some(bytes)
 }
 
