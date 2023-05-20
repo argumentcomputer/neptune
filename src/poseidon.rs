@@ -78,13 +78,18 @@ where
 /// and [`Arity`] as [`Poseidon`] instance that consumes it.
 ///
 /// See original [Poseidon paper](https://eprint.iacr.org/2019/458.pdf) for more details.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "F: PrimeField + Serialize, A: Arity<F>",
+    deserialize = "F: PrimeField + Deserialize<'de>, A: Arity<F>"
+))]
 pub struct PoseidonConstants<F, A>
 where
     F: PrimeField,
     A: Arity<F>,
 {
     pub mds_matrices: MdsMatrices<F>,
+    #[serde(skip)]
     pub round_constants: Option<Vec<F>>,
     pub compressed_round_constants: Vec<F>,
     pub pre_sparse_matrix: Matrix<F>,
@@ -97,6 +102,7 @@ where
     pub half_full_rounds: usize,
     pub partial_rounds: usize,
     pub hash_type: HashType<F, A>,
+    #[serde(skip)]
     pub(crate) _a: PhantomData<A>,
 }
 
