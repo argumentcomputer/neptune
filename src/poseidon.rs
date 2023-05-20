@@ -102,7 +102,6 @@ where
     pub half_full_rounds: usize,
     pub partial_rounds: usize,
     pub hash_type: HashType<F, A>,
-    #[serde(skip)]
     pub(crate) _a: PhantomData<A>,
 }
 
