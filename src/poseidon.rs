@@ -1309,7 +1309,8 @@ mod tests {
         let mut h3 = Poseidon::<Fr, U2>::new_with_preimage(&preimage, &constants3);
 
         assert_eq!(h1.hash(), h2.hash());
-        assert_eq!(h1.hash(), h3.hash())
+        h1.set_preimage(&preimage); // reset
+        assert_eq!(h1.hash(), h3.hash());
     }
 
     #[test]
@@ -1324,6 +1325,7 @@ mod tests {
         let mut h3 = Poseidon::<S1, U2>::new_with_preimage(&preimage, &constants3);
 
         assert_eq!(h1.hash(), h2.hash());
-        assert_eq!(h1.hash(), h3.hash())
+        h1.set_preimage(&preimage); // reset
+        assert_eq!(h1.hash(), h3.hash());
     }
 }
