@@ -257,7 +257,7 @@ impl<'de, F: PrimeField, A: Arity<F>> Deserialize<'de> for HashType<F, A> {
             }
         }
         #[doc(hidden)]
-        const VARIANTS: &'static [&'static str] = &[
+        const VARIANTS: &[&str] = &[
             "MerkleTree",
             "MerkleTreeSparse",
             "VariableLength",
