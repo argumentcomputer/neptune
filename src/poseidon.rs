@@ -89,7 +89,8 @@ where
     A: Arity<F>,
 {
     pub mds_matrices: MdsMatrices<F>,
-    #[serde(skip)]
+    // #[serde(skip)]
+    // TODO: we avoid this tag for now, because Nova does not maintain the invariant that `round_constants` should be `None`
     pub round_constants: Option<Vec<F>>,
     pub compressed_round_constants: Vec<F>,
     pub pre_sparse_matrix: Matrix<F>,
@@ -1283,8 +1284,7 @@ mod tests {
 
     #[test]
     fn serde_roundtrip() {
-        let mut constants = PoseidonConstants::<S1, U1>::new();
-        constants.round_constants = None;
+        let constants = PoseidonConstants::<S1, U24>::new();
 
         assert_eq!(
             constants,
