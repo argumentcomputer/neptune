@@ -25,12 +25,10 @@ pub enum HashType<F: PrimeField, A: Arity<F>> {
     VariableLength,
     ConstantLength(usize),
     Encryption,
-    // #[serde(skip)] // See: https://github.com/bincode-org/bincode/issues/424
     Custom(CType<F, A>),
     Sponge,
 }
 
-#[doc(hidden)]
 impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
     /// Implements domain separation defined in original [Poseidon paper](https://eprint.iacr.org/2019/458.pdf).
     /// Calculates field element used as a zero element in underlying [`crate::poseidon::Poseidon`] buffer that holds preimage.
