@@ -89,8 +89,8 @@ where
     A: Arity<F>,
 {
     pub mds_matrices: MdsMatrices<F>,
-    // #[serde(skip)]
-    // TODO: we avoid this tag for now, because Nova does not maintain the invariant that `round_constants` should be `None`
+    // #[serde(skip)] See: https://github.com/bincode-org/bincode/issues/424
+    // TODO: should have some way to enforce this to be None.
     pub round_constants: Option<Vec<F>>,
     pub compressed_round_constants: Vec<F>,
     pub pre_sparse_matrix: Matrix<F>,

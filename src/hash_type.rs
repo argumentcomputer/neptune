@@ -12,20 +12,21 @@
 /// may still express the full range of hash function types.
 use crate::{Arity, Strength};
 use ff::PrimeField;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer, __private as private, de, ser, Deserializer};
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum HashType<F: PrimeField, A: Arity<F>> {
     MerkleTree,
     MerkleTreeSparse(u64),
     VariableLength,
     ConstantLength(usize),
     Encryption,
-    #[serde(skip)]
+    // #[serde(skip)] // See: https://github.com/bincode-org/bincode/issues/424
     Custom(CType<F, A>),
     Sponge,
 }
 
+#[doc(hidden)]
 impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
     /// Implements domain separation defined in original [Poseidon paper](https://eprint.iacr.org/2019/458.pdf).
     /// Calculates field element used as a zero element in underlying [`crate::poseidon::Poseidon`] buffer that holds preimage.
@@ -65,6 +66,214 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
             HashType::Custom(_) => true,
             HashType::Sponge => true,
         }
+    }
+}
+
+impl<F: PrimeField, A: Arity<F>> Serialize for HashType<F, A> {
+    fn serialize<S>(&self, serializer: S) -> private::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match *self {
+            HashType::MerkleTree => {
+                Serializer::serialize_unit_variant(serializer, "HashType", 0u32, "MerkleTree")
+            }
+            HashType::MerkleTreeSparse(ref field0) => Serializer::serialize_newtype_variant(
+                serializer,
+                "HashType",
+                1u32,
+                "MerkleTreeSparse",
+                field0,
+            ),
+            HashType::VariableLength => {
+                Serializer::serialize_unit_variant(serializer, "HashType", 2u32, "VariableLength")
+            }
+            HashType::ConstantLength(ref field0) => Serializer::serialize_newtype_variant(
+                serializer,
+                "HashType",
+                3u32,
+                "ConstantLength",
+                field0,
+            ),
+            HashType::Encryption => {
+                Serializer::serialize_unit_variant(serializer, "HashType", 4u32, "Encryption")
+            }
+            HashType::Custom(..) => private::Err(ser::Error::custom(
+                "the enum variant HashType::Custom cannot be serialized",
+            )),
+            HashType::Sponge => {
+                Serializer::serialize_unit_variant(serializer, "HashType", 5u32, "Sponge")
+            }
+        }
+    }
+}
+
+#[doc(hidden)]
+impl<'de, F: PrimeField, A: Arity<F>> Deserialize<'de> for HashType<F, A> {
+    fn deserialize<D>(deserializer: D) -> private::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[allow(non_camel_case_types)]
+        #[doc(hidden)]
+        enum Field {
+            field0,
+            field1,
+            field2,
+            field3,
+            field4,
+            field6,
+        }
+        #[doc(hidden)]
+        struct FieldVisitor;
+        impl<'de> de::Visitor<'de> for FieldVisitor {
+            type Value = Field;
+            fn expecting(&self, formatter: &mut private::Formatter) -> private::fmt::Result {
+                private::Formatter::write_str(formatter, "variant identifier")
+            }
+            fn visit_u64<E>(self, value: u64) -> private::Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                match value {
+                    0u64 => private::Ok(Field::field0),
+                    1u64 => private::Ok(Field::field1),
+                    2u64 => private::Ok(Field::field2),
+                    3u64 => private::Ok(Field::field3),
+                    4u64 => private::Ok(Field::field4),
+                    5u64 => private::Ok(Field::field6),
+                    _ => private::Err(de::Error::invalid_value(
+                        de::Unexpected::Unsigned(value),
+                        &"variant index 0 <= i < 6",
+                    )),
+                }
+            }
+            fn visit_str<E>(self, value: &str) -> private::Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                match value {
+                    "MerkleTree" => private::Ok(Field::field0),
+                    "MerkleTreeSparse" => private::Ok(Field::field1),
+                    "VariableLength" => private::Ok(Field::field2),
+                    "ConstantLength" => private::Ok(Field::field3),
+                    "Encryption" => private::Ok(Field::field4),
+                    "Sponge" => private::Ok(Field::field6),
+                    _ => private::Err(de::Error::unknown_variant(value, VARIANTS)),
+                }
+            }
+            fn visit_bytes<E>(self, value: &[u8]) -> private::Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                match value {
+                    b"MerkleTree" => private::Ok(Field::field0),
+                    b"MerkleTreeSparse" => private::Ok(Field::field1),
+                    b"VariableLength" => private::Ok(Field::field2),
+                    b"ConstantLength" => private::Ok(Field::field3),
+                    b"Encryption" => private::Ok(Field::field4),
+                    b"Sponge" => private::Ok(Field::field6),
+                    _ => {
+                        let value = &private::from_utf8_lossy(value);
+                        private::Err(de::Error::unknown_variant(value, VARIANTS))
+                    }
+                }
+            }
+        }
+        impl<'de> Deserialize<'de> for Field {
+            #[inline]
+            fn deserialize<D>(deserializer: D) -> private::Result<Self, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                Deserializer::deserialize_identifier(deserializer, FieldVisitor)
+            }
+        }
+        #[doc(hidden)]
+        struct Visitor<'de, F: PrimeField, A: Arity<F>> {
+            marker: private::PhantomData<HashType<F, A>>,
+            lifetime: private::PhantomData<&'de ()>,
+        }
+        impl<'de, F: PrimeField, A: Arity<F>> de::Visitor<'de> for Visitor<'de, F, A> {
+            type Value = HashType<F, A>;
+            fn expecting(&self, formatter: &mut private::Formatter) -> private::fmt::Result {
+                private::Formatter::write_str(formatter, "enum HashType")
+            }
+            fn visit_enum<__A>(self, data: __A) -> private::Result<Self::Value, __A::Error>
+            where
+                __A: de::EnumAccess<'de>,
+            {
+                match match de::EnumAccess::variant(data) {
+                    private::Ok(val) => val,
+                    private::Err(err) => {
+                        return private::Err(err);
+                    }
+                } {
+                    (Field::field0, variant) => {
+                        match de::VariantAccess::unit_variant(variant) {
+                            private::Ok(val) => val,
+                            private::Err(err) => {
+                                return private::Err(err);
+                            }
+                        };
+                        private::Ok(HashType::MerkleTree)
+                    }
+                    (Field::field1, variant) => private::Result::map(
+                        de::VariantAccess::newtype_variant::<u64>(variant),
+                        HashType::MerkleTreeSparse,
+                    ),
+                    (Field::field2, variant) => {
+                        match de::VariantAccess::unit_variant(variant) {
+                            private::Ok(val) => val,
+                            private::Err(err) => {
+                                return private::Err(err);
+                            }
+                        };
+                        private::Ok(HashType::VariableLength)
+                    }
+                    (Field::field3, variant) => private::Result::map(
+                        de::VariantAccess::newtype_variant::<usize>(variant),
+                        HashType::ConstantLength,
+                    ),
+                    (Field::field4, variant) => {
+                        match de::VariantAccess::unit_variant(variant) {
+                            private::Ok(val) => val,
+                            private::Err(err) => {
+                                return private::Err(err);
+                            }
+                        };
+                        private::Ok(HashType::Encryption)
+                    }
+                    (Field::field6, variant) => {
+                        match de::VariantAccess::unit_variant(variant) {
+                            private::Ok(val) => val,
+                            private::Err(err) => {
+                                return private::Err(err);
+                            }
+                        };
+                        private::Ok(HashType::Sponge)
+                    }
+                }
+            }
+        }
+        #[doc(hidden)]
+        const VARIANTS: &'static [&'static str] = &[
+            "MerkleTree",
+            "MerkleTreeSparse",
+            "VariableLength",
+            "ConstantLength",
+            "Encryption",
+            "Sponge",
+        ];
+        Deserializer::deserialize_enum(
+            deserializer,
+            "HashType",
+            VARIANTS,
+            Visitor {
+                marker: private::PhantomData::<HashType<F, A>>,
+                lifetime: private::PhantomData,
+            },
+        )
     }
 }
 
