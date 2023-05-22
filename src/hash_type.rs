@@ -12,7 +12,7 @@
 /// may still express the full range of hash function types.
 use crate::{Arity, Strength};
 use ff::PrimeField;
-use serde::{Deserialize, Serialize, Serializer, __private as private, de, ser, Deserializer};
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(bound(
