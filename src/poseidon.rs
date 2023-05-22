@@ -1290,29 +1290,40 @@ mod tests {
             constants,
             bincode::deserialize(&bincode::serialize(&constants).unwrap()).unwrap()
         );
+        assert_eq!(
+            constants,
+            serde_json::from_slice(&serde_json::to_vec(&constants).unwrap()).unwrap()
+        );
     }
 
     #[test]
     fn serde_hash_blstrs() {
         let constants = PoseidonConstants::<Fr, U2>::new();
         let constants2 = bincode::deserialize(&bincode::serialize(&constants).unwrap()).unwrap();
+        let constants3 = serde_json::from_slice(&serde_json::to_vec(&constants).unwrap()).unwrap();
+
         let test_arity = 2;
         let preimage = vec![<Fr as Field>::ONE; test_arity];
         let mut h1 = Poseidon::<Fr, U2>::new_with_preimage(&preimage, &constants);
         let mut h2 = Poseidon::<Fr, U2>::new_with_preimage(&preimage, &constants2);
+        let mut h3 = Poseidon::<Fr, U2>::new_with_preimage(&preimage, &constants3);
 
-        assert_eq!(h1.hash(), h2.hash())
+        assert_eq!(h1.hash(), h2.hash());
+        assert_eq!(h1.hash(), h3.hash())
     }
 
     #[test]
     fn serde_hash_pallas() {
         let constants = PoseidonConstants::<S1, U2>::new();
         let constants2 = bincode::deserialize(&bincode::serialize(&constants).unwrap()).unwrap();
+        let constants3 = serde_json::from_slice(&serde_json::to_vec(&constants).unwrap()).unwrap();
         let test_arity = 2;
         let preimage = vec![<S1 as Field>::ONE; test_arity];
         let mut h1 = Poseidon::<S1, U2>::new_with_preimage(&preimage, &constants);
         let mut h2 = Poseidon::<S1, U2>::new_with_preimage(&preimage, &constants2);
+        let mut h3 = Poseidon::<S1, U2>::new_with_preimage(&preimage, &constants3);
 
-        assert_eq!(h1.hash(), h2.hash())
+        assert_eq!(h1.hash(), h2.hash());
+        assert_eq!(h1.hash(), h3.hash())
     }
 }
