@@ -15,13 +15,16 @@ use ff::PrimeField;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "F: PrimeField + Serialize, A: Arity<F>",
+    deserialize = "F: PrimeField + Deserialize<'de>, A: Arity<F>"
+))]
 pub enum HashType<F: PrimeField, A: Arity<F>> {
     MerkleTree,
     MerkleTreeSparse(u64),
     VariableLength,
     ConstantLength(usize),
     Encryption,
-    #[serde(skip)]
     Custom(CType<F, A>),
     Sponge,
 }
@@ -71,6 +74,11 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum CType<F: PrimeField, A: Arity<F>> {
     Arbitrary(u64),
+    // See: https://github.com/bincode-org/bincode/issues/424
+    // This is a bit of a hack, but since `serde(skip)` tags the last variant arm,
+    // the generated code ends up being correct. But, in the future, do not
+    // carelessly add new variants to this enum.
+    #[serde(skip)]
     _Phantom((F, A)),
 }
 

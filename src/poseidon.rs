@@ -920,6 +920,7 @@ mod tests {
     use blstrs::Scalar as Fr;
     use ff::Field;
     use generic_array::typenum;
+    use pasta_curves::pallas::Scalar as S1;
 
     #[test]
     fn reset() {
