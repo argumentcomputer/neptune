@@ -109,10 +109,7 @@ impl<Scalar: PrimeField> Elt<Scalar> {
 
     /// Add two Nums and return a Num tracking the calculation. It is forbidden to invoke on an Allocated because the intended computation
     /// does not include that path.
-    fn add<CS: ConstraintSystem<Scalar>>(
-        self,
-        other: Elt<Scalar>,
-    ) -> Result<Elt<Scalar>, SynthesisError> {
+    fn add(self, other: Elt<Scalar>) -> Result<Elt<Scalar>, SynthesisError> {
         match (self, other) {
             (Elt::Num(a), Elt::Num(b)) => Ok(Elt::Num(a.add(&b))),
             _ => panic!("only two numbers may be added"),
@@ -353,7 +350,7 @@ where
 
         for j in 1..self.width {
             result.push(
-                self.elements[j].clone().add::<CS>(
+                self.elements[j].clone().add(
                     self.elements[0]
                         .clone() // First row is dense.
                         .scale::<CS>(matrix.v_rest[j - 1])?, // Except for first row/column, diagonals are one.
@@ -595,7 +592,7 @@ fn scalar_product_with_add<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     to_add: Scalar,
 ) -> Result<Elt<Scalar>, SynthesisError> {
     let tmp = scalar_product::<Scalar, CS>(elts, scalars)?;
-    let tmp2 = tmp.add::<CS>(Elt::<Scalar>::num_from_fr::<CS>(to_add))?;
+    let tmp2 = tmp.add(Elt::<Scalar>::num_from_fr::<CS>(to_add))?;
 
     Ok(tmp2)
 }
@@ -607,7 +604,7 @@ fn scalar_product<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     elts.iter()
         .zip(scalars)
         .try_fold(Elt::Num(num::Num::zero()), |acc, (elt, &scalar)| {
-            acc.add::<CS>(elt.clone().scale::<CS>(scalar)?)
+            acc.add(elt.clone().scale::<CS>(scalar)?)
         })
 }
 
