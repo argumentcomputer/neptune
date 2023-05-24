@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 10.0.0
+
 - fix: PoseidonConstants serde Implementation (https://github.com/lurk-lab/neptune/pull/184)
 - chore: make version part of the release commit (https://github.com/lurk-lab/neptune/pull/185)
 
