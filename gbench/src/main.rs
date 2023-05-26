@@ -31,7 +31,7 @@ fn bench_column_building<F: PrimeField + GpuName>(
     info!("{}: ColumnTreeBuilder created", log_prefix);
 
     // Simplify computing the expected root.
-    let constant_element = F::zero();
+    let constant_element = F::ZERO;
     let constant_column = GenericArray::<F, U11>::generate(|_| constant_element);
 
     let max_batch_size = if let Some(batcher) = &builder.column_batcher {

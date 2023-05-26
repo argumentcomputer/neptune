@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 10.0.0
+
+- fix: PoseidonConstants serde Implementation (https://github.com/lurk-lab/neptune/pull/184)
+- chore: make version part of the release commit (https://github.com/lurk-lab/neptune/pull/185)
+
+## 9.0.0
+
+- refactor: Bump ff & group to 0.13, adjust dependent crates (https://github.com/lurk-lab/neptune/pull/179)
+- ci: Add licenses audits with 'cargo-deny' (https://github.com/lurk-lab/neptune/pull/181)
+- doc: covering PoseidonConstants and Poseidon abstractions with proper docs (https://github.com/lurk-lab/neptune/pull/178)
+
 ## 8.1.1
 
 - chore: update ec-gpu, update const fns (https://github.com/lurk-lab/neptune/pull/175)

@@ -460,7 +460,7 @@ impl<F: PrimeField, A: Arity<F>> InnerSpongeAPI<F, A> for Sponge<'_, F, A> {
     // Supplemental methods needed for a generic implementation.
 
     fn zero() -> F {
-        F::zero()
+        F::ZERO
     }
 
     fn rate(&self) -> usize {
@@ -535,7 +535,7 @@ mod tests {
 
         // Simple sanity check that are all non-zero and distinct.
         for (i, elt) in result.iter().enumerate() {
-            assert!(*elt != F::zero());
+            assert!(*elt != F::ZERO);
             // This is expensive (n^2), but it's hard to put field element into a set since we can't hash or compare (except equality).
             for (j, elt2) in result.iter().enumerate() {
                 if i != j {

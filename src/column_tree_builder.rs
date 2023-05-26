@@ -81,7 +81,7 @@ where
 
     fn reset(&mut self) {
         self.fill_index = 0;
-        self.data.iter_mut().for_each(|place| *place = F::zero());
+        self.data.iter_mut().for_each(|place| *place = F::ZERO);
     }
 }
 fn as_generic_arrays<A: Arity<F>, F: PrimeField>(vec: &[F]) -> &[GenericArray<F, A>] {
@@ -117,7 +117,7 @@ where
 
         let builder = Self {
             leaf_count,
-            data: vec![F::zero(); leaf_count],
+            data: vec![F::ZERO; leaf_count],
             fill_index: 0,
             column_constants: PoseidonConstants::<F, ColumnArity>::new(),
             column_batcher,
@@ -144,7 +144,11 @@ where
     }
 }
 
-#[cfg(all(any(feature = "cuda", feature = "opencl"), not(target_os = "macos")))]
+#[cfg(all(
+    feature = "bls",
+    any(feature = "cuda", feature = "opencl"),
+    not(target_os = "macos")
+))]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -186,7 +190,7 @@ mod tests {
             ColumnTreeBuilder::<Fr, U11, U8>::new(column_batcher, tree_batcher, leaves).unwrap();
 
         // Simplify computing the expected root.
-        let constant_element = Fr::zero();
+        let constant_element = Fr::ZERO;
         let constant_column = GenericArray::<Fr, U11>::generate(|_| constant_element);
 
         let max_batch_size = if let Some(batcher) = &builder.column_batcher {

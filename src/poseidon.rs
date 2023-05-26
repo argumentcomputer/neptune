@@ -50,7 +50,12 @@ impl_arity!(
     U22, U23, U24, U25, U26, U27, U28, U29, U30, U31, U32, U33, U34, U35, U36
 );
 
-/// The `Poseidon` structure will accept a number of inputs equal to the arity.
+/// Holds preimage, some utility offsets and counters along with the reference
+/// to [`PoseidonConstants`] required for hashing. [`Poseidon`] is parameterized
+/// by [`ff::PrimeField`] and [`Arity`], which should be similar to [`PoseidonConstants`].
+///
+/// [`Poseidon`] accepts input `elements` set with length equal or less than [`Arity`].
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct Poseidon<'a, F, A = U2>
 where
@@ -67,6 +72,14 @@ where
     _f: PhantomData<F>,
 }
 
+/// Holds constant values required for further [`Poseidon`] hashing. It contains MDS matrices,
+/// round constants and numbers, parameters that specify security level ([`Strength`]) and
+/// domain separation ([`HashType`]). Additional constants related to optimizations are also included.
+///
+/// For correct operation, [`PoseidonConstants`] instance should be parameterized with the same [`ff::PrimeField`]
+/// and [`Arity`] as [`Poseidon`] instance that consumes it.
+///
+/// See original [Poseidon paper](https://eprint.iacr.org/2019/458.pdf) for more details.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PoseidonConstants<F, A>
 where
@@ -157,15 +170,76 @@ where
     F: PrimeField,
     A: Arity<F>,
 {
+    /// Generates new instance of [`PoseidonConstants`] suitable for both optimized / non-optimized hashing
+    /// with following default parameters:
+    /// - 128 bit of security;
+    /// - Merkle Tree (where all leafs are presented) domain separation ([`HashType`]).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use neptune::poseidon::PoseidonConstants;
+    /// use neptune::Strength;
+    /// use neptune::hash_type::HashType;
+    /// use pasta_curves::Fp;
+    /// use generic_array::typenum::U2;
+    ///
+    /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new();
+    ///
+    /// assert_eq!(constants.strength, Strength::Standard);
+    /// assert_eq!(constants.hash_type, HashType::MerkleTree);
+    /// ```
     pub fn new() -> Self {
         Self::new_with_strength(DEFAULT_STRENGTH)
     }
 
-    /// `new_constant_length` creates constants for hashing a constant-sized preimage.
+    /// Generates new instance of [`PoseidonConstants`] suitable for both optimized / non-optimized hashing
+    /// of constant-size preimages with following parameters:
+    /// - 128 bit of security;
+    /// - Constant-Input-Length Hashing domain separation ([`HashType`]).
+    ///
+    /// Instantiated [`PoseidonConstants`] still calculates internal constants based on [`Arity`], but calculation of
+    /// [`HashType::domain_tag`] is based on input `length`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use neptune::poseidon::PoseidonConstants;
+    /// use neptune::Strength;
+    /// use neptune::hash_type::HashType;
+    /// use pasta_curves::Fp;
+    /// use generic_array::typenum::U2;
+    ///
+    /// let preimage_length = 2usize;
+    /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new_constant_length(preimage_length);
+    ///
+    /// assert_eq!(constants.strength, Strength::Standard);
+    /// assert_eq!(constants.hash_type, HashType::<Fp, U2>::ConstantLength(preimage_length));
+    /// ```
     pub fn new_constant_length(length: usize) -> Self {
         Self::new_with_strength_and_type(DEFAULT_STRENGTH, HashType::ConstantLength(length))
     }
 
+    /// Creates new instance of [`PoseidonConstants`] from already defined one with recomputed domain tag.
+    ///
+    /// It is assumed that input `length` is equal or less than [`Arity`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use neptune::poseidon::PoseidonConstants;
+    /// use neptune::Strength;
+    /// use neptune::hash_type::HashType;
+    /// use pasta_curves::Fp;
+    /// use generic_array::typenum::U8;
+    ///
+    /// let preimage_length = 2usize;
+    /// let constants: PoseidonConstants<Fp, U8> = PoseidonConstants::new_constant_length(preimage_length);
+    /// let constants: PoseidonConstants<Fp, U8> = constants.with_length(preimage_length - 2);
+    ///
+    /// assert_eq!(constants.strength, Strength::Standard);
+    /// assert_eq!(constants.hash_type, HashType::<Fp, U8>::ConstantLength(preimage_length - 2));
+    /// ```
     pub fn with_length(&self, length: usize) -> Self {
         let arity = A::to_usize();
         assert!(length <= arity);
@@ -184,10 +258,47 @@ where
         }
     }
 
+    /// Generates new instance of [`PoseidonConstants`] suitable for both optimized / non-optimized hashing
+    /// with Merkle Tree (where all leafs are presented) domain separation ([`HashType`]) custom security level ([`Strength`]).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use neptune::poseidon::PoseidonConstants;
+    /// use neptune::Strength;
+    /// use neptune::hash_type::HashType;
+    /// use pasta_curves::Fp;
+    /// use generic_array::typenum::U2;
+    ///
+    /// let security_level = Strength::Strengthened;
+    /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new_with_strength(security_level);
+    ///
+    /// assert_eq!(constants.strength, Strength::Strengthened);
+    /// assert_eq!(constants.hash_type, HashType::MerkleTree);
+    /// ```
     pub fn new_with_strength(strength: Strength) -> Self {
         Self::new_with_strength_and_type(strength, HashType::MerkleTree)
     }
 
+    /// Generates new instance of [`PoseidonConstants`] suitable for both optimized / non-optimized hashing
+    /// with custom domain separation ([`HashType`]) and custom security level ([`Strength`]).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use neptune::poseidon::PoseidonConstants;
+    /// use neptune::Strength;
+    /// use neptune::hash_type::HashType;
+    /// use pasta_curves::Fp;
+    /// use generic_array::typenum::U2;
+    ///
+    /// let domain_separation = HashType::Encryption;
+    /// let security_level = Strength::Strengthened;
+    /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new_with_strength_and_type(security_level, domain_separation);
+    ///
+    /// assert_eq!(constants.strength, Strength::Strengthened);
+    /// assert_eq!(constants.hash_type, HashType::Encryption);
+    /// ```
     pub fn new_with_strength_and_type(strength: Strength, hash_type: HashType<F, A>) -> Self {
         assert!(hash_type.is_supported());
         let arity = A::to_usize();
@@ -237,13 +348,37 @@ where
         }
     }
 
-    /// Returns the width.
+    /// Returns the [`Arity`] value represented as `usize`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use neptune::poseidon::PoseidonConstants;
+    /// use pasta_curves::Fp;
+    /// use generic_array::typenum::U8;
+    ///
+    /// let constants: PoseidonConstants<Fp, U8> = PoseidonConstants::new();
+    ///
+    /// assert_eq!(constants.arity(), 8usize);
+    /// ```
     #[inline]
     pub fn arity(&self) -> usize {
         A::to_usize()
     }
 
-    /// Returns the width.
+    /// Returns `width` value represented as `usize`. It equals to [`Arity`] + 1.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use neptune::poseidon::PoseidonConstants;
+    /// use pasta_curves::Fp;
+    /// use generic_array::typenum::U8;
+    ///
+    /// let constants: PoseidonConstants<Fp, U8> = PoseidonConstants::new();
+    ///
+    /// assert_eq!(constants.width(), 8 + 1);
+    /// ```
     #[inline]
     pub fn width(&self) -> usize {
         A::ConstantsSize::to_usize()
@@ -265,12 +400,34 @@ where
     F: PrimeField,
     A: Arity<F>,
 {
+    /// Creates [`Poseidon`] instance using provided [`PoseidonConstants`] as input. Underlying set of
+    /// elements are initialized and `domain_tag` from [`PoseidonConstants`] is used as zero element in the set.
+    /// Therefore, hashing is eventually performed over [`Arity`] + 1 elements in fact, while [`Arity`] elements
+    /// are occupied by preimage data.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use neptune::poseidon::PoseidonConstants;
+    /// use neptune::poseidon::Poseidon;
+    /// use pasta_curves::Fp;
+    /// use ff::Field;
+    /// use generic_array::typenum::U8;
+    ///
+    /// let constants: PoseidonConstants<Fp, U8> = PoseidonConstants::new();
+    /// let poseidon = Poseidon::<Fp, U8>::new(&constants);
+    ///
+    /// assert_eq!(poseidon.elements.len(), 9);
+    /// for index in 1..9 {
+    ///     assert_eq!(poseidon.elements[index], Fp::ZERO);
+    /// }
+    /// ```
     pub fn new(constants: &'a PoseidonConstants<F, A>) -> Self {
         let elements = GenericArray::generate(|i| {
             if i == 0 {
                 constants.domain_tag
             } else {
-                F::zero()
+                F::ZERO
             }
         });
         Poseidon {
@@ -283,6 +440,31 @@ where
         }
     }
 
+    /// Creates [`Poseidon`] instance using provided preimage and [`PoseidonConstants`] as input.
+    /// Doesn't support [`PoseidonConstants`] with [`HashType::VariableLength`]. It is assumed that
+    /// size of input preimage set can't be greater than [`Arity`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use neptune::poseidon::PoseidonConstants;
+    /// use neptune::poseidon::Poseidon;
+    /// use pasta_curves::Fp;
+    /// use ff::Field;
+    /// use generic_array::typenum::U2;
+    ///
+    /// let preimage_set_length = 1;
+    /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new_constant_length(preimage_set_length);
+    ///
+    /// let preimage = vec![Fp::from(u64::MAX); preimage_set_length];
+    ///
+    /// let mut poseidon = Poseidon::<Fp, U2>::new_with_preimage(&preimage, &constants);
+    ///
+    /// assert_eq!(constants.width(), 3);
+    /// assert_eq!(poseidon.elements.len(), constants.width());
+    /// assert_eq!(poseidon.elements[1], Fp::from(u64::MAX));
+    /// assert_eq!(poseidon.elements[2], Fp::ZERO);
+    /// ```
     pub fn new_with_preimage(preimage: &[F], constants: &'a PoseidonConstants<F, A>) -> Self {
         let elements = match constants.hash_type {
             HashType::ConstantLength(constant_len) => {
@@ -292,11 +474,14 @@ where
                     if i == 0 {
                         constants.domain_tag
                     } else if i > preimage.len() {
-                        F::zero()
+                        F::ZERO
                     } else {
                         preimage[i - 1]
                     }
                 })
+            }
+            HashType::MerkleTreeSparse(_) => {
+                panic!("Merkle Tree (with some empty leaves) hashes are not yet supported.")
             }
             HashType::VariableLength => panic!("variable-length hashes are not yet supported."),
             _ => {
@@ -323,11 +508,36 @@ where
         }
     }
 
-    /// Replace the elements with the provided optional items.
+    /// Replaces the elements with the provided optional items.
     ///
     /// # Panics
     ///
-    /// Panics if the provided slice is bigger than the arity.
+    /// Panics if the provided slice is not equal to the arity.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use neptune::poseidon::PoseidonConstants;
+    /// use neptune::poseidon::Poseidon;
+    /// use pasta_curves::Fp;
+    /// use ff::Field;
+    /// use generic_array::typenum::U2;
+    ///
+    /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new_constant_length(1);
+    /// let preimage = vec![Fp::from(u64::MAX)];
+    ///
+    /// let mut poseidon = Poseidon::<Fp, U2>::new_with_preimage(&preimage, &constants);
+    ///
+    /// assert_eq!(poseidon.elements.len(), constants.width());
+    /// assert_eq!(poseidon.elements[1], Fp::from(u64::MAX));
+    /// assert_eq!(poseidon.elements[2], Fp::ZERO);
+    ///
+    /// let preimage = vec![Fp::from(u64::MIN), Fp::from(u64::MIN)];
+    /// poseidon.set_preimage(&preimage);
+    /// assert_eq!(poseidon.elements.len(), constants.width());
+    /// assert_eq!(poseidon.elements[1], Fp::from(u64::MIN)); // Now it's u64::MIN
+    /// assert_eq!(poseidon.elements[2], Fp::from(u64::MIN)); // Now it's u64::MIN
+    /// ```
     pub fn set_preimage(&mut self, preimage: &[F]) {
         self.reset();
         self.elements[1..].copy_from_slice(preimage);
@@ -337,7 +547,7 @@ where
     /// Restore the initial state
     pub fn reset(&mut self) {
         self.reset_offsets();
-        self.elements[1..].iter_mut().for_each(|l| *l = F::zero());
+        self.elements[1..].iter_mut().for_each(|l| *l = F::ZERO);
         self.elements[0] = self.constants.domain_tag;
     }
 
@@ -347,7 +557,40 @@ where
         self.pos = 1;
     }
 
-    /// The returned `usize` represents the element position (within arity) for the input operation
+    /// Adds one more field element of preimage to the underlying [`Poseidon`] buffer for further hashing.
+    /// The returned `usize` represents the element position (within arity) for the input operation.
+    /// Returns [`Error::FullBuffer`] if no more elements can be added for hashing.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use neptune::poseidon::PoseidonConstants;
+    /// use neptune::poseidon::Poseidon;
+    /// use pasta_curves::Fp;
+    /// use ff::Field;
+    /// use generic_array::typenum::U2;
+    ///
+    /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new_constant_length(1);
+    ///
+    /// let mut poseidon = Poseidon::<Fp, U2>::new(&constants);
+    /// assert_eq!(poseidon.elements.len(), constants.width());
+    /// assert_eq!(poseidon.elements[1], Fp::ZERO);
+    /// assert_eq!(poseidon.elements[2], Fp::ZERO);
+    ///
+    /// let pos = poseidon.input(Fp::from(u64::MAX)).expect("can't add one more element");
+    ///
+    /// assert_eq!(pos, 1);
+    /// assert_eq!(poseidon.elements[1], Fp::from(u64::MAX));
+    /// assert_eq!(poseidon.elements[2], Fp::ZERO);
+    ///
+    /// let pos = poseidon.input(Fp::from(u64::MAX)).expect("can't add one more element");
+    ///
+    /// assert_eq!(pos, 2);
+    /// assert_eq!(poseidon.elements[1], Fp::from(u64::MAX));
+    /// assert_eq!(poseidon.elements[2], Fp::from(u64::MAX));
+    ///
+    /// // poseidon.input(Fp::from(u64::MAX)).expect("can't add one more element"); // panic !!!
+    /// ```
     pub fn input(&mut self, element: F) -> Result<usize, Error> {
         // Cannot input more elements than the defined arity
         // To hash constant-length input greater than arity, use sponge explicitly.
@@ -362,6 +605,29 @@ where
         Ok(self.pos - 1)
     }
 
+    /// Performs hashing using underlying [`Poseidon`] buffer of the preimage' field elements
+    /// using provided [`HashMode`]. Always outputs digest expressed as a single field element
+    /// of concrete type specified upon [`PoseidonConstants`] and [`Poseidon`] instantiations.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use neptune::poseidon::{HashMode, PoseidonConstants};
+    /// use neptune::poseidon::Poseidon;
+    /// use pasta_curves::Fp;
+    /// use ff::Field;
+    /// use generic_array::typenum::U2;
+    ///
+    /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new();
+    ///
+    /// let mut poseidon = Poseidon::<Fp, U2>::new(&constants);
+    ///
+    /// poseidon.input(Fp::from(u64::MAX)).expect("can't add one more element");
+    ///
+    /// let digest = poseidon.hash_in_mode(HashMode::Correct);
+    ///
+    /// assert_ne!(digest, Fp::ZERO); // digest has `Fp` type
+    /// ```
     pub fn hash_in_mode(&mut self, mode: HashMode) -> F {
         let res = match mode {
             Correct => hash_correct(self),
@@ -372,6 +638,29 @@ where
         res
     }
 
+    /// Performs hashing using underlying [`Poseidon`] buffer of the preimage' field elements
+    /// in default (optimized) mode. Always outputs digest expressed as a single field element
+    /// of concrete type specified upon [`PoseidonConstants`] and [`Poseidon`] instantiations.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use neptune::poseidon::PoseidonConstants;
+    /// use neptune::poseidon::Poseidon;
+    /// use pasta_curves::Fp;
+    /// use ff::Field;
+    /// use generic_array::typenum::U2;
+    ///
+    /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new();
+    ///
+    /// let mut poseidon = Poseidon::<Fp, U2>::new(&constants);
+    ///
+    /// poseidon.input(Fp::from(u64::MAX)).expect("can't add one more element");
+    ///
+    /// let digest = poseidon.hash();
+    ///
+    /// assert_ne!(digest, Fp::ZERO); // digest has `Fp` type
+    /// ```
     pub fn hash(&mut self) -> F {
         self.hash_in_mode(DEFAULT_HASH_MODE)
     }
@@ -388,7 +677,7 @@ where
         match self.constants.hash_type {
             HashType::ConstantLength(_) | HashType::Encryption => {
                 for elt in self.elements[self.pos..].iter_mut() {
-                    *elt = F::zero();
+                    *elt = F::ZERO;
                 }
                 self.pos = self.elements.len();
             }
@@ -398,11 +687,65 @@ where
         }
     }
 
+    /// Returns 1-th element from underlying [`Poseidon`] buffer. This function is important, since
+    /// according to [`Poseidon`] design, after performing hashing, output digest will be stored at
+    /// 1-st place of underlying buffer.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use neptune::poseidon::PoseidonConstants;
+    /// use neptune::poseidon::Poseidon;
+    /// use pasta_curves::Fp;
+    /// use ff::Field;
+    /// use generic_array::typenum::U2;
+    ///
+    /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new();
+    ///
+    /// let mut poseidon = Poseidon::<Fp, U2>::new(&constants);
+    ///
+    /// poseidon.input(Fp::from(u64::MAX)).expect("can't add one more element");
+    ///
+    /// let output = poseidon.extract_output();
+    ///
+    /// assert_eq!(poseidon.elements[1], Fp::from(u64::MAX));
+    /// assert_eq!(output, Fp::from(u64::MAX)); // output == input
+    ///
+    /// let digest = poseidon.hash();
+    ///
+    /// let output = poseidon.extract_output();
+    ///
+    /// assert_eq!(poseidon.elements[1], output);
+    /// assert_eq!(digest, output); // output == digest
+    /// ```
     #[inline]
     pub fn extract_output(&self) -> F {
         self.elements[1]
     }
 
+    /// Performs hashing using underlying [`Poseidon`] buffer of the preimage' field elements
+    /// using [`HashMode::OptimizedStatic`] mode. Always outputs digest expressed as a single field element
+    /// of concrete type specified upon [`PoseidonConstants`] and [`Poseidon`] instantiations.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use neptune::poseidon::PoseidonConstants;
+    /// use neptune::poseidon::Poseidon;
+    /// use pasta_curves::Fp;
+    /// use ff::Field;
+    /// use generic_array::typenum::U2;
+    ///
+    /// let constants: PoseidonConstants<Fp, U2> = PoseidonConstants::new();
+    ///
+    /// let mut poseidon = Poseidon::<Fp, U2>::new(&constants);
+    ///
+    /// poseidon.input(Fp::from(u64::MAX)).expect("can't add one more element");
+    ///
+    /// let digest = poseidon.hash_optimized_static();
+    ///
+    /// assert_ne!(digest, Fp::ZERO); // digest has `Fp` type
+    /// ```
     pub fn hash_optimized_static(&mut self) -> F {
         // The first full round should use the initial constants.
         self.add_round_constants();
@@ -534,7 +877,7 @@ where
     /// exploits the fact that our MDS matrices are symmetric by construction.
     #[allow(clippy::ptr_arg)]
     pub(crate) fn product_mds_with_matrix(&mut self, matrix: &Matrix<F>) {
-        let mut result = GenericArray::<F, A::ConstantsSize>::generate(|_| F::zero());
+        let mut result = GenericArray::<F, A::ConstantsSize>::generate(|_| F::ZERO);
 
         for (j, val) in result.iter_mut().enumerate() {
             for (i, row) in matrix.iter().enumerate() {
@@ -549,7 +892,7 @@ where
 
     // Sparse matrix in this context means one of the form, M''.
     fn product_mds_with_sparse_matrix(&mut self, sparse_matrix: &SparseMatrix<F>) {
-        let mut result = GenericArray::<F, A::ConstantsSize>::generate(|_| F::zero());
+        let mut result = GenericArray::<F, A::ConstantsSize>::generate(|_| F::ZERO);
 
         // First column is dense.
         for (i, val) in sparse_matrix.w_hat.iter().enumerate() {
@@ -627,11 +970,12 @@ mod tests {
     use blstrs::Scalar as Fr;
     use ff::Field;
     use generic_array::typenum;
+    use pasta_curves::pallas::Scalar as S1;
 
     #[test]
     fn reset() {
         let test_arity = 2;
-        let preimage = vec![<Fr as Field>::one(); test_arity];
+        let preimage = vec![<Fr as Field>::ONE; test_arity];
         let constants = PoseidonConstants::new();
         let mut h = Poseidon::<Fr, U2>::new_with_preimage(&preimage, &constants);
         h.hash();
@@ -646,9 +990,9 @@ mod tests {
     #[test]
     fn hash_det() {
         let test_arity = 2;
-        let mut preimage = vec![Fr::zero(); test_arity];
+        let mut preimage = vec![Fr::ZERO; test_arity];
         let constants = PoseidonConstants::new();
-        preimage[0] = <Fr as Field>::one();
+        preimage[0] = <Fr as Field>::ONE;
 
         let mut h = Poseidon::<Fr, U2>::new_with_preimage(&preimage, &constants);
 
@@ -660,9 +1004,9 @@ mod tests {
 
     #[test]
     fn hash_arity_3() {
-        let mut preimage = [Fr::zero(); 3];
+        let mut preimage = [Fr::ZERO; 3];
         let constants = PoseidonConstants::new();
-        preimage[0] = <Fr as Field>::one();
+        preimage[0] = <Fr as Field>::ONE;
 
         let mut h = Poseidon::<Fr, typenum::U3>::new_with_preimage(&preimage, &constants);
 

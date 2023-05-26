@@ -17,13 +17,16 @@ use ff::PrimeField;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "F: PrimeField + Serialize, A: Arity<F>",
+    deserialize = "F: PrimeField + Deserialize<'de>, A: Arity<F>"
+))]
 pub enum HashType<F: PrimeField, A: Arity<F>> {
     MerkleTree,
     MerkleTreeSparse(u64),
     VariableLength,
     ConstantLength(usize),
     Encryption,
-    #[serde(skip)]
     Custom(CType<F, A>),
     Sponge,
 }
@@ -88,6 +91,8 @@ impl<F: PrimeField, A: Arity<F>> Abomonation for HashType<F, A> {
 }
 
 impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
+    /// Implements domain separation defined in original [Poseidon paper](https://eprint.iacr.org/2019/458.pdf).
+    /// Calculates field element used as a zero element in underlying [`crate::poseidon::Poseidon`] buffer that holds preimage.
     pub fn domain_tag(&self) -> F {
         match self {
             // 2^arity - 1
@@ -107,7 +112,7 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
             // NOTE: in order to leave room for future `Strength` tags,
             // we make identifier a multiple of 2^40 rather than 2^32.
             HashType::Custom(ref ctype) => ctype.domain_tag(),
-            HashType::Sponge => F::zero(),
+            HashType::Sponge => F::ZERO,
         }
     }
 
@@ -130,6 +135,11 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum CType<F: PrimeField, A: Arity<F>> {
     Arbitrary(u64),
+    // See: https://github.com/bincode-org/bincode/issues/424
+    // This is a bit of a hack, but since `serde(skip)` tags the last variant arm,
+    // the generated code ends up being correct. But, in the future, do not
+    // carelessly add new variants to this enum.
+    #[serde(skip)]
     _Phantom((F, A)),
 }
 

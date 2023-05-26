@@ -194,7 +194,7 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> InnerSpongeAP
     // Supplemental methods needed for a generic implementation.
 
     fn zero() -> Elt<F> {
-        Elt::num_from_fr::<CS>(F::zero())
+        Elt::num_from_fr::<CS>(F::ZERO)
     }
 
     fn rate(&self) -> usize {
@@ -303,7 +303,7 @@ mod tests {
         assert_eq!(expected_constraints, root_cs.num_constraints());
         // Simple sanity check that results are all non-zero and distinct.
         for (i, elt) in allocated_result.iter().enumerate() {
-            assert!(elt.val().unwrap() != F::zero());
+            assert!(elt.val().unwrap() != F::ZERO);
             // This is expensive (n^2), but it's hard to put field element into a set since we can't hash or compare (except equality).
             for (j, elt2) in allocated_result.iter().enumerate() {
                 if i != j {

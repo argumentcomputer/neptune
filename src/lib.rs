@@ -1,7 +1,5 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
-#[macro_use]
-extern crate lazy_static;
 
 pub use crate::poseidon::{Arity, Poseidon};
 use crate::round_constants::generate_constants;
