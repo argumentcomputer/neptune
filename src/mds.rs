@@ -1,6 +1,7 @@
 // Allow `&Matrix` in function signatures.
 #![allow(clippy::ptr_arg)]
 
+use abomonation::Abomonation;
 use abomonation_derive::Abomonation;
 use ff::PrimeField;
 use serde::{Deserialize, Serialize};
@@ -11,48 +12,70 @@ use crate::matrix::{
 };
 use crate::unsafe_serde;
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Abomonation)]
+#[abomonation_bounds(where F::Repr: Abomonation)]
 pub struct MdsMatrices<F: PrimeField> {
+    #[abomonate_with(Vec<Vec<F::Repr>>)]
     pub m: Matrix<F>,
+    #[abomonate_with(Vec<Vec<F::Repr>>)]
     pub m_inv: Matrix<F>,
+    #[abomonate_with(Vec<Vec<F::Repr>>)]
     pub m_hat: Matrix<F>,
+    #[abomonate_with(Vec<Vec<F::Repr>>)]
     pub m_hat_inv: Matrix<F>,
+    #[abomonate_with(Vec<Vec<F::Repr>>)]
     pub m_prime: Matrix<F>,
+    #[abomonate_with(Vec<Vec<F::Repr>>)]
     pub m_double_prime: Matrix<F>,
 }
 
-impl<F: PrimeField> abomonation::Abomonation for MdsMatrices<F> {
-    unsafe fn entomb<W: std::io::Write>(&self, bytes: &mut W) -> std::io::Result<()> {
-        unsafe_serde::entomb_vec_vec_F(&self.m, bytes)?;
-        unsafe_serde::entomb_vec_vec_F(&self.m_inv, bytes)?;
-        unsafe_serde::entomb_vec_vec_F(&self.m_hat, bytes)?;
-        unsafe_serde::entomb_vec_vec_F(&self.m_hat_inv, bytes)?;
-        unsafe_serde::entomb_vec_vec_F(&self.m_prime, bytes)?;
-        unsafe_serde::entomb_vec_vec_F(&self.m_double_prime, bytes)?;
-        Ok(())
-    }
+// impl<F: PrimeField> abomonation::Abomonation for MdsMatrices<F> 
+// where
+//     F::Repr: Abomonation
+// {
+//     unsafe fn entomb<W: std::io::Write>(&self, bytes: &mut W) -> std::io::Result<()> {
+//         let m = &self.m as *const _ as *const Vec<Vec<F::Repr>>;
+//         (&*m).entomb(bytes)?;
+//         let m_inv = &self.m_inv as *const _ as *const Vec<Vec<F::Repr>>;
+//         (&*m_inv).entomb(bytes)?;
+//         let m_hat = &self.m_hat as *const _ as *const Vec<Vec<F::Repr>>;
+//         (&*m_hat).entomb(bytes)?;
+//         let m_hat_inv = &self.m_hat_inv as *const _ as *const Vec<Vec<F::Repr>>;
+//         (&*m_hat_inv).entomb(bytes)?;
+//         let m_prime = &self.m_prime as *const _ as *const Vec<Vec<F::Repr>>;
+//         (&*m_prime).entomb(bytes)?;
+//         let m_double_prime = &self.m_double_prime as *const _ as *const Vec<Vec<F::Repr>>;
+//         (&*m_double_prime).entomb(bytes)?;
+//         Ok(())
+//     }
 
-    unsafe fn exhume<'a, 'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
-        let bytes = unsafe_serde::exhume_vec_vec_F(&mut self.m, bytes)?;
-        let bytes = unsafe_serde::exhume_vec_vec_F(&mut self.m_inv, bytes)?;
-        let bytes = unsafe_serde::exhume_vec_vec_F(&mut self.m_hat, bytes)?;
-        let bytes = unsafe_serde::exhume_vec_vec_F(&mut self.m_hat_inv, bytes)?;
-        let bytes = unsafe_serde::exhume_vec_vec_F(&mut self.m_prime, bytes)?;
-        let bytes = unsafe_serde::exhume_vec_vec_F(&mut self.m_double_prime, bytes)?;
-        Some(bytes)
-    }
+//     unsafe fn exhume<'a, 'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+//         let m = &mut self.m as *mut _ as *mut Vec<Vec<F::Repr>>;
+//         let bytes = (&mut *m).exhume(bytes)?;
+//         let m_inv = &mut self.m_inv as *mut _ as *mut Vec<Vec<F::Repr>>;
+//         let bytes = (&mut *m_inv).exhume(bytes)?;
+//         let m_hat = &mut self.m_hat as *mut _ as *mut Vec<Vec<F::Repr>>;
+//         let bytes = (&mut *m_hat).exhume(bytes)?;
+//         let m_hat_inv = &mut self.m_hat_inv as *mut _ as *mut Vec<Vec<F::Repr>>;
+//         let bytes = (&mut *m_hat_inv).exhume(bytes)?;
+//         let m_prime = &mut self.m_prime as *mut _ as *mut Vec<Vec<F::Repr>>;
+//         let bytes = (&mut *m_prime).exhume(bytes)?;
+//         let m_double_prime = &mut self.m_double_prime as *mut _ as *mut Vec<Vec<F::Repr>>;
+//         let bytes = (&mut *m_double_prime).exhume(bytes)?;
+//         Some(bytes)
+//     }
 
-    fn extent(&self) -> usize {
-        let mut size = 0;
-        size += unsafe_serde::extent_vec_vec_F(&self.m);
-        size += unsafe_serde::extent_vec_vec_F(&self.m_inv);
-        size += unsafe_serde::extent_vec_vec_F(&self.m_hat);
-        size += unsafe_serde::extent_vec_vec_F(&self.m_hat_inv);
-        size += unsafe_serde::extent_vec_vec_F(&self.m_prime);
-        size += unsafe_serde::extent_vec_vec_F(&self.m_double_prime);
-        size
-    }
-}
+//     fn extent(&self) -> usize {
+//         let mut size = 0;
+//         size += unsafe_serde::extent_vec_vec_F(&self.m);
+//         size += unsafe_serde::extent_vec_vec_F(&self.m_inv);
+//         size += unsafe_serde::extent_vec_vec_F(&self.m_hat);
+//         size += unsafe_serde::extent_vec_vec_F(&self.m_hat_inv);
+//         size += unsafe_serde::extent_vec_vec_F(&self.m_prime);
+//         size += unsafe_serde::extent_vec_vec_F(&self.m_double_prime);
+//         size
+//     }
+// }
 
 pub fn create_mds_matrices<F: PrimeField>(t: usize) -> MdsMatrices<F> {
     let m = generate_mds(t);
@@ -81,10 +104,13 @@ pub fn derive_mds_matrices<F: PrimeField>(m: Matrix<F>) -> MdsMatrices<F> {
 /// (minor to the element in both the row and column) is the identity.
 /// We will pluralize this compact structure `sparse_matrixes` to distinguish from `sparse_matrices` from which they are created.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Abomonation)]
+#[abomonation_bounds(where F::Repr: Abomonation)]
 pub struct SparseMatrix<F: PrimeField> {
     /// `w_hat` is the first column of the M'' matrix. It will be directly multiplied (scalar product) with a row of state elements.
+    #[abomonate_with(Vec<F::Repr>)]
     pub w_hat: Vec<F>,
     /// `v_rest` contains all but the first (already included in `w_hat`).
+    #[abomonate_with(Vec<F::Repr>)]
     pub v_rest: Vec<F>,
 }
 

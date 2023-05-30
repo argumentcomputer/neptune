@@ -6,6 +6,7 @@ use crate::preprocessing::compress_round_constants;
 use crate::unsafe_serde;
 use crate::{matrix, quintic_s_box, BatchHasher, Strength, DEFAULT_STRENGTH};
 use crate::{round_constants, round_numbers, Error};
+use abomonation::Abomonation;
 use abomonation_derive::Abomonation;
 use ff::PrimeField;
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
@@ -80,20 +81,25 @@ where
 /// and [`Arity`] as [`Poseidon`] instance that consumes it.
 ///
 /// See original [Poseidon paper](https://eprint.iacr.org/2019/458.pdf) for more details.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Abomonation)]
+#[abomonation_bounds(where F: PrimeField, A: Arity<F>, F::Repr: Abomonation)]
 pub struct PoseidonConstants<F, A>
 where
     F: PrimeField,
     A: Arity<F>,
 {
     pub mds_matrices: MdsMatrices<F>,
+    #[abomonate_with(Option<Vec<F::Repr>>)]
     pub round_constants: Option<Vec<F>>,
+    #[abomonate_with(Vec<F::Repr>)]
     pub compressed_round_constants: Vec<F>,
+    #[abomonate_with(Matrix<F::Repr>)]
     pub pre_sparse_matrix: Matrix<F>,
     pub sparse_matrixes: Vec<SparseMatrix<F>>,
     pub strength: Strength,
     /// The domain tag is the first element of a Poseidon permutation.
     /// This extra element is necessary for 128-bit security.
+    #[abomonate_with(F::Repr)]
     pub domain_tag: F,
     pub full_rounds: usize,
     pub half_full_rounds: usize,
@@ -102,53 +108,67 @@ where
     pub(crate) _a: PhantomData<A>,
 }
 
-impl<F: PrimeField, A: Arity<F>> abomonation::Abomonation for PoseidonConstants<F, A> {
-    unsafe fn entomb<W: std::io::Write>(&self, bytes: &mut W) -> std::io::Result<()> {
-        self.mds_matrices.entomb(bytes)?;
-        unsafe_serde::entomb_option_vec_F(&self.round_constants, bytes)?;
-        unsafe_serde::entomb_vec_F(&self.compressed_round_constants, bytes)?;
-        unsafe_serde::entomb_vec_vec_F(&self.pre_sparse_matrix, bytes)?;
-        unsafe_serde::entomb_vec_sparse_matrix_F(&self.sparse_matrixes, bytes)?;
-        self.strength.entomb(bytes)?;
-        unsafe_serde::entomb_F(&self.domain_tag, bytes)?;
-        self.full_rounds.entomb(bytes)?;
-        self.half_full_rounds.entomb(bytes)?;
-        self.partial_rounds.entomb(bytes)?;
-        self.hash_type.entomb(bytes)?;
-        Ok(())
-    }
+// impl<F: PrimeField, A: Arity<F>> abomonation::Abomonation for PoseidonConstants<F, A>
+// where
+//     F::Repr: Abomonation,
+// {
+//     unsafe fn entomb<W: std::io::Write>(&self, bytes: &mut W) -> std::io::Result<()> {
+//         self.mds_matrices.entomb(bytes)?;
+//         unsafe_serde::entomb_option_vec_F(&self.round_constants, bytes)?;
+//         unsafe_serde::entomb_vec_F(&self.compressed_round_constants, bytes)?;
+//         unsafe_serde::entomb_vec_vec_F(&self.pre_sparse_matrix, bytes)?;
+//         unsafe_serde::entomb_vec_sparse_matrix_F(&self.sparse_matrixes, bytes)?;
+//         self.strength.entomb(bytes)?;
+//         unsafe_serde::entomb_F(&self.domain_tag, bytes)?;
+//         self.full_rounds.entomb(bytes)?;
+//         self.half_full_rounds.entomb(bytes)?;
+//         self.partial_rounds.entomb(bytes)?;
+//         self.hash_type.entomb(bytes)?;
+//         Ok(())
+//     }
 
-    unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
-        let temp = bytes; bytes = self.mds_matrices.exhume(temp)?;
-        let temp = bytes; bytes = unsafe_serde::exhume_option_vec_F(&mut self.round_constants, temp)?;
-        let temp = bytes; bytes = unsafe_serde::exhume_vec_F(&mut self.compressed_round_constants, temp)?;
-        let temp = bytes; bytes = unsafe_serde::exhume_vec_vec_F(&mut self.pre_sparse_matrix, temp)?;
-        let temp = bytes; bytes = unsafe_serde::exhume_vec_sparse_matrix_F(&mut self.sparse_matrixes, temp)?;
-        let temp = bytes; bytes = self.strength.exhume(temp)?;
-        let temp = bytes; bytes = unsafe_serde::exhume_F(&mut self.domain_tag, temp)?;
-        let temp = bytes; bytes = self.full_rounds.exhume(temp)?;
-        let temp = bytes; bytes = self.half_full_rounds.exhume(temp)?;
-        let temp = bytes; bytes = self.partial_rounds.exhume(temp)?;
-        let temp = bytes; bytes = self.hash_type.exhume(temp)?;
-        Some(bytes)
-    }
+//     unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+//         let temp = bytes;
+//         bytes = self.mds_matrices.exhume(temp)?;
+//         let temp = bytes;
+//         bytes = unsafe_serde::exhume_option_vec_F(&mut self.round_constants, temp)?;
+//         let temp = bytes;
+//         bytes = unsafe_serde::exhume_vec_F(&mut self.compressed_round_constants, temp)?;
+//         let temp = bytes;
+//         bytes = unsafe_serde::exhume_vec_vec_F(&mut self.pre_sparse_matrix, temp)?;
+//         let temp = bytes;
+//         bytes = unsafe_serde::exhume_vec_sparse_matrix_F(&mut self.sparse_matrixes, temp)?;
+//         let temp = bytes;
+//         bytes = self.strength.exhume(temp)?;
+//         let temp = bytes;
+//         bytes = unsafe_serde::exhume_F(&mut self.domain_tag, temp)?;
+//         let temp = bytes;
+//         bytes = self.full_rounds.exhume(temp)?;
+//         let temp = bytes;
+//         bytes = self.half_full_rounds.exhume(temp)?;
+//         let temp = bytes;
+//         bytes = self.partial_rounds.exhume(temp)?;
+//         let temp = bytes;
+//         bytes = self.hash_type.exhume(temp)?;
+//         Some(bytes)
+//     }
 
-    fn extent(&self) -> usize {
-        let mut size = 0;
-        size += self.mds_matrices.extent();
-        size += unsafe_serde::extent_option_vec_F(&self.round_constants);
-        size += unsafe_serde::extent_vec_F(&self.compressed_round_constants);
-        size += unsafe_serde::extent_vec_vec_F(&self.pre_sparse_matrix);
-        size += unsafe_serde::extent_vec_sparse_matrix_F(&self.sparse_matrixes);
-        size += self.strength.extent();
-        size += unsafe_serde::extent_F(&self.domain_tag);
-        size += self.full_rounds.extent();
-        size += self.half_full_rounds.extent();
-        size += self.partial_rounds.extent();
-        size += self.hash_type.extent();
-        size
-    }
-}
+//     fn extent(&self) -> usize {
+//         let mut size = 0;
+//         size += self.mds_matrices.extent();
+//         size += unsafe_serde::extent_option_vec_F(&self.round_constants);
+//         size += unsafe_serde::extent_vec_F(&self.compressed_round_constants);
+//         size += unsafe_serde::extent_vec_vec_F(&self.pre_sparse_matrix);
+//         size += unsafe_serde::extent_vec_sparse_matrix_F(&self.sparse_matrixes);
+//         size += self.strength.extent();
+//         size += unsafe_serde::extent_F(&self.domain_tag);
+//         size += self.full_rounds.extent();
+//         size += self.half_full_rounds.extent();
+//         size += self.partial_rounds.extent();
+//         size += self.hash_type.extent();
+//         size
+//     }
+// }
 
 #[derive(Debug, PartialEq)]
 pub enum HashMode {
@@ -967,6 +987,7 @@ mod tests {
     use super::*;
     use crate::sponge::vanilla::SpongeTrait;
     use crate::*;
+    use abomonation::{decode, encode};
     use blstrs::Scalar as Fr;
     use ff::Field;
     use generic_array::typenum;
@@ -1324,5 +1345,19 @@ mod tests {
             standard_constants.partial_rounds,
             default_constants.partial_rounds
         );
+    }
+
+    #[test]
+    fn roundtrip_serde() {
+        let constants = PoseidonConstants::<Fr, U8>::new();
+        let mut bytes = Vec::new();
+        unsafe { encode(&constants, &mut bytes).unwrap() };
+
+        if let Some((result, remaining)) =
+            unsafe { decode::<PoseidonConstants<Fr, U8>>(&mut bytes) }
+        {
+            assert!(result == &constants);
+            assert!(remaining.len() == 0);
+        }
     }
 }
