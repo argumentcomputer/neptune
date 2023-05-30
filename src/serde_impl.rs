@@ -252,13 +252,13 @@ where
     unsafe fn entomb<W: std::io::Write>(&self, bytes: &mut W) -> std::io::Result<()> {
         self.mds_matrices.entomb(bytes)?;
         let __this = &self.compressed_round_constants as *const _ as *const Vec<F::Repr>;
-        (&*__this).entomb(bytes)?;
+        (*__this).entomb(bytes)?;
         let __this = &self.pre_sparse_matrix as *const _ as *const Vec<Vec<F::Repr>>;
-        (&*__this).entomb(bytes)?;
+        (*__this).entomb(bytes)?;
         self.sparse_matrixes.entomb(bytes)?;
         self.strength.entomb(bytes)?;
         let __this = &self.domain_tag as *const _ as *const F::Repr;
-        (&*__this).entomb(bytes)?;
+        (*__this).entomb(bytes)?;
         self.full_rounds.entomb(bytes)?;
         self.partial_rounds.entomb(bytes)?;
         self.hash_type.entomb(bytes)?;
@@ -266,17 +266,17 @@ where
         Ok(())
     }
     #[inline]
-    unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+    unsafe fn exhume<'b>(&mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
         bytes = self.mds_matrices.exhume(bytes)?;
         self.round_constants = None;
         let __this = &mut self.compressed_round_constants as *mut _ as *mut Vec<F::Repr>;
-        bytes = (&mut *__this).exhume(bytes)?;
+        bytes = (*__this).exhume(bytes)?;
         let __this = &mut self.pre_sparse_matrix as *mut _ as *mut Vec<Vec<F::Repr>>;
-        bytes = (&mut *__this).exhume(bytes)?;
+        bytes = (*__this).exhume(bytes)?;
         bytes = self.sparse_matrixes.exhume(bytes)?;
         bytes = self.strength.exhume(bytes)?;
         let __this = &mut self.domain_tag as *mut _ as *mut F::Repr;
-        bytes = (&mut *__this).exhume(bytes)?;
+        bytes = (*__this).exhume(bytes)?;
         bytes = self.full_rounds.exhume(bytes)?;
         self.half_full_rounds = self.full_rounds / 2;
         bytes = self.partial_rounds.exhume(bytes)?;
@@ -289,15 +289,15 @@ where
         let mut size = 0;
         size += self.mds_matrices.extent();
         let __this = &self.round_constants as *const _ as *const Option<Vec<F::Repr>>;
-        size += unsafe { (&*__this).extent() };
+        size += unsafe { (*__this).extent() };
         let __this = &self.compressed_round_constants as *const _ as *const Vec<F::Repr>;
-        size += unsafe { (&*__this).extent() };
+        size += unsafe { (*__this).extent() };
         let __this = &self.pre_sparse_matrix as *const _ as *const Vec<Vec<F::Repr>>;
-        size += unsafe { (&*__this).extent() };
+        size += unsafe { (*__this).extent() };
         size += self.sparse_matrixes.extent();
         size += self.strength.extent();
         let __this = &self.domain_tag as *const _ as *const F::Repr;
-        size += unsafe { (&*__this).extent() };
+        size += unsafe { (*__this).extent() };
         size += self.full_rounds.extent();
         size += self.half_full_rounds.extent();
         size += self.partial_rounds.extent();
@@ -311,7 +311,7 @@ where
 mod tests {
     use super::*;
     use crate::Poseidon;
-    use abomonation::{encode, decode};
+    use abomonation::{decode, encode};
     use blstrs::Scalar as Fr;
     use ff::Field;
     use generic_array::typenum;

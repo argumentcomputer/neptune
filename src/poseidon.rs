@@ -3,7 +3,6 @@ use crate::matrix::Matrix;
 use crate::mds::{create_mds_matrices, factor_to_sparse_matrixes, MdsMatrices, SparseMatrix};
 use crate::poseidon_alt::{hash_correct, hash_optimized_dynamic};
 use crate::preprocessing::compress_round_constants;
-use crate::unsafe_serde;
 use crate::{matrix, quintic_s_box, BatchHasher, Strength, DEFAULT_STRENGTH};
 use crate::{round_constants, round_numbers, Error};
 use abomonation::Abomonation;

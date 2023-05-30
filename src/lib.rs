@@ -40,8 +40,6 @@ compile_error!("The `strengthened` feature needs the `cuda` and/or `opencl` feat
 ))]
 compile_error!("The `cuda` and `opencl` features need the `bls` and/or `pasta` feature to be set");
 
-pub mod unsafe_serde;
-
 /// Poseidon circuit
 pub mod circuit;
 pub mod circuit2;

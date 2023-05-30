@@ -10,7 +10,6 @@ use crate::matrix;
 use crate::matrix::{
     apply_matrix, invert, is_identity, is_invertible, is_square, mat_mul, minor, transpose, Matrix,
 };
-use crate::unsafe_serde;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Abomonation)]
 #[abomonation_bounds(where F::Repr: Abomonation)]

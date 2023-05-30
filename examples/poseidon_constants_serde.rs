@@ -1,12 +1,11 @@
 use abomonation::{decode, encode};
 use blstrs::Scalar as Fr;
-use generic_array::typenum::{U24};
+use generic_array::typenum::U24;
 use neptune::{poseidon::PoseidonConstants, Strength};
 
 fn main() {
-
     let mut bytes = Vec::new();
-    unsafe { 
+    unsafe {
         let constants = PoseidonConstants::<Fr, U24>::new_with_strength(Strength::Standard);
         encode(&constants, &mut bytes).unwrap()
     };

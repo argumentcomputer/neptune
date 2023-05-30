@@ -34,7 +34,7 @@ pub enum HashType<F: PrimeField, A: Arity<F>> {
 
 // impl<F: PrimeField, A: Arity<F>> Abomonation for HashType<F, A> {
 //     #[inline]
-//     unsafe fn entomb<W: std::io::Write>(&self, write: &mut W) -> std::io::Result<()> { 
+//     unsafe fn entomb<W: std::io::Write>(&self, write: &mut W) -> std::io::Result<()> {
 //         match *self {
 //             HashType::MerkleTree => {},
 //             HashType::MerkleTreeSparse(bitmask) => {
@@ -48,7 +48,7 @@ pub enum HashType<F: PrimeField, A: Arity<F>> {
 //             HashType::Custom(_) => unimplemented!(),
 //             HashType::Sponge => {},
 //         };
-//         Ok(()) 
+//         Ok(())
 //     }
 
 //     #[inline]
@@ -68,13 +68,13 @@ pub enum HashType<F: PrimeField, A: Arity<F>> {
 //             HashType::Custom(_) => unimplemented!(),
 //             HashType::Sponge => {},
 //         }
-//         Some(bytes) 
+//         Some(bytes)
 //     }
 
 //     #[inline]
-//     fn extent(&self) -> usize { 
+//     fn extent(&self) -> usize {
 //         let mut size = 0;
-//         match *self { 
+//         match *self {
 //             HashType::MerkleTree => {},
 //             HashType::MerkleTreeSparse(bitmask) => {
 //                 size += bitmask.extent();
