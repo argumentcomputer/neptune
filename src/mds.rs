@@ -29,54 +29,6 @@ pub struct MdsMatrices<F: PrimeField> {
     pub m_double_prime: Matrix<F>,
 }
 
-// impl<F: PrimeField> abomonation::Abomonation for MdsMatrices<F> 
-// where
-//     F::Repr: Abomonation
-// {
-//     unsafe fn entomb<W: std::io::Write>(&self, bytes: &mut W) -> std::io::Result<()> {
-//         let m = &self.m as *const _ as *const Vec<Vec<F::Repr>>;
-//         (&*m).entomb(bytes)?;
-//         let m_inv = &self.m_inv as *const _ as *const Vec<Vec<F::Repr>>;
-//         (&*m_inv).entomb(bytes)?;
-//         let m_hat = &self.m_hat as *const _ as *const Vec<Vec<F::Repr>>;
-//         (&*m_hat).entomb(bytes)?;
-//         let m_hat_inv = &self.m_hat_inv as *const _ as *const Vec<Vec<F::Repr>>;
-//         (&*m_hat_inv).entomb(bytes)?;
-//         let m_prime = &self.m_prime as *const _ as *const Vec<Vec<F::Repr>>;
-//         (&*m_prime).entomb(bytes)?;
-//         let m_double_prime = &self.m_double_prime as *const _ as *const Vec<Vec<F::Repr>>;
-//         (&*m_double_prime).entomb(bytes)?;
-//         Ok(())
-//     }
-
-//     unsafe fn exhume<'a, 'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
-//         let m = &mut self.m as *mut _ as *mut Vec<Vec<F::Repr>>;
-//         let bytes = (&mut *m).exhume(bytes)?;
-//         let m_inv = &mut self.m_inv as *mut _ as *mut Vec<Vec<F::Repr>>;
-//         let bytes = (&mut *m_inv).exhume(bytes)?;
-//         let m_hat = &mut self.m_hat as *mut _ as *mut Vec<Vec<F::Repr>>;
-//         let bytes = (&mut *m_hat).exhume(bytes)?;
-//         let m_hat_inv = &mut self.m_hat_inv as *mut _ as *mut Vec<Vec<F::Repr>>;
-//         let bytes = (&mut *m_hat_inv).exhume(bytes)?;
-//         let m_prime = &mut self.m_prime as *mut _ as *mut Vec<Vec<F::Repr>>;
-//         let bytes = (&mut *m_prime).exhume(bytes)?;
-//         let m_double_prime = &mut self.m_double_prime as *mut _ as *mut Vec<Vec<F::Repr>>;
-//         let bytes = (&mut *m_double_prime).exhume(bytes)?;
-//         Some(bytes)
-//     }
-
-//     fn extent(&self) -> usize {
-//         let mut size = 0;
-//         size += unsafe_serde::extent_vec_vec_F(&self.m);
-//         size += unsafe_serde::extent_vec_vec_F(&self.m_inv);
-//         size += unsafe_serde::extent_vec_vec_F(&self.m_hat);
-//         size += unsafe_serde::extent_vec_vec_F(&self.m_hat_inv);
-//         size += unsafe_serde::extent_vec_vec_F(&self.m_prime);
-//         size += unsafe_serde::extent_vec_vec_F(&self.m_double_prime);
-//         size
-//     }
-// }
-
 pub fn create_mds_matrices<F: PrimeField>(t: usize) -> MdsMatrices<F> {
     let m = generate_mds(t);
     derive_mds_matrices(m)

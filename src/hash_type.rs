@@ -16,11 +16,12 @@ use abomonation_derive::Abomonation;
 use ff::PrimeField;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Abomonation)]
 #[serde(bound(
     serialize = "F: PrimeField + Serialize, A: Arity<F>",
     deserialize = "F: PrimeField + Deserialize<'de>, A: Arity<F>"
 ))]
+#[abomonation_omit_bounds]
 pub enum HashType<F: PrimeField, A: Arity<F>> {
     MerkleTree,
     MerkleTreeSparse(u64),
@@ -31,64 +32,64 @@ pub enum HashType<F: PrimeField, A: Arity<F>> {
     Sponge,
 }
 
-impl<F: PrimeField, A: Arity<F>> Abomonation for HashType<F, A> {
-    #[inline]
-    unsafe fn entomb<W: std::io::Write>(&self, write: &mut W) -> std::io::Result<()> { 
-        match *self {
-            HashType::MerkleTree => {},
-            HashType::MerkleTreeSparse(bitmask) => {
-                bitmask.entomb(write)?;
-            },
-            HashType::VariableLength => {},
-            HashType::ConstantLength(length) => {
-                length.entomb(write)?;
-            },
-            HashType::Encryption => {},
-            HashType::Custom(_) => unimplemented!(),
-            HashType::Sponge => {},
-        };
-        Ok(()) 
-    }
+// impl<F: PrimeField, A: Arity<F>> Abomonation for HashType<F, A> {
+//     #[inline]
+//     unsafe fn entomb<W: std::io::Write>(&self, write: &mut W) -> std::io::Result<()> { 
+//         match *self {
+//             HashType::MerkleTree => {},
+//             HashType::MerkleTreeSparse(bitmask) => {
+//                 bitmask.entomb(write)?;
+//             },
+//             HashType::VariableLength => {},
+//             HashType::ConstantLength(length) => {
+//                 length.entomb(write)?;
+//             },
+//             HashType::Encryption => {},
+//             HashType::Custom(_) => unimplemented!(),
+//             HashType::Sponge => {},
+//         };
+//         Ok(()) 
+//     }
 
-    #[inline]
-    unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
-        match *self {
-            HashType::MerkleTree => {},
-            HashType::MerkleTreeSparse(mut bitmask) => {
-                let temp = bytes;
-                bytes = bitmask.exhume(temp)?;
-            },
-            HashType::VariableLength => {},
-            HashType::ConstantLength(mut length) => {
-                let temp = bytes;
-                bytes = length.exhume(temp)?;
-            },
-            HashType::Encryption => {},
-            HashType::Custom(_) => unimplemented!(),
-            HashType::Sponge => {},
-        }
-        Some(bytes) 
-    }
+//     #[inline]
+//     unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+//         match *self {
+//             HashType::MerkleTree => {},
+//             HashType::MerkleTreeSparse(mut bitmask) => {
+//                 let temp = bytes;
+//                 bytes = bitmask.exhume(temp)?;
+//             },
+//             HashType::VariableLength => {},
+//             HashType::ConstantLength(mut length) => {
+//                 let temp = bytes;
+//                 bytes = length.exhume(temp)?;
+//             },
+//             HashType::Encryption => {},
+//             HashType::Custom(_) => unimplemented!(),
+//             HashType::Sponge => {},
+//         }
+//         Some(bytes) 
+//     }
 
-    #[inline]
-    fn extent(&self) -> usize { 
-        let mut size = 0;
-        match *self { 
-            HashType::MerkleTree => {},
-            HashType::MerkleTreeSparse(bitmask) => {
-                size += bitmask.extent();
-            },
-            HashType::VariableLength => {},
-            HashType::ConstantLength(length) => {
-                size += length.extent();
-            },
-            HashType::Encryption => {},
-            HashType::Custom(_) => unimplemented!(),
-            HashType::Sponge => {},
-        }
-        size
-     }
-}
+//     #[inline]
+//     fn extent(&self) -> usize { 
+//         let mut size = 0;
+//         match *self { 
+//             HashType::MerkleTree => {},
+//             HashType::MerkleTreeSparse(bitmask) => {
+//                 size += bitmask.extent();
+//             },
+//             HashType::VariableLength => {},
+//             HashType::ConstantLength(length) => {
+//                 size += length.extent();
+//             },
+//             HashType::Encryption => {},
+//             HashType::Custom(_) => unimplemented!(),
+//             HashType::Sponge => {},
+//         }
+//         size
+//      }
+// }
 
 impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
     /// Implements domain separation defined in original [Poseidon paper](https://eprint.iacr.org/2019/458.pdf).
@@ -132,7 +133,8 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Abomonation)]
+#[abomonation_omit_bounds]
 pub enum CType<F: PrimeField, A: Arity<F>> {
     Arbitrary(u64),
     // See: https://github.com/bincode-org/bincode/issues/424
@@ -140,6 +142,7 @@ pub enum CType<F: PrimeField, A: Arity<F>> {
     // the generated code ends up being correct. But, in the future, do not
     // carelessly add new variants to this enum.
     #[serde(skip)]
+    #[abomonation_skip]
     _Phantom((F, A)),
 }
 
