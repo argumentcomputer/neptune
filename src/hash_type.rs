@@ -32,65 +32,6 @@ pub enum HashType<F: PrimeField, A: Arity<F>> {
     Sponge,
 }
 
-// impl<F: PrimeField, A: Arity<F>> Abomonation for HashType<F, A> {
-//     #[inline]
-//     unsafe fn entomb<W: std::io::Write>(&self, write: &mut W) -> std::io::Result<()> {
-//         match *self {
-//             HashType::MerkleTree => {},
-//             HashType::MerkleTreeSparse(bitmask) => {
-//                 bitmask.entomb(write)?;
-//             },
-//             HashType::VariableLength => {},
-//             HashType::ConstantLength(length) => {
-//                 length.entomb(write)?;
-//             },
-//             HashType::Encryption => {},
-//             HashType::Custom(_) => unimplemented!(),
-//             HashType::Sponge => {},
-//         };
-//         Ok(())
-//     }
-
-//     #[inline]
-//     unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
-//         match *self {
-//             HashType::MerkleTree => {},
-//             HashType::MerkleTreeSparse(mut bitmask) => {
-//                 let temp = bytes;
-//                 bytes = bitmask.exhume(temp)?;
-//             },
-//             HashType::VariableLength => {},
-//             HashType::ConstantLength(mut length) => {
-//                 let temp = bytes;
-//                 bytes = length.exhume(temp)?;
-//             },
-//             HashType::Encryption => {},
-//             HashType::Custom(_) => unimplemented!(),
-//             HashType::Sponge => {},
-//         }
-//         Some(bytes)
-//     }
-
-//     #[inline]
-//     fn extent(&self) -> usize {
-//         let mut size = 0;
-//         match *self {
-//             HashType::MerkleTree => {},
-//             HashType::MerkleTreeSparse(bitmask) => {
-//                 size += bitmask.extent();
-//             },
-//             HashType::VariableLength => {},
-//             HashType::ConstantLength(length) => {
-//                 size += length.extent();
-//             },
-//             HashType::Encryption => {},
-//             HashType::Custom(_) => unimplemented!(),
-//             HashType::Sponge => {},
-//         }
-//         size
-//      }
-// }
-
 impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
     /// Implements domain separation defined in original [Poseidon paper](https://eprint.iacr.org/2019/458.pdf).
     /// Calculates field element used as a zero element in underlying [`crate::poseidon::Poseidon`] buffer that holds preimage.
