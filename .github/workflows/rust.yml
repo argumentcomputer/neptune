@@ -87,7 +87,8 @@ jobs:
           args: --all --check
 
   # Runs the test suite on a self-hosted GPU machine with CUDA enabled
-  gpu:
+  test-cuda:
+    name: Rust tests on CUDA
     runs-on: self-hosted
     env:
       NVIDIA_VISIBLE_DEVICES: all
