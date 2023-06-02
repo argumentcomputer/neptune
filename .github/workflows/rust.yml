@@ -3,10 +3,10 @@ name: Rust
 on:
   merge_group:
   push:
-    branches:
-      - master
+    branches-ignored: [master]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+    branches: [master]
 
 env:
   CARGO_TERM_COLOR: always
@@ -101,6 +101,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
+      - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
       - name: Install GPU deps
         run: |
@@ -115,5 +116,5 @@ jobs:
       - run: clinfo
       - name: CUDA tests
         run: |
-          cargo test --no-default-features --features cuda,pasta,bls,arity2,arity4,arity8,arity11,arity16,arity24,arity36
+          cargo nextest run --release --no-default-features --features cuda,pasta,bls,arity2,arity4,arity8,arity11,arity16,arity24,arity36
       
