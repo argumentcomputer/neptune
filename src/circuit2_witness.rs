@@ -304,10 +304,8 @@ where
                 // mds
                 {
                     for j in 0..width {
-                        // TODO: Optimize this to avoid the Vec.
-                        let column = (0..width).map(|i| m[i][j]).collect::<Vec<_>>();
-
-                        elements_buffer[j] = scalar_product(elements, &column);
+                        elements_buffer[j] =
+                            (0..width).fold(Scalar::ZERO, |acc, i| acc + elements[i] * m[i][j]);
                     }
                     elements.copy_from_slice(&elements_buffer);
                 }
