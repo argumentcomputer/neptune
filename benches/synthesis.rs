@@ -8,7 +8,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ff::Field;
 use generic_array::typenum;
 use neptune::circuit::{poseidon_hash_circuit, CircuitType};
-use neptune::circuit2::poseidon_hash_allocated_mut;
+use neptune::circuit2::poseidon_hash_allocated;
 use neptune::*;
 use rand::thread_rng;
 use std::marker::PhantomData;
@@ -27,11 +27,16 @@ impl<A: Arity<Fr>> BenchCircuit<'_, A> {
         constants: &PoseidonConstants<Fr, A>,
     ) -> Result<(), SynthesisError> {
         for _ in 0..self.n {
-            let _ = if self.circuit_type.is_some() {
-                poseidon_hash_circuit(cs, *self.circuit_type.unwrap(), data.clone(), constants)
-                    .expect("poseidon hashing failed");
+            if self.circuit_type.is_some() {
+                poseidon_hash_circuit(
+                    &mut cs.namespace(|| "{i}"),
+                    *self.circuit_type.unwrap(),
+                    data.clone(),
+                    constants,
+                )
+                .expect("poseidon hashing failed");
             } else {
-                poseidon_hash_allocated_mut(cs, data.clone(), constants)
+                poseidon_hash_allocated(&mut cs.namespace(|| "{i}"), data.clone(), constants)
                     .expect("poseidon hashing failed");
             };
         }

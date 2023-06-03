@@ -437,21 +437,7 @@ where
 
 /// Create circuit for Poseidon hash, returning an allocated `Num` at the cost of one constraint.
 pub fn poseidon_hash_allocated<CS, Scalar, A>(
-    mut cs: CS,
-    preimage: Vec<AllocatedNum<Scalar>>,
-    constants: &PoseidonConstants<Scalar, A>,
-) -> Result<AllocatedNum<Scalar>, SynthesisError>
-where
-    CS: ConstraintSystem<Scalar>,
-    Scalar: PrimeField,
-    A: Arity<Scalar>,
-{
-    poseidon_hash_allocated_mut(&mut cs, preimage, constants)
-}
-
-/// Create circuit for Poseidon hash, returning an allocated `Num` at the cost of one constraint.
-pub fn poseidon_hash_allocated_mut<CS, Scalar, A>(
-    cs: &mut CS,
+    cs: CS,
     preimage: Vec<AllocatedNum<Scalar>>,
     constants: &PoseidonConstants<Scalar, A>,
 ) -> Result<AllocatedNum<Scalar>, SynthesisError>
@@ -461,7 +447,8 @@ where
     A: Arity<Scalar>,
 {
     if cs.is_witness_generator() {
-        poseidon_hash_allocated_witness(cs, &preimage, constants)
+        let mut cs = cs;
+        poseidon_hash_allocated_witness(&mut cs, &preimage, constants)
     } else {
         let arity = A::to_usize();
         let tag_element = Elt::num_from_fr::<CS>(constants.domain_tag);
