@@ -10,7 +10,7 @@ resolver = "2"
 rust-version = "1.62.1"
 
 [dependencies]
-bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "witness-cs" }
+bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "master" }
 blake2s_simd = "0.5"
 blstrs = { version = "0.7.0", optional = true }
 byteorder = "1"
