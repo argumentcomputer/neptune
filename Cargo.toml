@@ -73,3 +73,6 @@ pasta = ["pasta_curves/gpu"]
 members = [
   "gbench",
 ]
+
+[patch.crates-io]
+pasta_curves = { git = "https://github.com/lurk-lab/pasta_curves.git", branch = "uncompressed" }
