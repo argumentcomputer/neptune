@@ -7,7 +7,7 @@ edition = "2018"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-bellperson = { version = "0.25.0", default-features = false }
+bellperson = { git="https://github.com/lurk-lab/bellperson", branch="dev", default-features = false }
 blake2s_simd = "0.5"
 byteorder = "1"
 env_logger = "0.7.1"
@@ -18,8 +18,8 @@ neptune = { path = "../", default-features = false, features = ["arity8", "arity
 structopt = { version = "0.3", default-features = false }
 blstrs = { version = "0.7.0", features = ["gpu"] }
 pasta_curves = { version = "0.5.1", features = ["gpu"]}
-ec-gpu = "0.2.0"
-ec-gpu-gen = "0.6.0"
+ec-gpu = { git="https://github.com/lurk-lab/ec-gpu", branch="dev" }
+ec-gpu-gen = { git="https://github.com/lurk-lab/ec-gpu", branch="dev" }
 
 [features]
 default = ["opencl"]
