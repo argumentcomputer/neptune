@@ -85,15 +85,15 @@ members = [
 
 # Dependencies that should be kept in sync through the whole workspace
 [workspace.dependencies]
-bellpepper-core = { version = "0.4.0", default-features = false }
-bellpepper = { version = "0.4.0", default-features = false }
+bellpepper-core = { git = "https://github.com/lurk-lab/bellpepper", branch = "dev", default-features = false }
+bellpepper = { git = "https://github.com/lurk-lab/bellpepper", branch = "dev", default-features = false }
 blake2s_simd = "1.0.1"
 blstrs = { version = "0.7.0" }
 ff = "0.13.0"
-generic-array = "1.0"
-pasta_curves = { version = "0.5" }
-ec-gpu = { version = "0.2.0" }
-ec-gpu-gen = { version = "0.7.0" }
+generic-array = "0.14.7"
+pasta_curves = { git="https://github.com/lurk-lab/pasta_curves", branch="dev" }
+ec-gpu = { git="https://github.com/lurk-lab/ec-gpu", branch="dev" }
+ec-gpu-gen = { git="https://github.com/lurk-lab/ec-gpu", branch="dev" }
 log = "0.4.19"
 byteorder = "1"
 
