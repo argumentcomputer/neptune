@@ -10,17 +10,17 @@ resolver = "2"
 rust-version = "1.62.1"
 
 [dependencies]
-bellperson = { version = "0.25", default-features = false }
+bellperson = { git="https://github.com/lurk-lab/bellperson", branch="dev", default-features = false }
 blake2s_simd = "0.5"
 blstrs = { version = "0.7.0", optional = true }
 byteorder = "1"
-ec-gpu = { version = "0.2.0", optional = true }
-ec-gpu-gen = { version = "0.6.0", optional = true }
+ec-gpu = { git="https://github.com/lurk-lab/ec-gpu", branch="dev", optional = true }
+ec-gpu-gen = { git="https://github.com/lurk-lab/ec-gpu", branch="dev", optional = true }
 ff = "0.13.0"
 generic-array = "0.14.6"
 itertools = { version = "0.8.2" }
 log = "0.4.17"
-pasta_curves = { version = "0.5", features = ["serde"] }
+pasta_curves = { git="https://github.com/lurk-lab/pasta_curves", branch="dev", features = ["serde"] }
 trait-set = "0.3.0"
 serde = { version = "1.0", features = ["derive"] }
 
@@ -35,9 +35,9 @@ sha2 = "0.9"
 
 [build-dependencies]
 blstrs = "0.7.0"
-ec-gpu = { version = "0.2.0", optional = true }
-ec-gpu-gen = { version = "0.6.0", optional = true }
-pasta_curves = { version = "0.5", features = ["serde"] }
+ec-gpu = { git="https://github.com/lurk-lab/ec-gpu", branch="dev", optional = true }
+ec-gpu-gen = { git="https://github.com/lurk-lab/ec-gpu", branch="dev", optional = true }
+pasta_curves = { git="https://github.com/lurk-lab/pasta_curves", branch="dev", features = ["serde"] }
 
 [[bench]]
 name = "hash"
