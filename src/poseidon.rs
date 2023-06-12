@@ -82,8 +82,7 @@ where
 /// See original [Poseidon paper](https://eprint.iacr.org/2019/458.pdf) for more details.
 #[derive(Debug, Clone, PartialEq, Abomonation)]
 #[abomonation_bounds(where F::Repr: Abomonation)]
-pub struct PoseidonConstants<F: PrimeField, A: Arity<F>>
-{
+pub struct PoseidonConstants<F: PrimeField, A: Arity<F>> {
     pub mds_matrices: MdsMatrices<F>,
     #[abomonate_with(Option<Vec<F::Repr>>)]
     pub round_constants: Option<Vec<F>>, // TODO: figure out how to automatically allocate `None`
@@ -1280,7 +1279,7 @@ mod tests {
             default_constants.partial_rounds
         );
     }
-    
+
     #[test]
     fn roundtrip_abomonation() {
         let mut constants = PoseidonConstants::<Fr, U2>::new();

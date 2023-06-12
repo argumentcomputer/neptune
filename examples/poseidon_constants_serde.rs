@@ -14,8 +14,8 @@ fn main() {
 
     if let Some((result, remaining)) = unsafe { decode::<PoseidonConstants<Fr, U24>>(&mut bytes) } {
         let constants = PoseidonConstants::<Fr, U24>::new_with_strength(Strength::Standard);
-        assert!(result.clone() == constants.clone(), "not equal!");
-        assert!(remaining.len() == 0);
+        assert!(result.clone() == constants, "not equal!");
+        assert!(remaining.is_empty());
     } else {
         println!("Something terrible happened");
     }
