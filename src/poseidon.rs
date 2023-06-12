@@ -1291,7 +1291,7 @@ mod tests {
             unsafe { decode::<PoseidonConstants<Fr, U2>>(&mut bytes) }
         {
             assert!(result == &constants);
-            assert!(remaining.len() == 0);
+            assert!(remaining.is_empty());
         }
     }
 }
