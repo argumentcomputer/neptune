@@ -3,10 +3,10 @@ name: Rust
 on:
   merge_group:
   push:
-    branches-ignored: [master]
+    branches-ignored: [main]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    branches: [master]
+    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
