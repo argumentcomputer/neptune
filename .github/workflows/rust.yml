@@ -3,10 +3,10 @@ name: Rust
 on:
   merge_group:
   push:
-    branches-ignored: [master]
+    branches-ignored: [main]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    branches: [master]
+    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
@@ -95,10 +95,6 @@ jobs:
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITITES: compute,utility
       EC_GPU_FRAMEWORK: cuda
-      # The `compute`/`sm` number corresponds to the Nvidia GPU architecture
-      # In this case, the self-hosted machine uses the Ampere architecture
-      # See https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/
-      EC_GPU_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_86 --generate-code=arch=compute_86,code=sm_86
     steps:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
@@ -106,6 +102,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # Check we have access to the machine's Nvidia drivers
       - run: nvidia-smi
+      # The `compute`/`sm` number corresponds to the Nvidia GPU architecture
+      # In this case, the self-hosted machine uses the Ampere architecture, but we want this to be configurable
+      # See https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/
+      - name: Set env for CUDA compute
+        run: echo "CUDA_ARCH=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | sed 's/\.//g')" >> $GITHUB_ENV
+      - name: set env for EC_GPU
+        run: echo 'EC_GPU_CUDA_NVCC_ARGS=--fatbin --gpu-architecture=sm_${{ env.CUDA_ARCH }} --generate-code=arch=compute_${{ env.CUDA_ARCH }},code=sm_${{ env.CUDA_ARCH }}' >> $GITHUB_ENV
+      - run: echo "${{ env.EC_GPU_CUDA_NVCC_ARGS}}"
       # Check that CUDA is installed with a driver-compatible version
       # This must also be compatible with the GPU architecture, see above link
       - run: nvcc --version
@@ -121,10 +125,6 @@ jobs:
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITITES: compute,utility
       EC_GPU_FRAMEWORK: opencl
-      # The `compute`/`sm` number corresponds to the Nvidia GPU architecture
-      # In this case, the self-hosted machine uses the Ampere architecture
-      # See https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/
-      EC_GPU_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_86 --generate-code=arch=compute_86,code=sm_86
     steps:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
@@ -136,6 +136,14 @@ jobs:
           apt-get -y install ocl-icd-opencl-dev
       # Check we have access to the machine's Nvidia drivers
       - run: nvidia-smi
+      # The `compute`/`sm` number corresponds to the Nvidia GPU architecture
+      # In this case, the self-hosted machine uses the Ampere architecture, but we want this to be configurable
+      # See https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/
+      - name: Set env for CUDA compute
+        run: echo "CUDA_ARCH=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | sed 's/\.//g')" >> $GITHUB_ENV
+      - name: set env for EC_GPU
+        run: echo 'EC_GPU_CUDA_NVCC_ARGS=--fatbin --gpu-architecture=sm_${{ env.CUDA_ARCH }} --generate-code=arch=compute_${{ env.CUDA_ARCH }},code=sm_${{ env.CUDA_ARCH }}' >> $GITHUB_ENV
+      - run: echo "${{ env.EC_GPU_CUDA_NVCC_ARGS}}"
       # Check that CUDA is installed with a driver-compatible version
       # This must also be compatible with the GPU architecture, see above link
       - run: nvcc --version
