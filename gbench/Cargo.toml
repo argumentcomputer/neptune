@@ -16,8 +16,8 @@ generic-array = "0.14.6"
 log = "0.4.17"
 neptune = { path = "../", default-features = false, features = ["arity8", "arity11", "bls", "pasta"] }
 structopt = { version = "0.3", default-features = false }
-blstrs = { version = "0.7.0", features = ["gpu"] }
-pasta_curves = { version = "0.5.1", features = ["gpu"]}
+blstrs = { git="https://github.com/lurk-lab/blstrs.git", branch="dev", features = ["gpu"] }
+pasta_curves = { git="https://github.com/lurk-lab/pasta_curves.git", branch="dev", features = ["gpu"]}
 ec-gpu = { git="https://github.com/lurk-lab/ec-gpu", branch="dev" }
 ec-gpu-gen = { git="https://github.com/lurk-lab/ec-gpu", branch="dev" }
 
