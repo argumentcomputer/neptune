@@ -78,7 +78,7 @@ members = [
 [workspace.dependencies]
 bellperson = { git="https://github.com/lurk-lab/bellperson", branch="dev", default-features = false }
 blake2s_simd = "0.5"
-blstrs = { version = "0.7.0" }
+blstrs = { git="https://github.com/lurk-lab/blstrs.git", branch="dev"}
 ff = "0.13.0"
 generic-array = "0.14.6"
 pasta_curves = { git="https://github.com/lurk-lab/pasta_curves", branch="dev" }
