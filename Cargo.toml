@@ -88,7 +88,7 @@ members = [
 bellpepper-core = { git = "https://github.com/lurk-lab/bellpepper", branch = "dev", default-features = false }
 bellpepper = { git = "https://github.com/lurk-lab/bellpepper", branch = "dev", default-features = false }
 blake2s_simd = "1.0.1"
-blstrs = { version = "0.7.0" }
+blstrs = { git="https://github.com/lurk-lab/blstrs.git", branch="dev"}
 ff = "0.13.0"
 generic-array = "0.14.7"
 pasta_curves = { git="https://github.com/lurk-lab/pasta_curves", branch="dev" }
