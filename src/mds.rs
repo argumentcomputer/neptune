@@ -1,6 +1,8 @@
 // Allow `&Matrix` in function signatures.
 #![allow(clippy::ptr_arg)]
 
+use abomonation::Abomonation;
+use abomonation_derive::Abomonation;
 use ff::PrimeField;
 use serde::{Deserialize, Serialize};
 
@@ -9,13 +11,20 @@ use crate::matrix::{
     apply_matrix, invert, is_identity, is_invertible, is_square, mat_mul, minor, transpose, Matrix,
 };
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Abomonation)]
+#[abomonation_bounds(where F::Repr: Abomonation)]
 pub struct MdsMatrices<F: PrimeField> {
+    #[abomonate_with(Vec<Vec<F::Repr>>)]
     pub m: Matrix<F>,
+    #[abomonate_with(Vec<Vec<F::Repr>>)]
     pub m_inv: Matrix<F>,
+    #[abomonate_with(Vec<Vec<F::Repr>>)]
     pub m_hat: Matrix<F>,
+    #[abomonate_with(Vec<Vec<F::Repr>>)]
     pub m_hat_inv: Matrix<F>,
+    #[abomonate_with(Vec<Vec<F::Repr>>)]
     pub m_prime: Matrix<F>,
+    #[abomonate_with(Vec<Vec<F::Repr>>)]
     pub m_double_prime: Matrix<F>,
 }
 
@@ -45,11 +54,14 @@ pub fn derive_mds_matrices<F: PrimeField>(m: Matrix<F>) -> MdsMatrices<F> {
 /// This means its first row and column are each dense, and the interior matrix
 /// (minor to the element in both the row and column) is the identity.
 /// We will pluralize this compact structure `sparse_matrixes` to distinguish from `sparse_matrices` from which they are created.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Abomonation)]
+#[abomonation_bounds(where F::Repr: Abomonation)]
 pub struct SparseMatrix<F: PrimeField> {
     /// `w_hat` is the first column of the M'' matrix. It will be directly multiplied (scalar product) with a row of state elements.
+    #[abomonate_with(Vec<F::Repr>)]
     pub w_hat: Vec<F>,
     /// `v_rest` contains all but the first (already included in `w_hat`).
+    #[abomonate_with(Vec<F::Repr>)]
     pub v_rest: Vec<F>,
 }
 

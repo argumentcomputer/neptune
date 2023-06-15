@@ -11,14 +11,17 @@
 /// `Strength` with `HashType` so that hashes with `Strength` other than `Standard` (currently only `Strengthened`)
 /// may still express the full range of hash function types.
 use crate::{Arity, Strength};
+use abomonation::Abomonation;
+use abomonation_derive::Abomonation;
 use ff::PrimeField;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Abomonation)]
 #[serde(bound(
     serialize = "F: PrimeField + Serialize, A: Arity<F>",
     deserialize = "F: PrimeField + Deserialize<'de>, A: Arity<F>"
 ))]
+#[abomonation_omit_bounds]
 pub enum HashType<F: PrimeField, A: Arity<F>> {
     MerkleTree,
     MerkleTreeSparse(u64),
@@ -71,7 +74,8 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Abomonation)]
+#[abomonation_omit_bounds]
 pub enum CType<F: PrimeField, A: Arity<F>> {
     Arbitrary(u64),
     // See: https://github.com/bincode-org/bincode/issues/424
@@ -79,6 +83,7 @@ pub enum CType<F: PrimeField, A: Arity<F>> {
     // the generated code ends up being correct. But, in the future, do not
     // carelessly add new variants to this enum.
     #[serde(skip)]
+    #[abomonation_skip]
     _Phantom((F, A)),
 }
 
