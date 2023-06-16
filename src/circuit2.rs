@@ -236,7 +236,7 @@ where
         }
     }
 
-    fn hash_to_allocated<CS: ConstraintSystem<Scalar>>(
+    pub fn hash_to_allocated<CS: ConstraintSystem<Scalar>>(
         &mut self,
         mut cs: CS,
     ) -> Result<AllocatedNum<Scalar>, SynthesisError> {
@@ -429,7 +429,7 @@ where
         self.pos = 1;
     }
 
-    fn debug(&self) {
+    pub(crate) fn debug(&self) {
         let element_frs: Vec<_> = self.elements.iter().map(|n| n.val()).collect::<Vec<_>>();
         dbg!(element_frs, self.constants_offset);
     }

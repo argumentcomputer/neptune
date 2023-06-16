@@ -104,7 +104,6 @@ where
     fn num_aux(&self) -> usize {
         self.num_constraints()
     }
-
     fn generate_witness_into(&mut self, aux: &mut [Scalar], _inputs: &mut [Scalar]) -> Scalar {
         let width = A::ConstantsSize::to_usize();
         let constants = self.constants;
