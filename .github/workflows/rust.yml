@@ -67,25 +67,16 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
-          components: clippy
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       # See '.cargo/config' for list of enabled/disabled clippy lints
-      - name: cargo clippy
-        run: cargo xclippy -D warnings
-
-  rustfmt:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          components: rustfmt
-      - uses: Swatinem/rust-cache@v2
       - name: rustfmt
         uses: actions-rs/cargo@v1
         with:
           command: fmt
           args: --all --check
+      - name: cargo clippy
+        run: cargo xclippy -D warnings
 
   msrv:
     runs-on: ubuntu-latest
