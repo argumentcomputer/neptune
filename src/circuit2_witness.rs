@@ -235,7 +235,10 @@ where
 
                 // sparse mds
                 {
-                    elements_buffer[0] = scalar_product(elements, &m.w_hat);
+                    elements_buffer[0] = elements
+                        .iter()
+                        .zip(&m.w_hat)
+                        .fold(Scalar::ZERO, |acc, (&x, &y)| acc + (x * y));
 
                     for j in 1..width {
                         elements_buffer[j] = elements[j] + elements[0] * m.v_rest[j - 1];
@@ -314,12 +317,6 @@ where
 
         elements[1]
     }
-}
-
-fn scalar_product<Scalar: PrimeField>(a: &[Scalar], b: &[Scalar]) -> Scalar {
-    a.iter()
-        .zip(b)
-        .fold(Scalar::ZERO, |acc, (&x, &y)| acc + (x * y))
 }
 
 #[cfg(test)]
