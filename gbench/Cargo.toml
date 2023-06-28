@@ -7,19 +7,19 @@ edition = "2018"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-bellperson = { version = "0.25.0", default-features = false }
-blake2s_simd = "0.5"
-byteorder = "1"
+bellperson = { workspace = true, default-features = false }
+blake2s_simd = { workspace = true }
+blstrs = { workspace = true, features = ["gpu"] }
+byteorder = { workspace = true }
+ec-gpu = { workspace = true }
+ec-gpu-gen = { workspace = true }
 env_logger = "0.7.1"
-ff = "0.13.0"
-generic-array = "0.14.6"
-log = "0.4.17"
+ff = { workspace = true }
+generic-array = { workspace = true }
+log = { workspace = true }
 neptune = { path = "../", default-features = false, features = ["arity8", "arity11", "bls", "pasta"] }
+pasta_curves = { workspace = true, features = ["gpu"] }
 structopt = { version = "0.3", default-features = false }
-blstrs = { version = "0.7.0", features = ["gpu"] }
-pasta_curves = { version = "0.5.1", features = ["gpu"]}
-ec-gpu = "0.2.0"
-ec-gpu-gen = "0.6.0"
 
 [features]
 default = ["opencl"]
