@@ -8,10 +8,25 @@ use crate::sponge::{
     vanilla::{Direction, Mode, SpongeTrait},
 };
 use crate::Strength;
-use bellperson::gadgets::boolean::Boolean;
-use bellperson::gadgets::num::{self, AllocatedNum};
-use bellperson::util_cs::witness_cs::{SizedWitness, WitnessCS};
-use bellperson::{ConstraintSystem, LinearCombination, Namespace, SynthesisError};
+#[cfg(not(feature = "bellperson"))]
+use bellpepper::{
+    gadgets::{
+        boolean::Boolean,
+        num::{self, AllocatedNum},
+    },
+    util_cs::witness_cs::{SizedWitness, WitnessCS},
+    ConstraintSystem, LinearCombination, Namespace, SynthesisError,
+};
+#[cfg(feature = "bellperson")]
+use bellperson::{
+    gadgets::{
+        boolean::Boolean,
+        num::{self, AllocatedNum},
+    },
+    util_cs::witness_cs::{SizedWitness, WitnessCS},
+    ConstraintSystem, LinearCombination, Namespace, SynthesisError,
+};
+
 use ff::{Field, PrimeField};
 use std::collections::VecDeque;
 use std::marker::PhantomData;
@@ -254,6 +269,12 @@ mod tests {
     use super::*;
     use crate::sponge::vanilla::Sponge;
 
+    #[cfg(not(feature = "bellperson"))]
+    use bellpepper::{
+        util_cs::{test_cs::TestConstraintSystem, witness_cs::WitnessCS},
+        Circuit,
+    };
+    #[cfg(feature = "bellperson")]
     use bellperson::{
         util_cs::{test_cs::TestConstraintSystem, witness_cs::WitnessCS},
         Circuit,

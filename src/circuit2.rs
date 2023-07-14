@@ -6,10 +6,27 @@ use crate::hash_type::HashType;
 use crate::matrix::Matrix;
 use crate::mds::SparseMatrix;
 use crate::poseidon::{Arity, PoseidonConstants};
-use bellperson::gadgets::boolean::Boolean;
-use bellperson::gadgets::num::{self, AllocatedNum};
-use bellperson::gadgets::test::TestConstraintSystem;
-use bellperson::{ConstraintSystem, LinearCombination, SynthesisError};
+
+#[cfg(feature = "bellperson")]
+use bellperson::{
+    gadgets::{
+        boolean::Boolean,
+        num::{self, AllocatedNum},
+        test::TestConstraintSystem,
+    },
+    ConstraintSystem, LinearCombination, SynthesisError,
+};
+
+#[cfg(not(feature = "bellperson"))]
+use bellpepper::{
+    gadgets::{
+        boolean::Boolean,
+        num::{self, AllocatedNum},
+        test::TestConstraintSystem,
+    },
+    ConstraintSystem, LinearCombination, SynthesisError,
+};
+
 use ff::{Field, PrimeField};
 use std::marker::PhantomData;
 
@@ -699,8 +716,10 @@ mod tests {
     use super::*;
     use crate::poseidon::HashMode;
     use crate::{Poseidon, Strength};
-    use bellperson::util_cs::test_cs::TestConstraintSystem;
-    use bellperson::ConstraintSystem;
+    #[cfg(not(feature = "bellperson"))]
+    use bellpepper::{util_cs::test_cs::TestConstraintSystem, ConstraintSystem};
+    #[cfg(feature = "bellperson")]
+    use bellperson::{util_cs::test_cs::TestConstraintSystem, ConstraintSystem};
     use blstrs::Scalar as Fr;
     use generic_array::typenum;
     use rand::SeedableRng;

@@ -6,12 +6,27 @@ use crate::hash_type::HashType;
 use crate::matrix::Matrix;
 use crate::mds::SparseMatrix;
 use crate::poseidon::{Arity, Poseidon, PoseidonConstants};
-use bellperson::util_cs::witness_cs::SizedWitness;
+#[cfg(not(feature = "bellperson"))]
+use bellpepper::{
+    gadgets::{
+        boolean::Boolean,
+        num::{self, AllocatedNum},
+        test::TestConstraintSystem,
+    },
+    util_cs::witness_cs::SizedWitness,
+    ConstraintSystem, LinearCombination, SynthesisError,
+};
+#[cfg(feature = "bellperson")]
+use bellperson::{
+    gadgets::{
+        boolean::Boolean,
+        num::{self, AllocatedNum},
+        test::TestConstraintSystem,
+    },
+    util_cs::witness_cs::SizedWitness,
+    ConstraintSystem, LinearCombination, SynthesisError,
+};
 
-use bellperson::gadgets::boolean::Boolean;
-use bellperson::gadgets::num::{self, AllocatedNum};
-use bellperson::gadgets::test::TestConstraintSystem;
-use bellperson::{ConstraintSystem, LinearCombination, SynthesisError};
 use ff::{Field, PrimeField};
 use generic_array::sequence::GenericSequence;
 use generic_array::typenum::Unsigned;
@@ -324,8 +339,16 @@ mod test {
     use crate::circuit2;
     use crate::poseidon::HashMode;
     use crate::{Poseidon, Strength};
-    use bellperson::util_cs::{test_cs::TestConstraintSystem, witness_cs::WitnessCS, Comparable};
-    use bellperson::ConstraintSystem;
+    #[cfg(not(feature = "bellperson"))]
+    use bellpepper::{
+        util_cs::{test_cs::TestConstraintSystem, witness_cs::WitnessCS, Comparable},
+        ConstraintSystem,
+    };
+    #[cfg(feature = "bellperson")]
+    use bellperson::{
+        util_cs::{test_cs::TestConstraintSystem, witness_cs::WitnessCS, Comparable},
+        ConstraintSystem,
+    };
     use blstrs::Scalar as Fr;
     use generic_array::typenum;
     use rand::SeedableRng;
