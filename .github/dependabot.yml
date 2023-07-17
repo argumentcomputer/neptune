@@ -1,0 +1,16 @@
+  - package-ecosystem: cargo
+    directory: /
+    pull-request-branch-name:
+      separator: "-"
+    schedule:
+      interval: weekly
+    groups:
+      rust-dependencies:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
