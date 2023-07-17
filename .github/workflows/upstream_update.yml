@@ -46,7 +46,7 @@ jobs:
       if: steps.rebase.outcome == 'success'
     - name: Run a trivial test
       id: test
-      run: cargo check --all --tests --benches
+      run: cargo check --tests --benches
       if: steps.rebase.outcome == 'success'
       continue-on-error: true
 
