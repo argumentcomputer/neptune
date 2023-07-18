@@ -29,7 +29,7 @@ blstrs = { workspace = true }
 criterion = "0.4.0"
 rand = "0.8.5"
 rand_xorshift = "0.3.0"
-serde_json = "1.0.94"
+serde_json = "1.0.103"
 sha2 = "0.9"
 
 [build-dependencies]
@@ -80,9 +80,9 @@ bellperson = { version = "0.25", default-features = false }
 blake2s_simd = "0.5"
 blstrs = { version = "0.7.0" }
 ff = "0.13.0"
-generic-array = "0.14.6"
+generic-array = "0.14.7"
 pasta_curves = { version = "0.5" }
 ec-gpu = { version = "0.2.0" }
 ec-gpu-gen = { version = "0.6.0" }
-log = "0.4.17"
+log = "0.4.19"
 byteorder = "1"
