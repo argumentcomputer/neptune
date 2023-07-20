@@ -97,7 +97,7 @@ where
     fn element(&self, index: usize) -> Self::Elt;
     fn set_element(&mut self, index: usize, elt: Self::Elt);
 
-    /// `make_elt` is deprecated and will be removed. Do not use.
+    #[deprecated(since = "0.10.0")]
     fn make_elt(&self, val: F, acc: &mut Self::Acc) -> Self::Elt;
 
     fn is_simplex(&self) -> bool {
