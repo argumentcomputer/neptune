@@ -41,6 +41,7 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
+        arith: ["", "bellperson"]
       fail-fast: false
     env:
       RUSTFLAGS: -D warnings
@@ -51,15 +52,19 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # make sure benches don't bit-rot
       - name: build benches
-        # TODO: --all-features
         run: cargo build --benches --release
       - name: cargo test
-        # TODO: --all-features
         run: |
-          cargo nextest run --release
+          cargo nextest run --release --features ${{ matrix.arith }}
+        if: ${{ matrix.arith != '' }}
+      - run: cargo nextest run --release
+        if: ${{ matrix.arith == '' }}
       - name: Doctests
         run: |
-          cargo test --doc
+          cargo test --doc --features ${{ matrix.arith }}
+        if: ${{ matrix.arith != '' }}
+      - run: cargo test --doc
+        if: ${{ matrix.arith == '' }}
 
   clippy:
     runs-on: ubuntu-latest
@@ -87,6 +92,7 @@ jobs:
       with:
         toolchain: stable
         override: true
+    - uses: Swatinem/rust-cache@v2
     - name: Install cargo-msrv
       run: cargo install cargo-msrv
     - name: Check Rust MSRV
@@ -96,6 +102,9 @@ jobs:
   test-cuda:
     name: Rust tests on CUDA
     runs-on: self-hosted
+    strategy:
+      matrix:
+        arith: ["", "bellperson"]
     env:
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITITES: compute,utility
@@ -120,7 +129,7 @@ jobs:
       - run: nvcc --version
       - name: CUDA tests
         run: |
-          cargo nextest run --release --no-default-features --features cuda,pasta,bls,arity2,arity4,arity8,arity11,arity16,arity24,arity36
+          cargo nextest run --release --no-default-features --features cuda,pasta,bls,arity2,arity4,arity8,arity11,arity16,arity24,arity36,${{matrix.arith}}
 
     # Runs the test suite on a self-hosted GPU machine with CUDA and OpenCL enabled (that is using the OpenCL backend for NVIDIA GPUs)
   test-opencl:
@@ -156,5 +165,4 @@ jobs:
       - run: clinfo
       - name: OpenCL tests
         run: |
-          cargo nextest run --release --all-features
-      
+          cargo nextest run --release --no-default-features --features cuda,opencl,pasta,bls,arity2,arity4,arity8,arity11,arity16,arity24,arity36,${{matrix.arith}}
