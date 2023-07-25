@@ -1,0 +1,5 @@
+too-many-arguments-threshold = 20
+disallowed-methods = [
+    # we use a re-export to import bellperson
+    { path = "bellperson", reason = "use our custom inditection bellbar instead" },
+]

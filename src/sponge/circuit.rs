@@ -1,3 +1,6 @@
+use crate::bellbar::gadgets::boolean::Boolean;
+use crate::bellbar::gadgets::num::{self, AllocatedNum};
+use crate::bellbar::{ConstraintSystem, LinearCombination, Namespace, SynthesisError};
 use crate::circuit2::{self, Elt, PoseidonCircuit2};
 use crate::hash_type::HashType;
 use crate::matrix::Matrix;
@@ -8,9 +11,6 @@ use crate::sponge::{
     vanilla::{Direction, Mode, SpongeTrait},
 };
 use crate::Strength;
-use bellperson::gadgets::boolean::Boolean;
-use bellperson::gadgets::num::{self, AllocatedNum};
-use bellperson::{ConstraintSystem, LinearCombination, Namespace, SynthesisError};
 use ff::{Field, PrimeField};
 use std::collections::VecDeque;
 use std::marker::PhantomData;
@@ -236,7 +236,7 @@ mod tests {
     use super::*;
     use crate::sponge::vanilla::Sponge;
 
-    use bellperson::{util_cs::test_cs::TestConstraintSystem, Circuit};
+    use crate::bellbar::{util_cs::test_cs::TestConstraintSystem, Circuit};
     use blstrs::Scalar as Fr;
     use generic_array::typenum;
     use rand::{Rng, SeedableRng};

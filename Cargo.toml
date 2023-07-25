@@ -9,7 +9,8 @@ repository = "https://github.com/lurk-lab/neptune"
 rust-version = "1.64.0"
 
 [dependencies]
-bellperson = { workspace = true }
+bellpepper = { workspace = true }
+bellperson = { workspace = true, optional = true }
 blake2s_simd = { workspace = true }
 blstrs = { workspace = true, optional = true }
 byteorder = { workspace = true }
@@ -51,8 +52,9 @@ incremental = false
 codegen-units = 1
 
 [features]
-default = ["bellperson/default"]
+default = []
 cuda = ["ec-gpu-gen/cuda", "ec-gpu", "pasta_curves/gpu"]
+bellperson = ["bellperson/default"]
 opencl = ["ec-gpu-gen/opencl", "ec-gpu", "pasta_curves/gpu"]
 # The supported arities for Poseidon running on the GPU are specified at compile-time.
 arity2 = []
@@ -77,6 +79,7 @@ members = [
 # Dependencies that should be kept in sync through the whole workspace
 [workspace.dependencies]
 bellperson = { version = "0.25", default-features = false }
+bellpepper = { version = "0.1.2", default-features = false }
 blake2s_simd = "0.5"
 blstrs = { version = "0.7.0" }
 ff = "0.13.0"

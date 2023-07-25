@@ -1,14 +1,14 @@
 /// The `circuit2` module implements the optimal Poseidon hash circuit.
 use std::ops::{AddAssign, MulAssign};
 
+use crate::bellbar::gadgets::boolean::Boolean;
+use crate::bellbar::gadgets::num::{self, AllocatedNum};
+use crate::bellbar::gadgets::test::TestConstraintSystem;
+use crate::bellbar::{ConstraintSystem, LinearCombination, SynthesisError};
 use crate::hash_type::HashType;
 use crate::matrix::Matrix;
 use crate::mds::SparseMatrix;
 use crate::poseidon::{Arity, PoseidonConstants};
-use bellperson::gadgets::boolean::Boolean;
-use bellperson::gadgets::num::{self, AllocatedNum};
-use bellperson::gadgets::test::TestConstraintSystem;
-use bellperson::{ConstraintSystem, LinearCombination, SynthesisError};
 use ff::{Field, PrimeField};
 use std::marker::PhantomData;
 
@@ -693,10 +693,10 @@ fn scalar_product<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bellbar::util_cs::test_cs::TestConstraintSystem;
+    use crate::bellbar::ConstraintSystem;
     use crate::poseidon::HashMode;
     use crate::{Poseidon, Strength};
-    use bellperson::util_cs::test_cs::TestConstraintSystem;
-    use bellperson::ConstraintSystem;
     use blstrs::Scalar as Fr;
     use generic_array::typenum;
     use rand::SeedableRng;
