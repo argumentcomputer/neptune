@@ -3,7 +3,9 @@ name: Rust
 on:
   merge_group:
   push:
-    branches-ignored: [main]
+    branches-ignore:
+      - "gh-readonly-queue/**"
+      - "main"
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
@@ -157,4 +159,3 @@ jobs:
       - name: OpenCL tests
         run: |
           cargo nextest run --release --all-features
-      
