@@ -9,7 +9,7 @@ repository = "https://github.com/lurk-lab/neptune"
 rust-version = "1.64.0"
 
 [dependencies]
-bellperson = { workspace = true }
+bellpepper-core = { workspace = true }
 blake2s_simd = { workspace = true }
 blstrs = { workspace = true, optional = true }
 byteorder = { workspace = true }
@@ -25,6 +25,7 @@ trait-set = "0.3.0"
 
 [dev-dependencies]
 bincode = "1.3.3"
+bellpepper = { workspace = true }
 blstrs = { workspace = true }
 criterion = "0.4.0"
 rand = "0.8.5"
@@ -51,7 +52,7 @@ incremental = false
 codegen-units = 1
 
 [features]
-default = ["bellperson/default"]
+default = []
 cuda = ["ec-gpu-gen/cuda", "ec-gpu", "pasta_curves/gpu"]
 opencl = ["ec-gpu-gen/opencl", "ec-gpu", "pasta_curves/gpu"]
 # The supported arities for Poseidon running on the GPU are specified at compile-time.
@@ -76,7 +77,8 @@ members = [
 
 # Dependencies that should be kept in sync through the whole workspace
 [workspace.dependencies]
-bellperson = { version = "0.25", default-features = false }
+bellpepper-core = { path="../bellpepper/crates/bellpepper-core", default-features = false }
+bellpepper = { path="../bellpepper/crates/bellpepper", default-features = false }
 blake2s_simd = "0.5"
 blstrs = { version = "0.7.0" }
 ff = "0.13.0"

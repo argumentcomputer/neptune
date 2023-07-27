@@ -5,10 +5,10 @@ use crate::hash_type::HashType;
 use crate::matrix::Matrix;
 use crate::mds::SparseMatrix;
 use crate::poseidon::{Arity, PoseidonConstants};
-use bellperson::gadgets::boolean::Boolean;
-use bellperson::gadgets::num::{self, AllocatedNum};
-use bellperson::gadgets::test::TestConstraintSystem;
-use bellperson::{ConstraintSystem, LinearCombination, SynthesisError};
+use bellpepper_core::boolean::Boolean;
+use bellpepper_core::num::{self, AllocatedNum};
+use bellpepper_core::test_cs::TestConstraintSystem;
+use bellpepper_core::{ConstraintSystem, LinearCombination, SynthesisError};
 use ff::{Field, PrimeField};
 use std::marker::PhantomData;
 
@@ -695,8 +695,8 @@ mod tests {
     use super::*;
     use crate::poseidon::HashMode;
     use crate::{Poseidon, Strength};
-    use bellperson::util_cs::test_cs::TestConstraintSystem;
-    use bellperson::ConstraintSystem;
+    use bellpepper_core::test_cs::TestConstraintSystem;
+    use bellpepper_core::ConstraintSystem;
     use blstrs::Scalar as Fr;
     use generic_array::typenum;
     use rand::SeedableRng;

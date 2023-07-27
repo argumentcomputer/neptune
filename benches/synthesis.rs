@@ -1,7 +1,7 @@
 use crate::poseidon::{Arity, PoseidonConstants};
-use bellperson::gadgets::num::AllocatedNum;
-use bellperson::util_cs::bench_cs::BenchCS;
-use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use bellpepper::util_cs::bench_cs::BenchCS;
+use bellpepper_core::num::AllocatedNum;
+use bellpepper_core::{Circuit, ConstraintSystem, SynthesisError};
 use blstrs::Scalar as Fr;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ff::Field;

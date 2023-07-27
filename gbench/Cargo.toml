@@ -7,7 +7,7 @@ edition = "2018"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-bellperson = { workspace = true, default-features = false }
+bellpepper-core = { workspace = true, default-features = false }
 blake2s_simd = { workspace = true }
 blstrs = { workspace = true, features = ["gpu"] }
 byteorder = { workspace = true }
@@ -23,5 +23,5 @@ structopt = { version = "0.3", default-features = false }
 
 [features]
 default = ["opencl"]
-cuda = ["neptune/cuda", "bellperson/cuda", "ec-gpu-gen/cuda"]
-opencl = ["neptune/opencl", "bellperson/opencl", "ec-gpu-gen/opencl"]
+cuda = ["neptune/cuda", "ec-gpu-gen/cuda"]
+opencl = ["neptune/opencl", "ec-gpu-gen/opencl"]
