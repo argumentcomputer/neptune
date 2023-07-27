@@ -77,8 +77,8 @@ members = [
 
 # Dependencies that should be kept in sync through the whole workspace
 [workspace.dependencies]
-bellpepper-core = { path="../bellpepper/crates/bellpepper-core", default-features = false }
-bellpepper = { path="../bellpepper/crates/bellpepper", default-features = false }
+bellpepper-core = { git="https://github.com/huitseeker/bellpepper.git", branch="split_traits", default-features = false }
+bellpepper = { git="https://github.com/huitseeker/bellpepper.git", branch="split_traits", default-features = false }
 blake2s_simd = "0.5"
 blstrs = { version = "0.7.0" }
 ff = "0.13.0"
