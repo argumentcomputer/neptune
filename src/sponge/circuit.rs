@@ -8,9 +8,9 @@ use crate::sponge::{
     vanilla::{Direction, Mode, SpongeTrait},
 };
 use crate::Strength;
-use bellperson::gadgets::boolean::Boolean;
-use bellperson::gadgets::num::{self, AllocatedNum};
-use bellperson::{ConstraintSystem, LinearCombination, Namespace, SynthesisError};
+use bellpepper_core::boolean::Boolean;
+use bellpepper_core::num::{self, AllocatedNum};
+use bellpepper_core::{ConstraintSystem, LinearCombination, Namespace, SynthesisError};
 use ff::{Field, PrimeField};
 use std::collections::VecDeque;
 use std::marker::PhantomData;
@@ -236,7 +236,7 @@ mod tests {
     use super::*;
     use crate::sponge::vanilla::Sponge;
 
-    use bellperson::{util_cs::test_cs::TestConstraintSystem, Circuit};
+    use bellpepper_core::{test_cs::TestConstraintSystem, Circuit};
     use blstrs::Scalar as Fr;
     use generic_array::typenum;
     use rand::{Rng, SeedableRng};
