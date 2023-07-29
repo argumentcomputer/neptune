@@ -8,6 +8,7 @@ use crate::sponge::{
     vanilla::{Direction, Mode, SpongeTrait},
 };
 use crate::Strength;
+use bellpepper::util_cs::witness_cs::{SizedWitness, WitnessCS};
 use bellpepper_core::boolean::Boolean;
 use bellpepper_core::num::{self, AllocatedNum};
 use bellpepper_core::{ConstraintSystem, LinearCombination, Namespace, SynthesisError};
@@ -32,6 +33,7 @@ where
     queue: VecDeque<Elt<F>>,
     pattern: IOPattern,
     io_count: usize,
+    poseidon: Poseidon<'a, F, A>,
     _c: PhantomData<C>,
 }
 
@@ -54,6 +56,7 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
             state: PoseidonCircuit2::new_empty::<CS>(constants),
             queue: VecDeque::with_capacity(A::to_usize()),
             pattern: IOPattern(Vec::new()),
+            poseidon: Poseidon::new(constants),
             io_count: 0,
             _c: Default::default(),
         }
@@ -98,6 +101,7 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
     }
 
     fn set_element(&mut self, index: usize, elt: Self::Elt) {
+        self.poseidon.elements[index] = elt.val().unwrap();
         self.state.elements[index] = elt;
     }
 
@@ -128,8 +132,22 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
 
     fn permute_state(&mut self, ns: &mut Self::Acc) -> Result<(), Self::Error> {
         self.permutation_count += 1;
-        self.state
-            .hash(&mut ns.namespace(|| format!("permutation {}", self.permutation_count)))?;
+
+        if ns.is_witness_generator() {
+            self.poseidon.generate_witness_into_cs(ns);
+
+            for (elt, scalar) in self
+                .state
+                .elements
+                .iter_mut()
+                .zip(self.poseidon.elements.iter())
+            {
+                *elt = Elt::num_from_fr::<CS>(*scalar);
+            }
+        } else {
+            self.state
+                .hash(&mut ns.namespace(|| format!("permutation {}", self.permutation_count)))?;
+        };
 
         Ok(())
     }
@@ -236,6 +254,7 @@ mod tests {
     use super::*;
     use crate::sponge::vanilla::Sponge;
 
+    use bellpepper::util_cs::witness_cs::WitnessCS;
     use bellpepper_core::{test_cs::TestConstraintSystem, Circuit};
     use blstrs::Scalar as Fr;
     use generic_array::typenum;
@@ -428,20 +447,39 @@ mod tests {
             SpongeOp::Squeeze(3),
         ]);
 
+        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut wcs = WitnessCS::<Fr>::new();
         let circuit_output = {
             let p = Sponge::<Fr, typenum::U5>::api_constants(Strength::Standard);
+
             let mut sponge = SpongeCircuit::new_with_constants(&p, Mode::Simplex);
-            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut wsponge = SpongeCircuit::new_with_constants(&p, Mode::Simplex);
+
             let mut ns = cs.namespace(|| "ns");
             let acc = &mut ns;
 
+            let mut wns = wcs.namespace(|| "ns");
+            let wacc = &mut wns;
+
             sponge.start(parameter.clone(), None, acc);
+            wsponge.start(parameter.clone(), None, wacc);
+            sponge.state.debug();
+            wsponge.state.debug();
             SpongeAPI::absorb(
                 &mut sponge,
                 1,
                 &[Elt::num_from_fr::<TestConstraintSystem<Fr>>(Fr::from(123))],
                 acc,
             );
+            SpongeAPI::absorb(
+                &mut wsponge,
+                1,
+                &[Elt::num_from_fr::<WitnessCS<Fr>>(Fr::from(123))],
+                wacc,
+            );
+            sponge.state.debug();
+            wsponge.state.debug();
+
             SpongeAPI::absorb(
                 &mut sponge,
                 5,
@@ -454,13 +492,45 @@ mod tests {
                 ],
                 acc,
             );
+            SpongeAPI::absorb(
+                &mut wsponge,
+                5,
+                &[
+                    Elt::num_from_fr::<WitnessCS<Fr>>(Fr::from(123)),
+                    Elt::num_from_fr::<WitnessCS<Fr>>(Fr::from(123)),
+                    Elt::num_from_fr::<WitnessCS<Fr>>(Fr::from(123)),
+                    Elt::num_from_fr::<WitnessCS<Fr>>(Fr::from(123)),
+                    Elt::num_from_fr::<WitnessCS<Fr>>(Fr::from(123)),
+                ],
+                wacc,
+            );
+            sponge.state.debug();
+            wsponge.state.debug();
 
+            dbg!("last squeeze");
             let output = SpongeAPI::squeeze(&mut sponge, 3, acc);
+            let woutput = SpongeAPI::squeeze(&mut wsponge, 3, wacc);
+
+            sponge.state.debug();
+            wsponge.state.debug();
 
             sponge.finish(acc).unwrap();
+            wsponge.finish(wacc).unwrap();
+
+            let output_scalars = output.iter().map(|x| x.val()).collect::<Vec<_>>();
+            let woutput_scalars = woutput.iter().map(|x| x.val()).collect::<Vec<_>>();
+            assert_eq!(output_scalars, woutput_scalars);
 
             output
         };
+        let cs_aux = cs.scalar_aux();
+        let wcs_aux = wcs.scalar_aux();
+        let a = &cs_aux[300..320];
+        let b = &wcs_aux[300..320];
+        dbg!(cs_aux.len(), wcs_aux.len(), a, b);
+
+        assert_eq!(None, mismatch(cs_aux, wcs_aux));
+        assert!(cs.is_satisfied());
 
         let non_circuit_output = {
             let p = Sponge::<Fr, typenum::U5>::api_constants(Strength::Standard);
@@ -657,15 +727,39 @@ mod tests {
 
     fn test_sponge_synthesis_aux<F: PrimeField, A: Arity<F>>() {
         let p: PoseidonConstants<F, A> = Sponge::api_constants(Strength::Standard);
-        let s = S { p };
+        let s = S { p: p.clone() };
+        let s2 = S { p };
 
         let mut cs = TestConstraintSystem::<F>::new();
+        let mut wcs = WitnessCS::<F>::new();
+
         s.synthesize(&mut cs).unwrap();
+        s2.synthesize(&mut wcs).unwrap();
     }
 
     #[test]
     fn test_sponge_synthesis() {
         test_sponge_synthesis_aux::<Fr, typenum::U2>();
         test_sponge_synthesis_aux::<Fr, typenum::U4>();
+    }
+
+    // Returns index of first mismatch, along with the mismatched elements if they exist.
+    #[allow(clippy::type_complexity)]
+    fn mismatch<T: PartialEq + Copy>(
+        a: Vec<T>,
+        b: Vec<T>,
+    ) -> Option<(usize, (Option<T>, Option<T>))> {
+        for (i, (x, y)) in a.iter().zip(&b).enumerate() {
+            if x != y {
+                return Some((i, (Some(*x), Some(*y))));
+            }
+        }
+        use std::cmp::Ordering;
+
+        match a.len().cmp(&b.len()) {
+            Ordering::Less => Some((a.len(), (None, Some(b[a.len()])))),
+            Ordering::Greater => Some((b.len(), (Some(a[b.len()]), None))),
+            Ordering::Equal => None,
+        }
     }
 }
