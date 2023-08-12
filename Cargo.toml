@@ -79,7 +79,7 @@ members = [
 [workspace.dependencies]
 bellpepper-core = { version = "0.2.0", default-features = false }
 bellpepper = { version = "0.2.0", default-features = false }
-blake2s_simd = "0.5"
+blake2s_simd = "1.0.1"
 blstrs = { version = "0.7.0" }
 ff = "0.13.0"
 generic-array = "0.14.7"
