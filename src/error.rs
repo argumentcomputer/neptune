@@ -70,7 +70,7 @@ impl From<ec_gpu_gen::EcError> for Error {
 impl error::Error for Error {}
 
 impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
             Error::FullBuffer => write!(
                 f,
