@@ -8,4 +8,5 @@ xclippy = [
     "clippy", "--all-targets", "--",
     "-Wclippy::all",
     "-Wclippy::disallowed_methods",
+    "-Wrust_2018_idioms",
 ]

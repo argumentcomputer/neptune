@@ -11,7 +11,7 @@ use ff::PrimeField;
 /// This code path implements a naive and evidently correct poseidon hash.
 
 /// The returned element is the second poseidon element, the first is the arity tag.
-pub fn hash_correct<F, A>(p: &mut Poseidon<F, A>) -> F
+pub fn hash_correct<F, A>(p: &mut Poseidon<'_, F, A>) -> F
 where
     F: PrimeField,
     A: Arity<F>,
@@ -37,7 +37,7 @@ where
     p.elements[1]
 }
 
-pub fn full_round<F, A>(p: &mut Poseidon<F, A>)
+pub fn full_round<F, A>(p: &mut Poseidon<'_, F, A>)
 where
     F: PrimeField,
     A: Arity<F>,
@@ -70,7 +70,7 @@ where
 }
 
 /// The partial round is the same as the full round, with the difference that we apply the S-Box only to the first bitflags poseidon leaf.
-pub fn partial_round<F, A>(p: &mut Poseidon<F, A>)
+pub fn partial_round<F, A>(p: &mut Poseidon<'_, F, A>)
 where
     F: PrimeField,
     A: Arity<F>,
@@ -93,7 +93,7 @@ where
 /// Comments reference notation also expanded in matrix.rs and help clarify the relationship between
 /// our optimizations and those described in the paper.
 
-pub fn hash_optimized_dynamic<F, A>(p: &mut Poseidon<F, A>) -> F
+pub fn hash_optimized_dynamic<F, A>(p: &mut Poseidon<'_, F, A>) -> F
 where
     F: PrimeField,
     A: Arity<F>,
@@ -119,7 +119,7 @@ where
 }
 
 pub fn full_round_dynamic<F, A>(
-    p: &mut Poseidon<F, A>,
+    p: &mut Poseidon<'_, F, A>,
     add_current_round_keys: bool,
     absorb_next_round_keys: bool,
 ) where
@@ -214,7 +214,7 @@ pub fn full_round_dynamic<F, A>(
     p.product_mds();
 }
 
-pub fn partial_round_dynamic<F, A>(p: &mut Poseidon<F, A>)
+pub fn partial_round_dynamic<F, A>(p: &mut Poseidon<'_, F, A>)
 where
     F: PrimeField,
     A: Arity<F>,
@@ -228,7 +228,7 @@ where
 
 /// For every leaf, add the round constants with index defined by the constants offset, and increment the
 /// offset.
-fn add_round_constants<F, A>(p: &mut Poseidon<F, A>)
+fn add_round_constants<F, A>(p: &mut Poseidon<'_, F, A>)
 where
     F: PrimeField,
     A: Arity<F>,
