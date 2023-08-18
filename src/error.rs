@@ -15,11 +15,11 @@ pub enum ClError {
 }
 
 #[cfg(any(feature = "cuda", feature = "opencl"))]
-pub type ClResult<T> = std::result::Result<T, ClError>;
+pub type ClResult<T> = Result<T, ClError>;
 
 #[cfg(any(feature = "cuda", feature = "opencl"))]
 impl fmt::Display for ClError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
             ClError::DeviceNotFound => write!(f, "Device not found."),
             ClError::PlatformNotFound => write!(f, "Platform not found."),

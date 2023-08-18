@@ -498,10 +498,10 @@ mod tests {
         let some_vec = vec![six, five, four];
 
         // M^-1(S)
-        let inverse_applied = super::apply_matrix(&m_inv, &some_vec);
+        let inverse_applied = apply_matrix(&m_inv, &some_vec);
 
         // M(M^-1(S))
-        let m_applied_after_inverse = super::apply_matrix(&m, &inverse_applied);
+        let m_applied_after_inverse = apply_matrix(&m, &inverse_applied);
 
         // S = M(M^-1(S))
         assert_eq!(

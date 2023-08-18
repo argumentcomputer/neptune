@@ -14,7 +14,7 @@ use crate::{Arity, Strength};
 use ff::PrimeField;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(bound(
     serialize = "F: PrimeField + Serialize, A: Arity<F>",
     deserialize = "F: PrimeField + Deserialize<'de>, A: Arity<F>"
@@ -60,18 +60,17 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
     /// is sound.
     pub const fn is_supported(&self) -> bool {
         match self {
-            HashType::MerkleTree => true,
-            HashType::MerkleTreeSparse(_) => false,
-            HashType::VariableLength => false,
-            HashType::ConstantLength(_) => true,
-            HashType::Encryption => true,
-            HashType::Custom(_) => true,
-            HashType::Sponge => true,
+            HashType::MerkleTreeSparse(_) | HashType::VariableLength => false,
+            HashType::MerkleTree
+            | HashType::ConstantLength(_)
+            | HashType::Encryption
+            | HashType::Custom(_)
+            | HashType::Sponge => true,
         }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CType<F: PrimeField, A: Arity<F>> {
     Arbitrary(u64),
     // See: https://github.com/bincode-org/bincode/issues/424
@@ -197,9 +196,9 @@ mod tests {
         assert_eq!(expected_standard_sponge, standard_sponge);
 
         let mut all_tags_set = HashSet::new();
-        all_tags.iter().for_each(|x| {
+        for x in all_tags.iter() {
             let _ = all_tags_set.insert(x.to_repr());
-        });
+        }
 
         // Cardinality of set and vector are the same,
         // hence no tag is duplicated.
