@@ -9,7 +9,7 @@ use crate::matrix::{
     apply_matrix, invert, is_identity, is_invertible, is_square, mat_mul, minor, transpose, Matrix,
 };
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MdsMatrices<F: PrimeField> {
     pub m: Matrix<F>,
     pub m_inv: Matrix<F>,
@@ -45,7 +45,7 @@ pub fn derive_mds_matrices<F: PrimeField>(m: Matrix<F>) -> MdsMatrices<F> {
 /// This means its first row and column are each dense, and the interior matrix
 /// (minor to the element in both the row and column) is the identity.
 /// We will pluralize this compact structure `sparse_matrixes` to distinguish from `sparse_matrices` from which they are created.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SparseMatrix<F: PrimeField> {
     /// `w_hat` is the first column of the M'' matrix. It will be directly multiplied (scalar product) with a row of state elements.
     pub w_hat: Vec<F>,
@@ -233,10 +233,10 @@ mod tests {
         }
 
         // M^-1 x M = I
-        assert!(matrix::is_identity(&matrix::mat_mul(&m_inv, &m).unwrap()));
+        assert!(is_identity(&mat_mul(&m_inv, &m).unwrap()));
 
         // M' x M'' = M
-        assert_eq!(m, matrix::mat_mul(&m_prime, &m_double_prime).unwrap());
+        assert_eq!(m, mat_mul(&m_prime, &m_double_prime).unwrap());
     }
 
     #[test]
@@ -245,7 +245,7 @@ mod tests {
     }
 
     fn test_swapping_aux(width: usize) {
-        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         let MdsMatrices {
             m,
@@ -295,7 +295,7 @@ mod tests {
     }
 
     fn test_factor_to_sparse_matrices_aux(width: usize, n: usize) {
-        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         let m = generate_mds::<Fr>(width);
         let m2 = m.clone();

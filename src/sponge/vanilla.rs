@@ -509,7 +509,7 @@ mod tests {
 
     #[test]
     fn test_simplex() {
-        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         // Exercise simplex sponges with eventual size less, equal to, and greater to rate.
         for size in 2..10 {
@@ -550,7 +550,7 @@ mod tests {
 
     #[test]
     fn test_duplex_consistency() {
-        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         // Exercise duplex sponges with eventual size less, equal to, and greater to rate.
         for size in 4..10 {

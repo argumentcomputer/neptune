@@ -43,7 +43,7 @@ impl<T> cuda::KernelArgument for Buffer<T> {
 
 #[cfg(feature = "opencl")]
 impl<T> opencl::KernelArgument for Buffer<T> {
-    fn push(&self, kernel: &mut opencl::Kernel) {
+    fn push(&self, kernel: &mut opencl::Kernel<'_>) {
         match self {
             #[cfg(feature = "cuda")]
             Self::Cuda(_) => unreachable!(),

@@ -54,7 +54,7 @@ impl_arity!(
 ///
 /// [`Poseidon`] accepts input `elements` set with length equal or less than [`Arity`].
 ///
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Poseidon<'a, F, A = U2>
 where
     F: PrimeField,
@@ -78,7 +78,7 @@ where
 /// and [`Arity`] as [`Poseidon`] instance that consumes it.
 ///
 /// See original [Poseidon paper](https://eprint.iacr.org/2019/458.pdf) for more details.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PoseidonConstants<F, A>
 where
     F: PrimeField,
@@ -100,7 +100,7 @@ where
     pub(crate) _a: PhantomData<A>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum HashMode {
     // The initial and correct version of the algorithm. We should preserve the ability to hash this way for reference
     // and to preserve confidence in our tests along thew way.
@@ -958,7 +958,7 @@ mod tests {
         let constants = PoseidonConstants::new();
         preimage[0] = <Fr as Field>::ONE;
 
-        let mut h = Poseidon::<Fr, typenum::U3>::new_with_preimage(&preimage, &constants);
+        let mut h = Poseidon::<Fr, U3>::new_with_preimage(&preimage, &constants);
 
         let mut h2 = h.clone();
         let result = h.hash();
@@ -973,13 +973,13 @@ mod tests {
     }
 
     fn hash_values_cases(strength: Strength) {
-        hash_values_aux::<typenum::U2>(strength);
-        hash_values_aux::<typenum::U4>(strength);
-        hash_values_aux::<typenum::U8>(strength);
-        hash_values_aux::<typenum::U11>(strength);
-        hash_values_aux::<typenum::U16>(strength);
-        hash_values_aux::<typenum::U24>(strength);
-        hash_values_aux::<typenum::U36>(strength);
+        hash_values_aux::<U2>(strength);
+        hash_values_aux::<U4>(strength);
+        hash_values_aux::<U8>(strength);
+        hash_values_aux::<U11>(strength);
+        hash_values_aux::<U16>(strength);
+        hash_values_aux::<U24>(strength);
+        hash_values_aux::<U36>(strength);
     }
 
     /// Simple test vectors to ensure results don't change unintentionally in development.

@@ -10,7 +10,7 @@ pub enum Error {
     ParameterUsageMismatch,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SpongeOp {
     Absorb(u32),
     Squeeze(u32),
@@ -84,7 +84,7 @@ impl Hasher {
         self.x_i = self.x_i.overflowing_mul(self.x).0;
         self.state = self
             .state
-            .overflowing_add(self.x_i.overflowing_mul(a as u128).0)
+            .overflowing_add(self.x_i.overflowing_mul(u128::from(a)).0)
             .0;
     }
 
@@ -105,8 +105,7 @@ impl SpongeOp {
 
     pub const fn count(&self) -> u32 {
         match self {
-            Self::Absorb(n) => *n,
-            Self::Squeeze(n) => *n,
+            Self::Absorb(n) | Self::Squeeze(n) => *n,
         }
     }
 

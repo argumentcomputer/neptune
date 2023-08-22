@@ -138,8 +138,8 @@ criterion_group! {
 
     config = Criterion::default();
 
-    targets = bench_hash_bls::<typenum::U2>, bench_hash_bls::<typenum::U4>,
-    bench_hash_bls::<typenum::U8>, bench_hash_bls::<typenum::U11>
+    targets = bench_hash_bls::<U2>, bench_hash_bls::<U4>,
+    bench_hash_bls::<U8>, bench_hash_bls::<U11>
 }
 
 fn bench_bls_and_pasta_fields_for_arity<A>(c: &mut Criterion)

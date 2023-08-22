@@ -2,3 +2,4 @@
 Cargo.lock
 /scratch
 
+.vscode/settings.json
