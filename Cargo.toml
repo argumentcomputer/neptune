@@ -6,7 +6,7 @@ authors = ["porcuquine <porcuquine@gmail.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/lurk-lab/neptune"
-rust-version = "1.64.0"
+rust-version = "1.66.1"
 
 [dependencies]
 bellpepper = { workspace = true }
