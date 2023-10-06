@@ -6,7 +6,7 @@ authors = ["porcuquine <porcuquine@gmail.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/lurk-lab/neptune"
-rust-version = "1.66.1"
+rust-version = "1.70.0"
 
 [dependencies]
 bellpepper = { workspace = true }
@@ -54,7 +54,7 @@ incremental = false
 codegen-units = 1
 
 [features]
-default = []
+default = ["witness-gen"]
 cuda = ["ec-gpu-gen/cuda", "ec-gpu", "pasta_curves/gpu"]
 opencl = ["ec-gpu-gen/opencl", "ec-gpu", "pasta_curves/gpu"]
 # The supported arities for Poseidon running on the GPU are specified at compile-time.
@@ -70,6 +70,7 @@ strengthened = []
 # The supported fields for Poseidon running on the GPU are specified at compile-time.
 bls = ["blstrs/gpu"]
 pasta = ["pasta_curves/gpu"]
+witness-gen = []
 
 [workspace]
 resolver = "2"
@@ -79,8 +80,8 @@ members = [
 
 # Dependencies that should be kept in sync through the whole workspace
 [workspace.dependencies]
-bellpepper-core = { git = "https://github.com/lurk-lab/bellpepper", branch = "dev", default-features = false }
-bellpepper = { git = "https://github.com/lurk-lab/bellpepper", branch = "dev", default-features = false }
+bellpepper-core = { git = "https://github.com/lurk-lab/bellpepper", branch = "benchmarks", default-features = false }
+bellpepper = { git = "https://github.com/lurk-lab/bellpepper", branch = "benchmarks", default-features = false }
 blake2s_simd = "1.0.1"
 blstrs = { git="https://github.com/lurk-lab/blstrs.git", branch="dev"}
 ff = "0.13.0"

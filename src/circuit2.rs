@@ -446,28 +446,29 @@ where
     Scalar: PrimeField,
     A: Arity<Scalar>,
 {
+    #[cfg(feature = "witness-gen")]
     if cs.is_witness_generator() {
         let mut cs = cs;
-        poseidon_hash_allocated_witness(&mut cs, &preimage, constants)
-    } else {
-        let arity = A::to_usize();
-        let tag_element = Elt::num_from_fr::<CS>(constants.domain_tag);
-        let mut elements = Vec::with_capacity(arity + 1);
-        elements.push(tag_element);
-        elements.extend(preimage.into_iter().map(Elt::Allocated));
-
-        if let HashType::ConstantLength(length) = constants.hash_type {
-            assert!(length <= arity, "illegal length: constants are malformed");
-            // Add zero-padding.
-            for _ in 0..(arity - length) {
-                let elt = Elt::Num(num::Num::zero());
-                elements.push(elt);
-            }
-        }
-        let mut p = PoseidonCircuit2::new(elements, constants);
-
-        p.hash_to_allocated(cs)
+        return poseidon_hash_allocated_witness(&mut cs, &preimage, constants);
     }
+
+    let arity = A::to_usize();
+    let tag_element = Elt::num_from_fr::<CS>(constants.domain_tag);
+    let mut elements = Vec::with_capacity(arity + 1);
+    elements.push(tag_element);
+    elements.extend(preimage.into_iter().map(Elt::Allocated));
+
+    if let HashType::ConstantLength(length) = constants.hash_type {
+        assert!(length <= arity, "illegal length: constants are malformed");
+        // Add zero-padding.
+        for _ in 0..(arity - length) {
+            let elt = Elt::Num(num::Num::zero());
+            elements.push(elt);
+        }
+    }
+    let mut p = PoseidonCircuit2::new(elements, constants);
+
+    p.hash_to_allocated(cs)
 }
 
 /// Create circuit for Poseidon hash, minimizing constraints by returning an unallocated `Num`.
