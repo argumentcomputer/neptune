@@ -44,7 +44,7 @@ pub mod circuit;
 pub mod circuit2;
 pub mod circuit2_witness;
 pub mod error;
-mod matrix;
+pub mod matrix;
 mod mds;
 
 /// Poseidon hash
