@@ -115,7 +115,7 @@ where
         full_round_dynamic(p, true, false);
     }
 
-    p.elements[1]
+    p.elements[0]
 }
 
 pub fn full_round_dynamic<F, A>(
