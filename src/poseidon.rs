@@ -1,5 +1,5 @@
 use crate::hash_type::HashType;
-use crate::matrix::Matrix;
+use crate::matrix::{Matrix, transpose};
 use crate::mds::{
     create_mds_matrices, derive_mds_matrices, factor_to_sparse_matrixes, MdsMatrices, SparseMatrix,
 };
@@ -308,7 +308,7 @@ where
         partial_rounds: usize,
         hash_type: HashType<F, A>,
     ) -> Self {
-        let mds_matrices = derive_mds_matrices(m);
+        let mds_matrices = derive_mds_matrices(transpose(&m));
         let half_full_rounds = full_rounds / 2;
         let compressed_round_constants = compress_round_constants(
             width,
