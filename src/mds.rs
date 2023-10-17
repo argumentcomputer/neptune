@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::matrix;
 use crate::matrix::{
-    apply_matrix, invert, is_identity, is_invertible, is_square, mat_mul, minor, transpose, Matrix,
+    apply_matrix, invert, is_identity, is_invertible, is_square, left_apply_matrix, mat_mul, minor,
+    transpose, Matrix,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -172,7 +173,7 @@ fn make_prime<F: PrimeField>(m: &Matrix<F>) -> Matrix<F> {
 
 fn make_double_prime<F: PrimeField>(m: &Matrix<F>, m_hat_inv: &Matrix<F>) -> Matrix<F> {
     let (v, w) = make_v_w(m);
-    let w_hat = apply_matrix(m_hat_inv, &w);
+    let w_hat = left_apply_matrix(m_hat_inv, &w);
 
     m.iter()
         .enumerate()

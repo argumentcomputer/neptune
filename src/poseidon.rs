@@ -1,5 +1,5 @@
 use crate::hash_type::HashType;
-use crate::matrix::{Matrix, transpose};
+use crate::matrix::{apply_matrix, left_apply_matrix, transpose, Matrix};
 use crate::mds::{
     create_mds_matrices, derive_mds_matrices, factor_to_sparse_matrixes, MdsMatrices, SparseMatrix,
 };
@@ -308,7 +308,7 @@ where
         partial_rounds: usize,
         hash_type: HashType<F, A>,
     ) -> Self {
-        let mds_matrices = derive_mds_matrices(transpose(&m));
+        let mds_matrices = derive_mds_matrices(m);
         let half_full_rounds = full_rounds / 2;
         let compressed_round_constants = compress_round_constants(
             width,
@@ -849,7 +849,7 @@ where
         let full_half = self.constants.half_full_rounds;
         let sparse_offset = full_half - 1;
         if self.current_round == sparse_offset {
-            self.product_mds_with_matrix(&self.constants.pre_sparse_matrix);
+            self.product_mds_with_matrix_right(&self.constants.pre_sparse_matrix);
         } else {
             if (self.current_round > sparse_offset)
                 && (self.current_round < full_half + self.constants.partial_rounds)
@@ -869,25 +869,27 @@ where
     /// Set the provided elements with the result of the product between the elements and the constant
     /// MDS matrix.
     pub(crate) fn product_mds(&mut self) {
-        self.product_mds_with_matrix(&self.constants.mds_matrices.m);
+        self.product_mds_with_matrix_left(&self.constants.mds_matrices.m);
     }
 
     /// NOTE: This calculates a vector-matrix product (`elements * matrix`) rather than the
     /// expected matrix-vector `(matrix * elements)`. This is a performance optimization which
     /// exploits the fact that our MDS matrices are symmetric by construction.
     #[allow(clippy::ptr_arg)]
-    pub(crate) fn product_mds_with_matrix(&mut self, matrix: &Matrix<F>) {
-        let mut result = GenericArray::<F, A::ConstantsSize>::generate(|_| F::ZERO);
+    pub(crate) fn product_mds_with_matrix_right(&mut self, matrix: &Matrix<F>) {
+        let result = apply_matrix(matrix, &self.elements);
+        let _ = std::mem::replace(
+            &mut self.elements,
+            GenericArray::<F, A::ConstantsSize>::generate(|i| result[i]),
+        );
+    }
 
-        for (j, val) in result.iter_mut().enumerate() {
-            for (i, row) in matrix.iter().enumerate() {
-                let mut tmp = row[j];
-                tmp.mul_assign(&self.elements[i]);
-                val.add_assign(&tmp);
-            }
-        }
-
-        let _ = std::mem::replace(&mut self.elements, result);
+    pub(crate) fn product_mds_with_matrix_left(&mut self, matrix: &Matrix<F>) {
+        let result = left_apply_matrix(matrix, &self.elements);
+        let _ = std::mem::replace(
+            &mut self.elements,
+            GenericArray::<F, A::ConstantsSize>::generate(|i| result[i]),
+        );
     }
 
     // Sparse matrix in this context means one of the form, M''.
