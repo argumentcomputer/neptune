@@ -300,6 +300,8 @@ where
         }
     }
 
+    /// Generates new instance of [`PoseidonConstants`] with matrix, constants and number of rounds.
+    /// The matrix does not have to be symmetric.
     pub fn new_from_parameters(
         width: usize,
         m: Matrix<F>,
@@ -320,7 +322,7 @@ where
         );
 
         let (pre_sparse_matrix, sparse_matrixes) =
-            factor_to_sparse_matrixes(transpose(&mds_matrices.m.clone()), partial_rounds);
+            factor_to_sparse_matrixes(transpose(&mds_matrices.m), partial_rounds);
 
         // Ensure we have enough constants for the sbox rounds
         assert!(
@@ -720,7 +722,7 @@ where
     /// ```
     #[inline]
     pub fn extract_output(&self) -> F {
-        self.elements[0]
+        self.elements[1]
     }
 
     /// Performs hashing using underlying [`Poseidon`] buffer of the preimage' field elements

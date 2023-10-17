@@ -34,7 +34,7 @@ where
         full_round(p);
     }
 
-    p.elements[0]
+    p.elements[1]
 }
 
 pub(crate) fn full_round<F, A>(p: &mut Poseidon<'_, F, A>)
@@ -115,7 +115,7 @@ where
         full_round_dynamic(p, true, false);
     }
 
-    p.elements[0]
+    p.elements[1]
 }
 
 pub(crate) fn full_round_dynamic<F, A>(
