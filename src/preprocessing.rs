@@ -1,4 +1,4 @@
-use crate::matrix::{apply_matrix, vec_add};
+use crate::matrix::{apply_matrix, left_apply_matrix, vec_add};
 use crate::mds::MdsMatrices;
 use crate::quintic_s_box;
 use ff::PrimeField;
@@ -37,7 +37,7 @@ pub(crate) fn compress_round_constants<F: PrimeField>(
     };
     for i in 0..end {
         let next_round = round_keys(i + 1); // First round was added before any S-boxes.
-        let inverted = apply_matrix(inverse_matrix, next_round);
+        let inverted = left_apply_matrix(inverse_matrix, next_round);
         res.extend(inverted);
     }
 
@@ -61,7 +61,7 @@ pub(crate) fn compress_round_constants<F: PrimeField>(
     let round_acc = (0..partial_preprocessed)
         .map(|i| round_keys(final_round - i - 1))
         .fold(final_round_key, |acc, previous_round_keys| {
-            let mut inverted = apply_matrix(inverse_matrix, &acc);
+            let mut inverted = left_apply_matrix(inverse_matrix, &acc);
 
             partial_keys.push(inverted[0]);
             inverted[0] = F::ZERO;
@@ -86,7 +86,7 @@ pub(crate) fn compress_round_constants<F: PrimeField>(
         let initial_round_keys = round_keys(terminal_constants_round - 1);
 
         // M^-1(T)
-        let mut inv = apply_matrix(inverse_matrix, terminal_round_keys);
+        let mut inv = left_apply_matrix(inverse_matrix, terminal_round_keys);
 
         // M^-1(T)[0]
         let pk = inv[0];
@@ -122,7 +122,7 @@ pub(crate) fn compress_round_constants<F: PrimeField>(
         quintic_s_box(&mut q_state[0], None, None);
 
         // Mix with mds_matrix
-        let mixed = apply_matrix(mds_matrix, &q_state);
+        let mixed = left_apply_matrix(mds_matrix, &q_state);
 
         // Ark
         let plain_result = vec_add(terminal_round_keys, &mixed);
@@ -144,7 +144,7 @@ pub(crate) fn compress_round_constants<F: PrimeField>(
 
         quintic_s_box(&mut p_state[0], None, Some(&pk));
 
-        let preprocessed_result = apply_matrix(mds_matrix, &p_state);
+        let preprocessed_result = left_apply_matrix(mds_matrix, &p_state);
 
         assert_eq!(
             plain_result, preprocessed_result,
@@ -155,7 +155,7 @@ pub(crate) fn compress_round_constants<F: PrimeField>(
     for i in 1..unpreprocessed {
         res.extend(round_keys(half_full_rounds + i));
     }
-    res.extend(apply_matrix(inverse_matrix, &round_acc));
+    res.extend(left_apply_matrix(inverse_matrix, &round_acc));
 
     while let Some(x) = partial_keys.pop() {
         res.push(x)
@@ -165,7 +165,7 @@ pub(crate) fn compress_round_constants<F: PrimeField>(
     for i in 1..(half_full_rounds) {
         let start = half_full_rounds + partial_rounds;
         let next_round = round_keys(i + start);
-        let inverted = apply_matrix(inverse_matrix, next_round);
+        let inverted = left_apply_matrix(inverse_matrix, next_round);
         res.extend(inverted);
     }
 
