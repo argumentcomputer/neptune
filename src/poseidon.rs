@@ -851,7 +851,7 @@ where
         let full_half = self.constants.half_full_rounds;
         let sparse_offset = full_half - 1;
         if self.current_round == sparse_offset {
-            self.product_mds_with_matrix_right(&self.constants.pre_sparse_matrix);
+            self.product_mds_with_matrix(&self.constants.pre_sparse_matrix);
         } else {
             if (self.current_round > sparse_offset)
                 && (self.current_round < full_half + self.constants.partial_rounds)
@@ -878,12 +878,18 @@ where
     /// expected matrix-vector `(matrix * elements)`. This is a performance optimization which
     /// exploits the fact that our MDS matrices are symmetric by construction.
     #[allow(clippy::ptr_arg)]
-    pub(crate) fn product_mds_with_matrix_right(&mut self, matrix: &Matrix<F>) {
-        let result = apply_matrix(matrix, &self.elements);
-        let _ = std::mem::replace(
-            &mut self.elements,
-            GenericArray::<F, A::ConstantsSize>::generate(|i| result[i]),
-        );
+    pub(crate) fn product_mds_with_matrix(&mut self, matrix: &Matrix<F>) {
+        let mut result = GenericArray::<F, A::ConstantsSize>::generate(|_| F::ZERO);
+
+        for (j, val) in result.iter_mut().enumerate() {
+            for (i, row) in matrix.iter().enumerate() {
+                let mut tmp = row[j];
+                tmp.mul_assign(&self.elements[i]);
+                val.add_assign(&tmp);
+            }
+        }
+
+        let _ = std::mem::replace(&mut self.elements, result);
     }
 
     pub(crate) fn product_mds_with_matrix_left(&mut self, matrix: &Matrix<F>) {
@@ -1074,228 +1080,228 @@ mod tests {
         assert_eq!(digest, digest3);
         assert_eq!(digest, digest4);
 
-        // let expected = match strength {
-        //     Strength::Standard => {
-        //         // Currently secure round constants.
-        //         match test_arity {
-        //             2 => scalar_from_u64s([
-        //                 0x2e203c369a02e7ff,
-        //                 0xa6fba9339d05a69d,
-        //                 0x739e0fd902efe161,
-        //                 0x396508d75e76a56b,
-        //             ]),
-        //             4 => scalar_from_u64s([
-        //                 0x019814ff6662075d,
-        //                 0xfb6b4605bf1327ec,
-        //                 0x00db3c6579229399,
-        //                 0x58a54b10a9e5848a,
-        //             ]),
-        //             8 => scalar_from_u64s([
-        //                 0x2a9934f56d38a5e6,
-        //                 0x4b682e9d9cc4aed9,
-        //                 0x1201004211677077,
-        //                 0x2394611da3a5de55,
-        //             ]),
-        //             11 => scalar_from_u64s([
-        //                 0xcee3bbc32b693163,
-        //                 0x09f3dcd8ccb08fc1,
-        //                 0x6ca537e232ebe87a,
-        //                 0x0c0fc1b2e5227f28,
-        //             ]),
-        //             16 => scalar_from_u64s([
-        //                 0x1291c74060266d37,
-        //                 0x5b8dbc6d30680a6f,
-        //                 0xc1c2fb5a6f871e63,
-        //                 0x2d3ae2663381ae8a,
-        //             ]),
-        //             24 => scalar_from_u64s([
-        //                 0xd7ef3569f585b321,
-        //                 0xc3e779f6468815b1,
-        //                 0x066f39bf783f3d9f,
-        //                 0x63beb8831f11ae15,
-        //             ]),
-        //             36 => scalar_from_u64s([
-        //                 0x4473606dfa4e8140,
-        //                 0x75cd368df8a8ac3c,
-        //                 0x540a30e03c10bbaa,
-        //                 0x699303082a6e5d5f,
-        //             ]),
-        //             _ => {
-        //                 // dbg!(digest, test_arity);
-        //                 panic!("Arity lacks test vector: {}", test_arity)
-        //             }
-        //         }
-        //     }
-        //     Strength::Strengthened =>
-        //     // Strengthened round constants.
-        //     {
-        //         match test_arity {
-        //             2 => scalar_from_u64s([
-        //                 0x793dbaf54552cd69,
-        //                 0x5278ecbf17040ea6,
-        //                 0xc48b36ecc4cab748,
-        //                 0x33d28a753baee41b,
-        //             ]),
-        //             4 => scalar_from_u64s([
-        //                 0x4650ee190212aa9a,
-        //                 0xe5113a254d6f5c7e,
-        //                 0x54013bdaf68ba4c2,
-        //                 0x09d8207c51ca3f43,
-        //             ]),
-        //             8 => scalar_from_u64s([
-        //                 0x9f0c3c93c3fc894e,
-        //                 0xe843d4cfba662df1,
-        //                 0xd69aae8fe1cb63e8,
-        //                 0x69e61465981ae17e,
-        //             ]),
-        //             11 => scalar_from_u64s([
-        //                 0x778af344d8f9e8b7,
-        //                 0xc94fe2ca3f46d433,
-        //                 0x07abbcf9b406e8d8,
-        //                 0x28bb83ff439753c0,
-        //             ]),
-        //             16 => scalar_from_u64s([
-        //                 0x3cc2664c5fd6ae07,
-        //                 0xd7431eaaa5e43189,
-        //                 0x43ba5f418c6ef01d,
-        //                 0x68d7856395aa217e,
-        //             ]),
-        //             24 => scalar_from_u64s([
-        //                 0x1df1da58827cb39d,
-        //                 0x0566756b7b80fb10,
-        //                 0x222eb82c6666be3d,
-        //                 0x086e4e81a35bfd92,
-        //             ]),
-        //             36 => scalar_from_u64s([
-        //                 0x636401e9371dc311,
-        //                 0x8f69e35a702ed188,
-        //                 0x64d73b2ddc03d43b,
-        //                 0x609f8c6fe45cc054,
-        //             ]),
-        //             _ => {
-        //                 // dbg!(digest, test_arity);
-        //                 panic!("Arity lacks test vector: {}", test_arity)
-        //             }
-        //         }
-        //     }
-        // };
-        //
-        // let mut constant_sponge = Sponge::new_with_constants(&constant_constants, Mode::Simplex);
-        //
-        // let check_simple = constant_length <= test_arity;
-        // for n in 0..constant_length {
-        //     let scalar = Fr::from(n as u64);
-        //     constant_sponge.absorb(&scalar, &mut ()).unwrap();
-        //     if check_simple {
-        //         pc.input(scalar).unwrap();
-        //     }
-        // }
-        //
-        // let constant_sponge_digest = constant_sponge.squeeze(&mut ()).unwrap();
-        // if check_simple {
-        //     let constant_simple_digest = pc.hash();
-        //     assert_eq!(constant_simple_digest, constant_sponge_digest.unwrap());
-        // }
-        //
-        // let expected_constant = match strength {
-        //     Strength::Standard =>
-        //     // Currently secure round constants.
-        //     {
-        //         match test_arity {
-        //             2 => scalar_from_u64s([
-        //                 0x1e12d20d3b71ec56,
-        //                 0x7fb97ce0b8f66322,
-        //                 0xc923003920c488d4,
-        //                 0x19e8a3fe6c2df9ff,
-        //             ]),
-        //             4 => scalar_from_u64s([
-        //                 0x8935b00a07909d45,
-        //                 0x4984de08542c9977,
-        //                 0x39443980077d7593,
-        //                 0x3a21a6ae86754a29,
-        //             ]),
-        //             8 => scalar_from_u64s([
-        //                 0x370a94532f818897,
-        //                 0x203e3c7c4a85c1f9,
-        //                 0xcad8b9f8aeb1578f,
-        //                 0x5c6de4b69de9d792,
-        //             ]),
-        //             11 => scalar_from_u64s([
-        //                 0xe9b0cb7d6496f73b,
-        //                 0x7d2807d793af9582,
-        //                 0xef841b6bf51a5a39,
-        //                 0x02550c3a2113c7ca,
-        //             ]),
-        //             16 => scalar_from_u64s([
-        //                 0x6a1e563d359c1bdd,
-        //                 0x6b4493d5d40be9d3,
-        //                 0x275a6eb04a0ecb37,
-        //                 0x30ec6fa0fec08504,
-        //             ]),
-        //             24 => scalar_from_u64s([
-        //                 0xc540772c5968a299,
-        //                 0xe2e556352af20f97,
-        //                 0x15ed0a6b8faba5aa,
-        //                 0x327bdee6fa2b22b6,
-        //             ]),
-        //             36 => scalar_from_u64s([
-        //                 0x7d89cddb70217dcd,
-        //                 0x02ae71d3d04f0b32,
-        //                 0xfe52151f29c50f99,
-        //                 0x626bdae6cad79307,
-        //             ]),
-        //             _ => unimplemented!(),
-        //         }
-        //     }
-        //     Strength::Strengthened => match test_arity {
-        //         2 => scalar_from_u64s([
-        //             0xcbd4499072dcaff6,
-        //             0xdd21d8ebc5db51fb,
-        //             0x336c9c5c50e6a71e,
-        //             0x28156ad178f3a8fe,
-        //         ]),
-        //         4 => scalar_from_u64s([
-        //             0xa31d9dc66a42f972,
-        //             0xb5be830aae89db0d,
-        //             0xdff9a095d1d40420,
-        //             0x466e7819bb809c44,
-        //         ]),
-        //         8 => scalar_from_u64s([
-        //             0x6f2c393786312ee2,
-        //             0xadb6da339b87e590,
-        //             0xbf626c21fd6cb051,
-        //             0x0bb12009ab1fb62a,
-        //         ]),
-        //         11 => scalar_from_u64s([
-        //             0x6d14b130d0fc1ed5,
-        //             0x96e16aa48efc68a9,
-        //             0xf199e67d4e6e4bc7,
-        //             0x5ee31c86cd42e810,
-        //         ]),
-        //         16 => scalar_from_u64s([
-        //             0x7dbe8ac03eb7fb25,
-        //             0xeb53bd55f5095e4e,
-        //             0x5bc3390694ee8251,
-        //             0x4611720250274a29,
-        //         ]),
-        //         24 => scalar_from_u64s([
-        //             0xe2ed71355cbe9268,
-        //             0x2400a67b915b45fa,
-        //             0xaa5f37dd1685188e,
-        //             0x1075afe1e62be162,
-        //         ]),
-        //         36 => scalar_from_u64s([
-        //             0x8d6f2e5faf077152,
-        //             0xd3cd55eeec46751a,
-        //             0x4fc92a1baa0ee777,
-        //             0x4ed7c0e22446987f,
-        //         ]),
-        //         _ => unimplemented!(),
-        //     },
-        // };
-        // assert_eq!(expected_constant, constant_sponge_digest.unwrap());
-        //
-        // assert_eq!(expected, digest);
+        let expected = match strength {
+            Strength::Standard => {
+                // Currently secure round constants.
+                match test_arity {
+                    2 => scalar_from_u64s([
+                        0x2e203c369a02e7ff,
+                        0xa6fba9339d05a69d,
+                        0x739e0fd902efe161,
+                        0x396508d75e76a56b,
+                    ]),
+                    4 => scalar_from_u64s([
+                        0x019814ff6662075d,
+                        0xfb6b4605bf1327ec,
+                        0x00db3c6579229399,
+                        0x58a54b10a9e5848a,
+                    ]),
+                    8 => scalar_from_u64s([
+                        0x2a9934f56d38a5e6,
+                        0x4b682e9d9cc4aed9,
+                        0x1201004211677077,
+                        0x2394611da3a5de55,
+                    ]),
+                    11 => scalar_from_u64s([
+                        0xcee3bbc32b693163,
+                        0x09f3dcd8ccb08fc1,
+                        0x6ca537e232ebe87a,
+                        0x0c0fc1b2e5227f28,
+                    ]),
+                    16 => scalar_from_u64s([
+                        0x1291c74060266d37,
+                        0x5b8dbc6d30680a6f,
+                        0xc1c2fb5a6f871e63,
+                        0x2d3ae2663381ae8a,
+                    ]),
+                    24 => scalar_from_u64s([
+                        0xd7ef3569f585b321,
+                        0xc3e779f6468815b1,
+                        0x066f39bf783f3d9f,
+                        0x63beb8831f11ae15,
+                    ]),
+                    36 => scalar_from_u64s([
+                        0x4473606dfa4e8140,
+                        0x75cd368df8a8ac3c,
+                        0x540a30e03c10bbaa,
+                        0x699303082a6e5d5f,
+                    ]),
+                    _ => {
+                        // dbg!(digest, test_arity);
+                        panic!("Arity lacks test vector: {}", test_arity)
+                    }
+                }
+            }
+            Strength::Strengthened =>
+            // Strengthened round constants.
+            {
+                match test_arity {
+                    2 => scalar_from_u64s([
+                        0x793dbaf54552cd69,
+                        0x5278ecbf17040ea6,
+                        0xc48b36ecc4cab748,
+                        0x33d28a753baee41b,
+                    ]),
+                    4 => scalar_from_u64s([
+                        0x4650ee190212aa9a,
+                        0xe5113a254d6f5c7e,
+                        0x54013bdaf68ba4c2,
+                        0x09d8207c51ca3f43,
+                    ]),
+                    8 => scalar_from_u64s([
+                        0x9f0c3c93c3fc894e,
+                        0xe843d4cfba662df1,
+                        0xd69aae8fe1cb63e8,
+                        0x69e61465981ae17e,
+                    ]),
+                    11 => scalar_from_u64s([
+                        0x778af344d8f9e8b7,
+                        0xc94fe2ca3f46d433,
+                        0x07abbcf9b406e8d8,
+                        0x28bb83ff439753c0,
+                    ]),
+                    16 => scalar_from_u64s([
+                        0x3cc2664c5fd6ae07,
+                        0xd7431eaaa5e43189,
+                        0x43ba5f418c6ef01d,
+                        0x68d7856395aa217e,
+                    ]),
+                    24 => scalar_from_u64s([
+                        0x1df1da58827cb39d,
+                        0x0566756b7b80fb10,
+                        0x222eb82c6666be3d,
+                        0x086e4e81a35bfd92,
+                    ]),
+                    36 => scalar_from_u64s([
+                        0x636401e9371dc311,
+                        0x8f69e35a702ed188,
+                        0x64d73b2ddc03d43b,
+                        0x609f8c6fe45cc054,
+                    ]),
+                    _ => {
+                        // dbg!(digest, test_arity);
+                        panic!("Arity lacks test vector: {}", test_arity)
+                    }
+                }
+            }
+        };
+
+        let mut constant_sponge = Sponge::new_with_constants(&constant_constants, Mode::Simplex);
+
+        let check_simple = constant_length <= test_arity;
+        for n in 0..constant_length {
+            let scalar = Fr::from(n as u64);
+            constant_sponge.absorb(&scalar, &mut ()).unwrap();
+            if check_simple {
+                pc.input(scalar).unwrap();
+            }
+        }
+
+        let constant_sponge_digest = constant_sponge.squeeze(&mut ()).unwrap();
+        if check_simple {
+            let constant_simple_digest = pc.hash();
+            assert_eq!(constant_simple_digest, constant_sponge_digest.unwrap());
+        }
+
+        let expected_constant = match strength {
+            Strength::Standard =>
+            // Currently secure round constants.
+            {
+                match test_arity {
+                    2 => scalar_from_u64s([
+                        0x1e12d20d3b71ec56,
+                        0x7fb97ce0b8f66322,
+                        0xc923003920c488d4,
+                        0x19e8a3fe6c2df9ff,
+                    ]),
+                    4 => scalar_from_u64s([
+                        0x8935b00a07909d45,
+                        0x4984de08542c9977,
+                        0x39443980077d7593,
+                        0x3a21a6ae86754a29,
+                    ]),
+                    8 => scalar_from_u64s([
+                        0x370a94532f818897,
+                        0x203e3c7c4a85c1f9,
+                        0xcad8b9f8aeb1578f,
+                        0x5c6de4b69de9d792,
+                    ]),
+                    11 => scalar_from_u64s([
+                        0xe9b0cb7d6496f73b,
+                        0x7d2807d793af9582,
+                        0xef841b6bf51a5a39,
+                        0x02550c3a2113c7ca,
+                    ]),
+                    16 => scalar_from_u64s([
+                        0x6a1e563d359c1bdd,
+                        0x6b4493d5d40be9d3,
+                        0x275a6eb04a0ecb37,
+                        0x30ec6fa0fec08504,
+                    ]),
+                    24 => scalar_from_u64s([
+                        0xc540772c5968a299,
+                        0xe2e556352af20f97,
+                        0x15ed0a6b8faba5aa,
+                        0x327bdee6fa2b22b6,
+                    ]),
+                    36 => scalar_from_u64s([
+                        0x7d89cddb70217dcd,
+                        0x02ae71d3d04f0b32,
+                        0xfe52151f29c50f99,
+                        0x626bdae6cad79307,
+                    ]),
+                    _ => unimplemented!(),
+                }
+            }
+            Strength::Strengthened => match test_arity {
+                2 => scalar_from_u64s([
+                    0xcbd4499072dcaff6,
+                    0xdd21d8ebc5db51fb,
+                    0x336c9c5c50e6a71e,
+                    0x28156ad178f3a8fe,
+                ]),
+                4 => scalar_from_u64s([
+                    0xa31d9dc66a42f972,
+                    0xb5be830aae89db0d,
+                    0xdff9a095d1d40420,
+                    0x466e7819bb809c44,
+                ]),
+                8 => scalar_from_u64s([
+                    0x6f2c393786312ee2,
+                    0xadb6da339b87e590,
+                    0xbf626c21fd6cb051,
+                    0x0bb12009ab1fb62a,
+                ]),
+                11 => scalar_from_u64s([
+                    0x6d14b130d0fc1ed5,
+                    0x96e16aa48efc68a9,
+                    0xf199e67d4e6e4bc7,
+                    0x5ee31c86cd42e810,
+                ]),
+                16 => scalar_from_u64s([
+                    0x7dbe8ac03eb7fb25,
+                    0xeb53bd55f5095e4e,
+                    0x5bc3390694ee8251,
+                    0x4611720250274a29,
+                ]),
+                24 => scalar_from_u64s([
+                    0xe2ed71355cbe9268,
+                    0x2400a67b915b45fa,
+                    0xaa5f37dd1685188e,
+                    0x1075afe1e62be162,
+                ]),
+                36 => scalar_from_u64s([
+                    0x8d6f2e5faf077152,
+                    0xd3cd55eeec46751a,
+                    0x4fc92a1baa0ee777,
+                    0x4ed7c0e22446987f,
+                ]),
+                _ => unimplemented!(),
+            },
+        };
+        assert_eq!(expected_constant, constant_sponge_digest.unwrap());
+
+        assert_eq!(expected, digest);
     }
 
     #[test]
