@@ -320,7 +320,7 @@ where
         );
 
         let (pre_sparse_matrix, sparse_matrixes) =
-            factor_to_sparse_matrixes(mds_matrices.m.clone(), partial_rounds);
+            factor_to_sparse_matrixes(transpose(&mds_matrices.m.clone()), partial_rounds);
 
         // Ensure we have enough constants for the sbox rounds
         assert!(
