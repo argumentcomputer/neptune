@@ -25,3 +25,4 @@ structopt = { version = "0.3", default-features = false }
 default = ["opencl"]
 cuda = ["neptune/cuda", "ec-gpu-gen/cuda"]
 opencl = ["neptune/opencl", "ec-gpu-gen/opencl"]
+portable = ["blstrs/portable"]

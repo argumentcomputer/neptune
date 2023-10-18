@@ -68,6 +68,7 @@ strengthened = []
 # The supported fields for Poseidon running on the GPU are specified at compile-time.
 bls = ["blstrs/gpu"]
 pasta = ["pasta_curves/gpu"]
+portable = ["blstrs/portable"]
 
 [workspace]
 resolver = "2"
