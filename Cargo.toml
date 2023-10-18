@@ -85,6 +85,6 @@ ff = "0.13.0"
 generic-array = "0.14.7"
 pasta_curves = { version = "0.5" }
 ec-gpu = { version = "0.2.0" }
-ec-gpu-gen = { version = "0.6.0" }
+ec-gpu-gen = { version = "0.7.0" }
 log = "0.4.19"
 byteorder = "1"
