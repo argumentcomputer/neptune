@@ -89,7 +89,7 @@ fn as_generic_arrays<A: Arity<F>, F: PrimeField>(vec: &[F]) -> &[GenericArray<F,
     // into an even number of `GenericArray<Fr, Arity>`.
     assert_eq!(
         0,
-        (vec.len() * std::mem::size_of::<F>()) % std::mem::size_of::<GenericArray<F, A>>()
+        std::mem::size_of_val(vec) % std::mem::size_of::<GenericArray<F, A>>()
     );
 
     // This block does not affect the underlying `Fr`s. It just groups them into `GenericArray`s of length `Arity`.

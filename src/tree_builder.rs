@@ -70,7 +70,7 @@ fn as_generic_arrays<A: Arity<F>, F: PrimeField>(vec: &[F]) -> &[GenericArray<F,
     // into an even number of `GenericArray<Fr, Arity>`.
     assert_eq!(
         0,
-        (vec.len() * std::mem::size_of::<F>()) % std::mem::size_of::<GenericArray<F, A>>()
+        std::mem::size_of_val(vec) % std::mem::size_of::<GenericArray<F, A>>()
     );
 
     // This block does not affect the underlying `Fr`s. It just groups them into `GenericArray`s of length `Arity`.
@@ -143,7 +143,7 @@ where
                             as_generic_arrays::<TreeArity, F>(&tree_data[batch_start..batch_end]);
                         let hashed = batcher.hash(preimages)?;
 
-                        #[allow(clippy::drop_ref)]
+                        #[allow(dropping_references)]
                         drop(preimages); // make sure we don't reference tree_data anymore
                         tree_data[new_row_start + total_hashed
                             ..new_row_start + total_hashed + hashed.len()]
