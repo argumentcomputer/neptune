@@ -20,9 +20,7 @@ fn columns<T>(matrix: &Matrix<T>) -> usize {
     } else {
         let column_length = matrix[0].len();
         for row in matrix {
-            if row.len() != column_length {
-                panic!("not a matrix");
-            }
+            assert!(row.len() == column_length, "not a matrix");
         }
         column_length
     }

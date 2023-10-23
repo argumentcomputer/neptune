@@ -151,8 +151,9 @@ fn main() {
 
     let default_device = *Device::all().first().expect("Cannot get a default device");
 
-    let devices = gpus
-        .map(|v| {
+    let devices = gpus.map_or_else(
+        |_| vec![default_device],
+        |v| {
             v.split(',')
                 .map(|s| UniqueId::try_from(s).expect("Invalid unique ID!"))
                 .map(|unique_id| {
@@ -160,8 +161,8 @@ fn main() {
                         .unwrap_or_else(|| panic!("No device with unique ID {} found!", unique_id))
                 })
                 .collect::<Vec<_>>()
-        })
-        .unwrap_or_else(|_| vec![default_device]);
+        },
+    );
 
     let mut threads = Vec::new();
     for device in devices {

@@ -467,10 +467,7 @@ pub fn square_sum<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
     to_add: Scalar,
     num: &AllocatedNum<Scalar>,
     enforce: bool,
-) -> Result<AllocatedNum<Scalar>, SynthesisError>
-where
-    CS: ConstraintSystem<Scalar>,
-{
+) -> Result<AllocatedNum<Scalar>, SynthesisError> {
     let res = AllocatedNum::alloc(cs.namespace(|| "squared sum"), || {
         let mut tmp = num.get_value().ok_or(SynthesisError::AssignmentMissing)?;
         tmp.add_assign(&to_add);
@@ -499,10 +496,7 @@ pub fn mul_sum<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
     pre_add: Option<Scalar>,
     post_add: Option<Scalar>,
     enforce: bool,
-) -> Result<AllocatedNum<Scalar>, SynthesisError>
-where
-    CS: ConstraintSystem<Scalar>,
-{
+) -> Result<AllocatedNum<Scalar>, SynthesisError> {
     let res = AllocatedNum::alloc(cs.namespace(|| "mul_sum"), || {
         let mut tmp = b.get_value().ok_or(SynthesisError::AssignmentMissing)?;
         if let Some(x) = pre_add {
@@ -563,10 +557,7 @@ pub fn mul_pre_sum<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
     b: &AllocatedNum<Scalar>,
     to_add: Scalar,
     enforce: bool,
-) -> Result<AllocatedNum<Scalar>, SynthesisError>
-where
-    CS: ConstraintSystem<Scalar>,
-{
+) -> Result<AllocatedNum<Scalar>, SynthesisError> {
     let res = AllocatedNum::alloc(cs.namespace(|| "mul_sum"), || {
         let mut tmp = b.get_value().ok_or(SynthesisError::AssignmentMissing)?;
         tmp.add_assign(&to_add);

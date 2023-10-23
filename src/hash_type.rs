@@ -15,10 +15,7 @@ use ff::PrimeField;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(bound(
-    serialize = "F: PrimeField + Serialize, A: Arity<F>",
-    deserialize = "F: PrimeField + Deserialize<'de>, A: Arity<F>"
-))]
+#[serde(bound(serialize = "F: Serialize", deserialize = "F: Deserialize<'de>"))]
 pub enum HashType<F: PrimeField, A: Arity<F>> {
     MerkleTree,
     MerkleTreeSparse(u64),

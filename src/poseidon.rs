@@ -632,8 +632,7 @@ where
                 self.pos = self.elements.len();
             }
             HashType::VariableLength => todo!(),
-            HashType::Sponge => (),
-            _ => (),
+            _ => (), // incl. HashType::Sponge
         }
     }
 
