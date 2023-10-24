@@ -4,7 +4,7 @@
 # configuration file. This is a similar workaround to the ones presented here:
 # <https://github.com/EmbarkStudios/rust-ecosystem/issues/59>
 xclippy = [
-    "clippy", "--workspace", "--all-targets", "--",
+    "clippy", "--all-targets", "--",
     "-Wclippy::all",
     "-Wclippy::match_same_arms",
     "-Wclippy::cast_lossless",
