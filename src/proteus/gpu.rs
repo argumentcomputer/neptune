@@ -207,7 +207,7 @@ where
 /// Set `global_work_size` to the smallest value possible, so that the
 /// total number of threads is >= `batch-size`.
 fn calc_global_work_size(batch_size: usize, local_work_size: usize) -> usize {
-    (batch_size / local_work_size) + (batch_size % local_work_size != 0) as usize
+    (batch_size / local_work_size) + usize::from(batch_size % local_work_size != 0)
 }
 
 #[cfg(test)]
