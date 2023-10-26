@@ -394,7 +394,9 @@ mod tests {
         sponge.absorb(&F::from(n as u64), acc).unwrap();
         circuit
             .absorb(
-                &Elt::Allocated(AllocatedNum::alloc_infallible(&mut ns, || F::from(n as u64))),
+                &Elt::Allocated(AllocatedNum::alloc_infallible(&mut ns, || {
+                    F::from(n as u64)
+                })),
                 &mut ns,
             )
             .unwrap();
@@ -420,9 +422,10 @@ mod tests {
                 let f = F::from(sponge.absorbed() as u64);
                 sponge.absorb(&f, acc).unwrap();
                 i += 1;
-                let elt = Elt::Allocated(
-                    AllocatedNum::alloc_infallible(&mut ns.namespace(|| format!("{}", i)), || f),
-                );
+                let elt = Elt::Allocated(AllocatedNum::alloc_infallible(
+                    &mut ns.namespace(|| format!("{}", i)),
+                    || f,
+                ));
                 circuit.absorb(&elt, &mut ns).unwrap();
             }
         }
@@ -529,7 +532,7 @@ mod tests {
         let b = &wcs_aux[300..320];
         dbg!(cs_aux.len(), wcs_aux.len(), a, b);
 
-        assert_eq!(None, mismatch(cs_aux, wcs_aux));
+        assert_eq!(None, mismatch(&cs_aux, &wcs_aux));
         assert!(cs.is_satisfied());
 
         let non_circuit_output = {
@@ -745,11 +748,8 @@ mod tests {
 
     // Returns index of first mismatch, along with the mismatched elements if they exist.
     #[allow(clippy::type_complexity)]
-    fn mismatch<T: PartialEq + Copy>(
-        a: Vec<T>,
-        b: Vec<T>,
-    ) -> Option<(usize, (Option<T>, Option<T>))> {
-        for (i, (x, y)) in a.iter().zip(&b).enumerate() {
+    fn mismatch<T: PartialEq + Copy>(a: &[T], b: &[T]) -> Option<(usize, (Option<T>, Option<T>))> {
+        for (i, (x, y)) in a.iter().zip(b.iter()).enumerate() {
             if x != y {
                 return Some((i, (Some(*x), Some(*y))));
             }

@@ -3,7 +3,7 @@ use crate::poseidon::{Arity, PoseidonConstants};
 use bellpepper::util_cs::bench_cs::BenchCS;
 use bellpepper::util_cs::witness_cs::WitnessCS;
 use bellpepper_core::num::AllocatedNum;
-use bellpepper_core::{ConstraintSystem, SynthesisError};
+use bellpepper_core::ConstraintSystem;
 use blstrs::Scalar as Fr;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ff::Field;
@@ -24,24 +24,23 @@ impl<A: Arity<Fr>> BenchCircuit<'_, A> {
     fn synthesize<CS: ConstraintSystem<Fr>>(
         self,
         cs: &mut CS,
-        data: Vec<AllocatedNum<Fr>>,
+        data: &[AllocatedNum<Fr>],
         constants: &PoseidonConstants<Fr, A>,
-    ) -> Result<(), SynthesisError> {
+    ) {
         for _ in 0..self.n {
             if self.circuit_type.is_some() {
                 poseidon_hash_circuit(
                     &mut cs.namespace(|| "{i}"),
                     *self.circuit_type.unwrap(),
-                    data.clone(),
+                    data.to_vec(),
                     constants,
                 )
                 .expect("poseidon hashing failed");
             } else {
-                poseidon_hash_allocated(&mut cs.namespace(|| "{i}"), data.clone(), constants)
+                poseidon_hash_allocated(&mut cs.namespace(|| "{i}"), data.to_vec(), constants)
                     .expect("poseidon hashing failed");
             };
         }
-        Ok(())
     }
 
     fn data<CS: ConstraintSystem<Fr>>(cs: &mut CS) -> Vec<AllocatedNum<Fr>> {
@@ -84,7 +83,7 @@ where
                             circuit_type: Some(circuit_type),
                             _a: PhantomData::<A>,
                         };
-                        circuit.synthesize(&mut cs, data.clone(), &constants)
+                        circuit.synthesize(&mut cs, &data, &constants)
                     })
                 },
             );
@@ -105,7 +104,7 @@ where
                         circuit_type: None,
                         _a: PhantomData::<A>,
                     };
-                    circuit.synthesize(&mut cs, data.clone(), &constants)
+                    circuit.synthesize(&mut cs, &data, &constants)
                 })
             },
         );

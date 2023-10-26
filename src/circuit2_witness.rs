@@ -354,11 +354,8 @@ mod test {
 
     // Returns index of first mismatch, along with the mismatched elements if they exist.
     #[allow(clippy::type_complexity)]
-    fn mismatch<T: PartialEq + Copy>(
-        a: Vec<T>,
-        b: Vec<T>,
-    ) -> Option<(usize, (Option<T>, Option<T>))> {
-        for (i, (x, y)) in a.iter().zip(&b).enumerate() {
+    fn mismatch<T: PartialEq + Copy>(a: &[T], b: &[T]) -> Option<(usize, (Option<T>, Option<T>))> {
+        for (i, (x, y)) in a.iter().zip(b.iter()).enumerate() {
             if x != y {
                 return Some((i, (Some(*x), Some(*y))));
             }
@@ -443,9 +440,9 @@ mod test {
 
                 assert_eq!(cs_aux.len(), wcs_aux.len());
 
-                assert_eq!(None, mismatch(cs_inputs, wcs_inputs));
+                assert_eq!(None, mismatch(&cs_inputs, &wcs_inputs));
                 dbg!(&cs_aux[220..], &wcs_aux[220..]);
-                assert_eq!(None, mismatch(cs_aux, wcs_aux));
+                assert_eq!(None, mismatch(&cs_aux, &wcs_aux));
 
                 let mut p = Poseidon::<Fr, A>::new_with_preimage(&fr_data, &constants);
                 let expected: Fr = p.hash_in_mode(HashMode::Correct);

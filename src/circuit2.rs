@@ -849,9 +849,10 @@ mod tests {
 
         let mut cs1 = cs.namespace(|| "square_sum");
         let two = fr(2);
-        let three = Elt::Allocated(
-            AllocatedNum::alloc_infallible(cs1.namespace(|| "three"), || Fr::from(3)),
-        );
+        let three = Elt::Allocated(AllocatedNum::alloc_infallible(
+            cs1.namespace(|| "three"),
+            || Fr::from(3),
+        ));
         let res = square_sum(cs1, two, &three, true).unwrap();
 
         let twenty_five = Fr::from(25);
