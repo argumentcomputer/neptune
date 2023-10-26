@@ -114,10 +114,11 @@ impl<Scalar: PrimeField> Elt<Scalar> {
     ) -> Result<AllocatedNum<Scalar>, SynthesisError> {
         match self {
             Elt::Num(num) => {
-                let mut tmp = num.get_value().ok_or(SynthesisError::AssignmentMissing)?;
-                tmp = tmp * tmp;
-                let allocated =
-                    AllocatedNum::alloc_infallible(&mut cs.namespace(|| "squared num"), || tmp);
+                let allocated = AllocatedNum::alloc(&mut cs.namespace(|| "squared num"), || {
+                    num.get_value()
+                        .ok_or(SynthesisError::AssignmentMissing)
+                        .map(|tmp| tmp * tmp)
+                })?;
                 cs.enforce(
                     || "squaring constraint",
                     |_| num.lc(Scalar::ONE),
