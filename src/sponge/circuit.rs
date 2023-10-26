@@ -106,7 +106,7 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
     }
 
     fn make_elt(&self, val: F, ns: &mut Self::Acc) -> Self::Elt {
-        let allocated = AllocatedNum::alloc(ns, || Ok(val)).unwrap();
+        let allocated = AllocatedNum::alloc_infallible(ns, || val);
         Elt::Allocated(allocated)
     }
 
@@ -394,7 +394,7 @@ mod tests {
         sponge.absorb(&F::from(n as u64), acc).unwrap();
         circuit
             .absorb(
-                &Elt::Allocated(AllocatedNum::alloc(&mut ns, || Ok(F::from(n as u64))).unwrap()),
+                &Elt::Allocated(AllocatedNum::alloc_infallible(&mut ns, || F::from(n as u64))),
                 &mut ns,
             )
             .unwrap();
@@ -421,7 +421,7 @@ mod tests {
                 sponge.absorb(&f, acc).unwrap();
                 i += 1;
                 let elt = Elt::Allocated(
-                    AllocatedNum::alloc(&mut ns.namespace(|| format!("{}", i)), || Ok(f)).unwrap(),
+                    AllocatedNum::alloc_infallible(&mut ns.namespace(|| format!("{}", i)), || f),
                 );
                 circuit.absorb(&elt, &mut ns).unwrap();
             }
@@ -692,11 +692,11 @@ mod tests {
             let mut sponge = SpongeCircuit::<F, A, _>::new_with_constants(&self.p, Mode::Simplex);
             let mut ns = cs.namespace(|| "ns");
 
-            let a1 = AllocatedNum::alloc(&mut ns.namespace(|| "a1"), || Ok(F::from(1))).unwrap();
-            let a2 = AllocatedNum::alloc(&mut ns.namespace(|| "a2"), || Ok(F::from(2))).unwrap();
-            let a3 = AllocatedNum::alloc(&mut ns.namespace(|| "a3"), || Ok(F::from(3))).unwrap();
-            let a4 = AllocatedNum::alloc(&mut ns.namespace(|| "a4"), || Ok(F::from(4))).unwrap();
-            let a5 = AllocatedNum::alloc(&mut ns.namespace(|| "a5"), || Ok(F::from(4))).unwrap();
+            let a1 = AllocatedNum::alloc_infallible(&mut ns.namespace(|| "a1"), || F::from(1));
+            let a2 = AllocatedNum::alloc_infallible(&mut ns.namespace(|| "a2"), || F::from(2));
+            let a3 = AllocatedNum::alloc_infallible(&mut ns.namespace(|| "a3"), || F::from(3));
+            let a4 = AllocatedNum::alloc_infallible(&mut ns.namespace(|| "a4"), || F::from(4));
+            let a5 = AllocatedNum::alloc_infallible(&mut ns.namespace(|| "a5"), || F::from(4));
 
             let acc = &mut ns;
 
