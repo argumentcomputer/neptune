@@ -109,20 +109,17 @@ impl<Scalar: PrimeField> Elt<Scalar> {
 
     /// Add two Nums and return a Num tracking the calculation. It is forbidden to invoke on an Allocated because the intended computation
     /// does not include that path.
-    fn add(self, other: Elt<Scalar>) -> Result<Elt<Scalar>, SynthesisError> {
+    fn add(self, other: Elt<Scalar>) -> Elt<Scalar> {
         match (self, other) {
-            (Elt::Num(a), Elt::Num(b)) => Ok(Elt::Num(a.add(&b))),
+            (Elt::Num(a), Elt::Num(b)) => Elt::Num(a.add(&b)),
             _ => panic!("only two numbers may be added"),
         }
     }
 
     /// Scale
-    fn scale<CS: ConstraintSystem<Scalar>>(
-        self,
-        scalar: Scalar,
-    ) -> Result<Elt<Scalar>, SynthesisError> {
+    fn scale<CS: ConstraintSystem<Scalar>>(self, scalar: Scalar) -> Elt<Scalar> {
         match self {
-            Elt::Num(num) => Ok(Elt::Num(num.scale(scalar))),
+            Elt::Num(num) => Elt::Num(num.scale(scalar)),
             Elt::Allocated(a) => Elt::Num(a.into()).scale::<CS>(scalar),
         }
     }
@@ -263,7 +260,7 @@ where
         self.constants_offset = constants_offset;
 
         // Multiply the elements by the constant MDS matrix
-        self.product_mds::<CS>()?;
+        self.product_mds::<CS>();
         Ok(())
     }
 
@@ -281,22 +278,22 @@ where
         )?;
 
         // Multiply the elements by the constant MDS matrix
-        self.product_mds::<CS>()?;
+        self.product_mds::<CS>();
         Ok(())
     }
 
-    fn product_mds_m<CS: ConstraintSystem<Scalar>>(&mut self) -> Result<(), SynthesisError> {
+    fn product_mds_m<CS: ConstraintSystem<Scalar>>(&mut self) {
         self.product_mds_with_matrix::<CS>(&self.constants.mds_matrices.m)
     }
 
     /// Set the provided elements with the result of the product between the elements and the appropriate
     /// MDS matrix.
     #[allow(clippy::collapsible_else_if)]
-    fn product_mds<CS: ConstraintSystem<Scalar>>(&mut self) -> Result<(), SynthesisError> {
+    fn product_mds<CS: ConstraintSystem<Scalar>>(&mut self) {
         let full_half = self.constants.half_full_rounds;
         let sparse_offset = full_half - 1;
         if self.current_round == sparse_offset {
-            self.product_mds_with_matrix::<CS>(&self.constants.pre_sparse_matrix)?;
+            self.product_mds_with_matrix::<CS>(&self.constants.pre_sparse_matrix);
         } else {
             if (self.current_round > sparse_offset)
                 && (self.current_round < full_half + self.constants.partial_rounds)
@@ -304,21 +301,17 @@ where
                 let index = self.current_round - sparse_offset - 1;
                 let sparse_matrix = &self.constants.sparse_matrixes[index];
 
-                self.product_mds_with_sparse_matrix::<CS>(sparse_matrix)?;
+                self.product_mds_with_sparse_matrix::<CS>(sparse_matrix);
             } else {
-                self.product_mds_m::<CS>()?;
+                self.product_mds_m::<CS>();
             }
         };
 
         self.current_round += 1;
-        Ok(())
     }
 
     #[allow(clippy::ptr_arg)]
-    fn product_mds_with_matrix<CS: ConstraintSystem<Scalar>>(
-        &mut self,
-        matrix: &Matrix<Scalar>,
-    ) -> Result<(), SynthesisError> {
+    fn product_mds_with_matrix<CS: ConstraintSystem<Scalar>>(&mut self, matrix: &Matrix<Scalar>) {
         let mut result: Vec<Elt<Scalar>> = Vec::with_capacity(self.constants.width());
 
         for j in 0..self.constants.width() {
@@ -326,41 +319,37 @@ where
                 .map(|i| matrix[i][j])
                 .collect::<Vec<_>>();
 
-            let product = scalar_product::<Scalar, CS>(self.elements.as_slice(), &column)?;
+            let product = scalar_product::<Scalar, CS>(self.elements.as_slice(), &column);
 
             result.push(product);
         }
 
         self.elements = result;
-
-        Ok(())
     }
 
     // Sparse matrix in this context means one of the form, M''.
     fn product_mds_with_sparse_matrix<CS: ConstraintSystem<Scalar>>(
         &mut self,
         matrix: &SparseMatrix<Scalar>,
-    ) -> Result<(), SynthesisError> {
+    ) {
         let mut result: Vec<Elt<Scalar>> = Vec::with_capacity(self.constants.width());
 
         result.push(scalar_product::<Scalar, CS>(
             self.elements.as_slice(),
             &matrix.w_hat,
-        )?);
+        ));
 
         for j in 1..self.width {
             result.push(
                 self.elements[j].clone().add(
                     self.elements[0]
                         .clone() // First row is dense.
-                        .scale::<CS>(matrix.v_rest[j - 1])?, // Except for first row/column, diagonals are one.
-                )?,
+                        .scale::<CS>(matrix.v_rest[j - 1]), // Except for first row/column, diagonals are one.
+                ),
             );
         }
 
         self.elements = result;
-
-        Ok(())
     }
 
     fn debug(&self) {
@@ -581,21 +570,19 @@ fn scalar_product_with_add<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     elts: &[Elt<Scalar>],
     scalars: &[Scalar],
     to_add: Scalar,
-) -> Result<Elt<Scalar>, SynthesisError> {
-    let tmp = scalar_product::<Scalar, CS>(elts, scalars)?;
-    let tmp2 = tmp.add(Elt::<Scalar>::num_from_fr::<CS>(to_add))?;
-
-    Ok(tmp2)
+) -> Elt<Scalar> {
+    let tmp = scalar_product::<Scalar, CS>(elts, scalars);
+    tmp.add(Elt::<Scalar>::num_from_fr::<CS>(to_add))
 }
 
 fn scalar_product<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     elts: &[Elt<Scalar>],
     scalars: &[Scalar],
-) -> Result<Elt<Scalar>, SynthesisError> {
+) -> Elt<Scalar> {
     elts.iter()
         .zip(scalars)
-        .try_fold(Elt::Num(num::Num::zero()), |acc, (elt, &scalar)| {
-            acc.add(elt.clone().scale::<CS>(scalar)?)
+        .fold(Elt::Num(num::Num::zero()), |acc, (elt, &scalar)| {
+            acc.add(elt.clone().scale::<CS>(scalar))
         })
 }
 
@@ -678,7 +665,7 @@ mod tests {
                     let fr = Fr::random(&mut rng);
                     fr_data[i] = fr;
                     i += 1;
-                    AllocatedNum::alloc(cs.namespace(|| format!("data {}", i)), || Ok(fr)).unwrap()
+                    AllocatedNum::alloc_infallible(cs.namespace(|| format!("data {}", i)), || fr)
                 })
                 .collect::<Vec<_>>();
 
@@ -723,7 +710,7 @@ mod tests {
 
         let mut cs1 = cs.namespace(|| "square_sum");
         let two = fr(2);
-        let three = AllocatedNum::alloc(cs1.namespace(|| "three"), || Ok(Fr::from(3))).unwrap();
+        let three = AllocatedNum::alloc_infallible(cs1.namespace(|| "three"), || Fr::from(3));
         let res = square_sum(cs1, two, &three, true).unwrap();
 
         let twenty_five = Fr::from(25);
@@ -741,8 +728,7 @@ mod tests {
             let res = scalar_product::<Fr, TestConstraintSystem<Fr>>(
                 &[two, three, four],
                 &[fr(5), fr(6), fr(7)],
-            )
-            .unwrap();
+            );
 
             assert!(res.is_num());
             assert_eq!(Fr::from(56), res.val().unwrap());
@@ -753,16 +739,15 @@ mod tests {
             // Inputs are linear combinations and an allocated number.
             let two = efr(2);
 
-            let n3 = AllocatedNum::alloc(cs.namespace(|| "three"), || Ok(Fr::from(3))).unwrap();
+            let n3 = AllocatedNum::alloc_infallible(cs.namespace(|| "three"), || Fr::from(3));
             let three = Elt::Allocated(n3.clone());
-            let n4 = AllocatedNum::alloc(cs.namespace(|| "four"), || Ok(Fr::from(4))).unwrap();
+            let n4 = AllocatedNum::alloc_infallible(cs.namespace(|| "four"), || Fr::from(4));
             let four = Elt::Allocated(n4.clone());
 
             let res = scalar_product::<Fr, TestConstraintSystem<Fr>>(
                 &[two, three, four],
                 &[fr(5), fr(6), fr(7)],
-            )
-            .unwrap();
+            );
 
             assert!(res.is_num());
             assert_eq!(Fr::from(56), res.val().unwrap());
@@ -785,9 +770,9 @@ mod tests {
             // Inputs are linear combinations and an allocated number.
             let two = efr(2);
 
-            let n3 = AllocatedNum::alloc(cs.namespace(|| "three"), || Ok(Fr::from(3))).unwrap();
+            let n3 = AllocatedNum::alloc_infallible(cs.namespace(|| "three"), || Fr::from(3));
             let three = Elt::Allocated(n3.clone());
-            let n4 = AllocatedNum::alloc(cs.namespace(|| "four"), || Ok(Fr::from(4))).unwrap();
+            let n4 = AllocatedNum::alloc_infallible(cs.namespace(|| "four"), || Fr::from(4));
             let four = Elt::Allocated(n4.clone());
 
             let mut res_vec = Vec::new();
@@ -795,8 +780,7 @@ mod tests {
             let res = scalar_product::<Fr, TestConstraintSystem<Fr>>(
                 &[two, three, four],
                 &[fr(5), fr(6), fr(7)],
-            )
-            .unwrap();
+            );
 
             res_vec.push(res);
 
@@ -816,8 +800,7 @@ mod tests {
             res_vec.push(efr(3));
             res_vec.push(four2);
             let res2 =
-                scalar_product::<Fr, TestConstraintSystem<Fr>>(&res_vec, &[fr(7), fr(8), fr(9)])
-                    .unwrap();
+                scalar_product::<Fr, TestConstraintSystem<Fr>>(&res_vec, &[fr(7), fr(8), fr(9)]);
 
             res2.lc().iter().for_each(|(var, f)| {
                 if var.get_unchecked() == n3.get_variable().get_unchecked() {
@@ -847,8 +830,7 @@ mod tests {
             &[two, three, four],
             &[fr(5), fr(6), fr(7)],
             fr(3),
-        )
-        .unwrap();
+        );
 
         assert!(res.is_num());
         assert_eq!(fr(59), res.val().unwrap());

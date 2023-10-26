@@ -78,8 +78,8 @@ members = [
 
 # Dependencies that should be kept in sync through the whole workspace
 [workspace.dependencies]
-bellpepper-core = { version = "0.2.0", default-features = false }
-bellpepper = { version = "0.2.0", default-features = false }
+bellpepper-core = { version = "0.3.0", default-features = false }
+bellpepper = { version = "0.3.0", default-features = false }
 blake2s_simd = "1.0.1"
 blstrs = { version = "0.7.0" }
 ff = "0.13.0"

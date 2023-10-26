@@ -106,7 +106,7 @@ impl<'a, F: PrimeField, A: Arity<F>, CS: 'a + ConstraintSystem<F>> SpongeTrait<'
     }
 
     fn make_elt(&self, val: F, ns: &mut Self::Acc) -> Self::Elt {
-        let allocated = AllocatedNum::alloc(ns, || Ok(val)).unwrap();
+        let allocated = AllocatedNum::alloc_infallible(ns, || val);
         Elt::Allocated(allocated)
     }
 
@@ -394,7 +394,9 @@ mod tests {
         sponge.absorb(&F::from(n as u64), acc).unwrap();
         circuit
             .absorb(
-                &Elt::Allocated(AllocatedNum::alloc(&mut ns, || Ok(F::from(n as u64))).unwrap()),
+                &Elt::Allocated(AllocatedNum::alloc_infallible(&mut ns, || {
+                    F::from(n as u64)
+                })),
                 &mut ns,
             )
             .unwrap();
@@ -420,9 +422,10 @@ mod tests {
                 let f = F::from(sponge.absorbed() as u64);
                 sponge.absorb(&f, acc).unwrap();
                 i += 1;
-                let elt = Elt::Allocated(
-                    AllocatedNum::alloc(&mut ns.namespace(|| format!("{}", i)), || Ok(f)).unwrap(),
-                );
+                let elt = Elt::Allocated(AllocatedNum::alloc_infallible(
+                    &mut ns.namespace(|| format!("{}", i)),
+                    || f,
+                ));
                 circuit.absorb(&elt, &mut ns).unwrap();
             }
         }
@@ -529,7 +532,7 @@ mod tests {
         let b = &wcs_aux[300..320];
         dbg!(cs_aux.len(), wcs_aux.len(), a, b);
 
-        assert_eq!(None, mismatch(cs_aux, wcs_aux));
+        assert_eq!(None, mismatch(&cs_aux, &wcs_aux));
         assert!(cs.is_satisfied());
 
         let non_circuit_output = {
@@ -692,11 +695,11 @@ mod tests {
             let mut sponge = SpongeCircuit::<F, A, _>::new_with_constants(&self.p, Mode::Simplex);
             let mut ns = cs.namespace(|| "ns");
 
-            let a1 = AllocatedNum::alloc(&mut ns.namespace(|| "a1"), || Ok(F::from(1))).unwrap();
-            let a2 = AllocatedNum::alloc(&mut ns.namespace(|| "a2"), || Ok(F::from(2))).unwrap();
-            let a3 = AllocatedNum::alloc(&mut ns.namespace(|| "a3"), || Ok(F::from(3))).unwrap();
-            let a4 = AllocatedNum::alloc(&mut ns.namespace(|| "a4"), || Ok(F::from(4))).unwrap();
-            let a5 = AllocatedNum::alloc(&mut ns.namespace(|| "a5"), || Ok(F::from(4))).unwrap();
+            let a1 = AllocatedNum::alloc_infallible(&mut ns.namespace(|| "a1"), || F::from(1));
+            let a2 = AllocatedNum::alloc_infallible(&mut ns.namespace(|| "a2"), || F::from(2));
+            let a3 = AllocatedNum::alloc_infallible(&mut ns.namespace(|| "a3"), || F::from(3));
+            let a4 = AllocatedNum::alloc_infallible(&mut ns.namespace(|| "a4"), || F::from(4));
+            let a5 = AllocatedNum::alloc_infallible(&mut ns.namespace(|| "a5"), || F::from(4));
 
             let acc = &mut ns;
 
@@ -745,11 +748,8 @@ mod tests {
 
     // Returns index of first mismatch, along with the mismatched elements if they exist.
     #[allow(clippy::type_complexity)]
-    fn mismatch<T: PartialEq + Copy>(
-        a: Vec<T>,
-        b: Vec<T>,
-    ) -> Option<(usize, (Option<T>, Option<T>))> {
-        for (i, (x, y)) in a.iter().zip(&b).enumerate() {
+    fn mismatch<T: PartialEq + Copy>(a: &[T], b: &[T]) -> Option<(usize, (Option<T>, Option<T>))> {
+        for (i, (x, y)) in a.iter().zip(b.iter()).enumerate() {
             if x != y {
                 return Some((i, (Some(*x), Some(*y))));
             }

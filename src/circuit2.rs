@@ -114,10 +114,11 @@ impl<Scalar: PrimeField> Elt<Scalar> {
     ) -> Result<AllocatedNum<Scalar>, SynthesisError> {
         match self {
             Elt::Num(num) => {
-                let mut tmp = num.get_value().ok_or(SynthesisError::AssignmentMissing)?;
-                tmp = tmp * tmp;
-                let allocated =
-                    AllocatedNum::alloc(&mut cs.namespace(|| "squared num"), || Ok(tmp))?;
+                let allocated = AllocatedNum::alloc(&mut cs.namespace(|| "squared num"), || {
+                    num.get_value()
+                        .ok_or(SynthesisError::AssignmentMissing)
+                        .map(|tmp| tmp * tmp)
+                })?;
                 cs.enforce(
                     || "squaring constraint",
                     |_| num.lc(Scalar::ONE),
@@ -849,9 +850,10 @@ mod tests {
 
         let mut cs1 = cs.namespace(|| "square_sum");
         let two = fr(2);
-        let three = Elt::Allocated(
-            AllocatedNum::alloc(cs1.namespace(|| "three"), || Ok(Fr::from(3))).unwrap(),
-        );
+        let three = Elt::Allocated(AllocatedNum::alloc_infallible(
+            cs1.namespace(|| "three"),
+            || Fr::from(3),
+        ));
         let res = square_sum(cs1, two, &three, true).unwrap();
 
         let twenty_five = Fr::from(25);
@@ -881,9 +883,9 @@ mod tests {
             // Inputs are linear combinations and an allocated number.
             let two = efr(2);
 
-            let n3 = AllocatedNum::alloc(cs.namespace(|| "three"), || Ok(Fr::from(3))).unwrap();
+            let n3 = AllocatedNum::alloc_infallible(cs.namespace(|| "three"), || Fr::from(3));
             let three = Elt::Allocated(n3.clone());
-            let n4 = AllocatedNum::alloc(cs.namespace(|| "four"), || Ok(Fr::from(4))).unwrap();
+            let n4 = AllocatedNum::alloc_infallible(cs.namespace(|| "four"), || Fr::from(4));
             let four = Elt::Allocated(n4.clone());
 
             let res = scalar_product::<Fr, TestConstraintSystem<Fr>>(
@@ -912,9 +914,9 @@ mod tests {
             // Inputs are linear combinations and an allocated number.
             let two = efr(2);
 
-            let n3 = AllocatedNum::alloc(cs.namespace(|| "three"), || Ok(Fr::from(3))).unwrap();
+            let n3 = AllocatedNum::alloc_infallible(cs.namespace(|| "three"), || Fr::from(3));
             let three = Elt::Allocated(n3.clone());
-            let n4 = AllocatedNum::alloc(cs.namespace(|| "four"), || Ok(Fr::from(4))).unwrap();
+            let n4 = AllocatedNum::alloc_infallible(cs.namespace(|| "four"), || Fr::from(4));
             let four = Elt::Allocated(n4.clone());
 
             let mut res_vec = Vec::new();

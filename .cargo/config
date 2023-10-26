@@ -19,6 +19,7 @@ xclippy = [
     "-Wclippy::map_flatten",
     "-Wclippy::map_unwrap_or",
     "-Wclippy::needless_borrow",
+    "-Wclippy::unnecessary_wraps",
     "-Wclippy::checked_conversions",
     "-Wclippy::trait_duplication_in_bounds",
     "-Wrust_2018_idioms",
