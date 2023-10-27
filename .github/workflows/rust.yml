@@ -3,12 +3,10 @@ name: Rust
 on:
   merge_group:
   push:
-    branches-ignore:
-      - "gh-readonly-queue/**"
-      - "main"
+    branches: [main, dev]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    branches: [main]
+    branches: [main, dev]
 
 env:
   CARGO_TERM_COLOR: always
