@@ -435,14 +435,14 @@ mod test {
                 let cs_inputs = cs.scalar_inputs();
                 let cs_aux = cs.scalar_aux();
 
-                let wcs_inputs = wcs.scalar_inputs();
-                let wcs_aux = wcs.scalar_aux();
+                let wcs_inputs = wcs.input_assignment();
+                let wcs_aux = wcs.aux_assignment();
 
                 assert_eq!(cs_aux.len(), wcs_aux.len());
 
-                assert_eq!(None, mismatch(&cs_inputs, &wcs_inputs));
+                assert_eq!(None, mismatch(&cs_inputs, wcs_inputs));
                 dbg!(&cs_aux[220..], &wcs_aux[220..]);
-                assert_eq!(None, mismatch(&cs_aux, &wcs_aux));
+                assert_eq!(None, mismatch(&cs_aux, wcs_aux));
 
                 let mut p = Poseidon::<Fr, A>::new_with_preimage(&fr_data, &constants);
                 let expected: Fr = p.hash_in_mode(HashMode::Correct);
