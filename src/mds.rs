@@ -54,9 +54,18 @@ pub struct SparseMatrix<F: PrimeField> {
 }
 
 impl<F: PrimeField> SparseMatrix<F> {
+    #[allow(clippy::needless_pass_by_value)]
+    #[deprecated(
+        since = "12.1.0",
+        note = "Please use `SparseMatrix::new_from_ref` instead."
+    )]
     pub fn new(m_double_prime: Matrix<F>) -> Self {
-        assert!(Self::is_sparse_matrix(&m_double_prime));
-        let size = matrix::rows(&m_double_prime);
+        Self::new_from_ref(&m_double_prime)
+    }
+
+    pub fn new_from_ref(m_double_prime: &Matrix<F>) -> Self {
+        assert!(Self::is_sparse_matrix(m_double_prime));
+        let size = matrix::rows(m_double_prime);
 
         let w_hat = (0..size).map(|i| m_double_prime[i][0]).collect::<Vec<_>>();
         let v_rest = m_double_prime[0][1..].to_vec();
@@ -91,27 +100,27 @@ impl<F: PrimeField> SparseMatrix<F> {
 //   - The previous layer's M is then replaced by M x M' = M*.
 //   - M* is likewise factored into M*' and M*'', and the process continues.
 pub(crate) fn factor_to_sparse_matrixes<F: PrimeField>(
-    base_matrix: Matrix<F>,
+    base_matrix: &Matrix<F>,
     n: usize,
 ) -> (Matrix<F>, Vec<SparseMatrix<F>>) {
     let (pre_sparse, sparse_matrices) = factor_to_sparse_matrices(base_matrix, n);
     let sparse_matrixes = sparse_matrices
         .iter()
-        .map(|m| SparseMatrix::<F>::new(m.to_vec()))
+        .map(|m| SparseMatrix::<F>::new_from_ref(m))
         .collect::<Vec<_>>();
 
     (pre_sparse, sparse_matrixes)
 }
 
 pub(crate) fn factor_to_sparse_matrices<F: PrimeField>(
-    base_matrix: Matrix<F>,
+    base_matrix: &Matrix<F>,
     n: usize,
 ) -> (Matrix<F>, Vec<Matrix<F>>) {
     let (pre_sparse, mut all) =
         (0..n).fold((base_matrix.clone(), Vec::new()), |(curr, mut acc), _| {
             let derived = derive_mds_matrices(curr);
             acc.push(derived.m_double_prime);
-            let new = mat_mul(&base_matrix, &derived.m_prime).unwrap();
+            let new = mat_mul(base_matrix, &derived.m_prime).unwrap();
             (new, acc)
         });
     all.reverse();
@@ -300,7 +309,7 @@ mod tests {
         let m = generate_mds::<Fr>(width);
         let m2 = m.clone();
 
-        let (pre_sparse, mut sparse) = factor_to_sparse_matrices(m, n);
+        let (pre_sparse, mut sparse) = factor_to_sparse_matrices(&m, n);
         assert_eq!(n, sparse.len());
 
         let mut initial = Vec::with_capacity(width);
@@ -345,10 +354,10 @@ mod tests {
         let m = generate_mds::<Fr>(width);
         let m2 = m.clone();
 
-        let (pre_sparse, sparse_matrices) = factor_to_sparse_matrices(m, n);
+        let (pre_sparse, sparse_matrices) = factor_to_sparse_matrices(&m, n);
         assert_eq!(n, sparse_matrices.len());
 
-        let (pre_sparse2, sparse_matrixes) = factor_to_sparse_matrixes(m2, n);
+        let (pre_sparse2, sparse_matrixes) = factor_to_sparse_matrixes(&m2, n);
 
         assert_eq!(pre_sparse, pre_sparse2);
 

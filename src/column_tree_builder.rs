@@ -135,10 +135,10 @@ where
     // without the cost of generating a full column tree.
     pub fn compute_uniform_tree_root(
         &mut self,
-        column: GenericArray<F, ColumnArity>,
+        column: &GenericArray<F, ColumnArity>,
     ) -> Result<F, Error> {
         // All the leaves will be the same.
-        let element = Poseidon::new_with_preimage(&column, &self.column_constants).hash();
+        let element = Poseidon::new_with_preimage(column, &self.column_constants).hash();
 
         self.tree_builder.compute_uniform_tree_root(element)
     }

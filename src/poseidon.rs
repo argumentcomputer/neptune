@@ -100,7 +100,7 @@ where
     pub(crate) _a: PhantomData<A>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum HashMode {
     // The initial and correct version of the algorithm. We should preserve the ability to hash this way for reference
     // and to preserve confidence in our tests along thew way.
@@ -269,7 +269,7 @@ where
         );
 
         let (pre_sparse_matrix, sparse_matrixes) =
-            factor_to_sparse_matrixes(mds_matrices.m.clone(), partial_rounds);
+            factor_to_sparse_matrixes(&mds_matrices.m, partial_rounds);
 
         // Ensure we have enough constants for the sbox rounds
         assert!(
