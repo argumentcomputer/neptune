@@ -8,6 +8,7 @@ xclippy = [
     "-Wclippy::all",
     "-Wclippy::match_same_arms",
     "-Wclippy::cast_lossless",
+    "-Wclippy::checked_conversions",
     "-Wclippy::disallowed_methods",
     "-Wclippy::enum_glob_use",
     "-Wclippy::filter_map_next",
@@ -19,11 +20,12 @@ xclippy = [
     "-Wclippy::map_flatten",
     "-Wclippy::map_unwrap_or",
     "-Wclippy::needless_borrow",
+    "-Wclippy::needless_pass_by_value",
     "-Wclippy::unnecessary_wraps",
-    "-Wclippy::checked_conversions",
     "-Wclippy::trait_duplication_in_bounds",
     "-Wrust_2018_idioms",
     "-Wtrivial_numeric_casts",
     "-Wunused_lifetimes",
     "-Wunused_qualifications",
+    "-Wunreachable_pub"
 ]

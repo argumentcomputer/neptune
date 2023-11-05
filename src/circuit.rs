@@ -540,6 +540,7 @@ pub fn mul_sum<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
 }
 
 /// Calculates a * (b + to_add) — and enforces that constraint.
+#[deprecated(since = "12.1.0", note = "use mul_sum instead")]
 pub fn mul_pre_sum<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
     mut cs: CS,
     a: &AllocatedNum<Scalar>,

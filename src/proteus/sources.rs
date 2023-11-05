@@ -12,28 +12,28 @@ use pasta_curves::{Fp, Fq as Fv};
 
 use round_numbers::{round_numbers_base, round_numbers_strengthened};
 
-pub struct DerivedConstants {
-    pub arity: usize,
-    pub partial_rounds: usize,
-    pub width: usize,
-    pub sparse_matrix_size: usize,
-    pub full_half: usize,
-    pub sparse_offset: usize,
-    pub constants_elements: usize,
+pub(crate) struct DerivedConstants {
+    pub(crate) arity: usize,
+    pub(crate) partial_rounds: usize,
+    pub(crate) width: usize,
+    pub(crate) sparse_matrix_size: usize,
+    pub(crate) full_half: usize,
+    pub(crate) sparse_offset: usize,
+    pub(crate) constants_elements: usize,
 
     // Offsets
-    pub domain_tag_offset: usize,
-    pub round_keys_offset: usize,
-    pub mds_matrix_offset: usize,
-    pub pre_sparse_matrix_offset: usize,
-    pub sparse_matrixes_offset: usize,
-    pub w_hat_offset: usize,
-    pub v_rest_offset: usize,
+    pub(crate) domain_tag_offset: usize,
+    pub(crate) round_keys_offset: usize,
+    pub(crate) mds_matrix_offset: usize,
+    pub(crate) pre_sparse_matrix_offset: usize,
+    pub(crate) sparse_matrixes_offset: usize,
+    pub(crate) w_hat_offset: usize,
+    pub(crate) v_rest_offset: usize,
 }
 
 #[allow(clippy::suspicious_operation_groupings)]
 impl DerivedConstants {
-    pub fn new(arity: usize, full_rounds: usize, partial_rounds: usize) -> Self {
+    pub(crate) fn new(arity: usize, full_rounds: usize, partial_rounds: usize) -> Self {
         let sparse_count = partial_rounds;
         let width = arity + 1;
         let sparse_matrix_size = 2 * width - 1;
@@ -156,7 +156,7 @@ fn derive_constants(arity: usize) -> (DerivedConstants, DerivedConstants) {
 /// Returns the kernels source based on the set feature flags.
 ///
 /// Kernels for certain arities are enabled by feature flags.
-pub fn generate_program() -> SourceBuilder {
+pub(crate) fn generate_program() -> SourceBuilder {
     #[cfg(any(feature = "bls", feature = "pasta"))]
     let derived_constants = vec![
         #[cfg(feature = "arity2")]

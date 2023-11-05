@@ -57,12 +57,12 @@ impl Default for Hasher {
 }
 
 impl Hasher {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Default::default()
     }
 
     /// Update hasher's current op to coalesce absorb/squeeze runs.
-    pub fn update_op(&mut self, op: SpongeOp) {
+    pub(crate) fn update_op(&mut self, op: SpongeOp) {
         if self.current_op.matches(op) {
             self.current_op = self.current_op.combine(op)
         } else {
@@ -80,7 +80,7 @@ impl Hasher {
         self.update(op_value);
     }
 
-    pub fn update(&mut self, a: u32) {
+    pub(crate) fn update(&mut self, a: u32) {
         self.x_i = self.x_i.overflowing_mul(self.x).0;
         self.state = self
             .state
@@ -88,7 +88,7 @@ impl Hasher {
             .0;
     }
 
-    pub fn finalize(&mut self, domain_separator: u32) -> u128 {
+    pub(crate) fn finalize(&mut self, domain_separator: u32) -> u128 {
         self.finish_op();
         self.update(domain_separator);
         self.state
