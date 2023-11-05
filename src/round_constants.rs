@@ -26,7 +26,7 @@ use ff::PrimeField;
 /// Following https://extgit.iaik.tugraz.at/krypto/hadeshash/blob/master/code/scripts/create_rcs_grain.sage
 /// The script was updated and can currently be found at:
 /// https://extgit.iaik.tugraz.at/krypto/hadeshash/blob/master/code/generate_parameters_grain.sage
-pub fn generate_constants<F: PrimeField>(
+pub(crate) fn generate_constants<F: PrimeField>(
     field: u8,
     sbox: u8,
     field_size: u16,
@@ -178,7 +178,7 @@ const fn bool_to_u8(bit: bool, offset: usize) -> u8 {
 
 /// Converts a slice of bools into their byte representation, in little endian.
 #[allow(dead_code)]
-pub fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
+pub(crate) fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
     bits.chunks(8)
         .map(|bits| {
             bool_to_u8(bits[7], 7)
@@ -196,7 +196,7 @@ pub fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    pub use blstrs::Scalar as Fr;
+    pub(crate) use blstrs::Scalar as Fr;
     use serde_json::Value;
     use std::fs::File;
     use std::io::{BufRead, BufReader};

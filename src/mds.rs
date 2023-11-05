@@ -19,12 +19,12 @@ pub struct MdsMatrices<F: PrimeField> {
     pub m_double_prime: Matrix<F>,
 }
 
-pub fn create_mds_matrices<F: PrimeField>(t: usize) -> MdsMatrices<F> {
+pub(crate) fn create_mds_matrices<F: PrimeField>(t: usize) -> MdsMatrices<F> {
     let m = generate_mds(t);
     derive_mds_matrices(m)
 }
 
-pub fn derive_mds_matrices<F: PrimeField>(m: Matrix<F>) -> MdsMatrices<F> {
+pub(crate) fn derive_mds_matrices<F: PrimeField>(m: Matrix<F>) -> MdsMatrices<F> {
     let m_inv = invert(&m).unwrap(); // m is MDS so invertible.
     let m_hat = minor(&m, 0, 0);
     let m_hat_inv = invert(&m_hat).unwrap(); // If this returns None, then `mds_matrix` was not correctly generated.
@@ -90,7 +90,7 @@ impl<F: PrimeField> SparseMatrix<F> {
 //   - M'' is sparse and replaces M for the round.
 //   - The previous layer's M is then replaced by M x M' = M*.
 //   - M* is likewise factored into M*' and M*'', and the process continues.
-pub fn factor_to_sparse_matrixes<F: PrimeField>(
+pub(crate) fn factor_to_sparse_matrixes<F: PrimeField>(
     base_matrix: Matrix<F>,
     n: usize,
 ) -> (Matrix<F>, Vec<SparseMatrix<F>>) {
@@ -103,7 +103,7 @@ pub fn factor_to_sparse_matrixes<F: PrimeField>(
     (pre_sparse, sparse_matrixes)
 }
 
-pub fn factor_to_sparse_matrices<F: PrimeField>(
+pub(crate) fn factor_to_sparse_matrices<F: PrimeField>(
     base_matrix: Matrix<F>,
     n: usize,
 ) -> (Matrix<F>, Vec<Matrix<F>>) {

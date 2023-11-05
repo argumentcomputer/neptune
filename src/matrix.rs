@@ -6,9 +6,9 @@ use ff::PrimeField;
 /// Matrix functions here are, at least for now, quick and dirty — intended only to support precomputation of poseidon optimization.
 
 /// Matrix represented as a Vec of rows, so that m[i][j] represents the jth column of the ith row in Matrix, m.
-pub type Matrix<T> = Vec<Vec<T>>;
+pub(crate) type Matrix<T> = Vec<Vec<T>>;
 
-pub fn rows<T>(matrix: &Matrix<T>) -> usize {
+pub(crate) fn rows<T>(matrix: &Matrix<T>) -> usize {
     matrix.len()
 }
 
@@ -57,7 +57,7 @@ fn scalar_vec_mul<F: PrimeField>(scalar: F, vec: &[F]) -> Vec<F> {
         .collect::<Vec<_>>()
 }
 
-pub fn mat_mul<F: PrimeField>(a: &Matrix<F>, b: &Matrix<F>) -> Option<Matrix<F>> {
+pub(crate) fn mat_mul<F: PrimeField>(a: &Matrix<F>, b: &Matrix<F>) -> Option<Matrix<F>> {
     if rows(a) != columns(b) {
         return None;
     };
@@ -85,7 +85,7 @@ fn vec_mul<F: PrimeField>(a: &[F], b: &[F]) -> F {
     })
 }
 
-pub fn vec_add<F: PrimeField>(a: &[F], b: &[F]) -> Vec<F> {
+pub(crate) fn vec_add<F: PrimeField>(a: &[F], b: &[F]) -> Vec<F> {
     a.iter()
         .zip(b.iter())
         .map(|(a, b)| {
@@ -96,7 +96,7 @@ pub fn vec_add<F: PrimeField>(a: &[F], b: &[F]) -> Vec<F> {
         .collect::<Vec<_>>()
 }
 
-pub fn vec_sub<F: PrimeField>(a: &[F], b: &[F]) -> Vec<F> {
+pub(crate) fn vec_sub<F: PrimeField>(a: &[F], b: &[F]) -> Vec<F> {
     a.iter()
         .zip(b.iter())
         .map(|(a, b)| {
@@ -108,7 +108,7 @@ pub fn vec_sub<F: PrimeField>(a: &[F], b: &[F]) -> Vec<F> {
 }
 
 /// Left-multiply a vector by a square matrix of same size: MV where V is considered a column vector.
-pub fn left_apply_matrix<F: PrimeField>(m: &Matrix<F>, v: &[F]) -> Vec<F> {
+pub(crate) fn left_apply_matrix<F: PrimeField>(m: &Matrix<F>, v: &[F]) -> Vec<F> {
     assert!(is_square(m), "Only square matrix can be applied to vector.");
     assert_eq!(
         rows(m),
@@ -129,7 +129,7 @@ pub fn left_apply_matrix<F: PrimeField>(m: &Matrix<F>, v: &[F]) -> Vec<F> {
 }
 
 /// Right-multiply a vector by a square matrix  of same size: VM where V is considered a row vector.
-pub fn apply_matrix<F: PrimeField>(m: &Matrix<F>, v: &[F]) -> Vec<F> {
+pub(crate) fn apply_matrix<F: PrimeField>(m: &Matrix<F>, v: &[F]) -> Vec<F> {
     assert!(is_square(m), "Only square matrix can be applied to vector.");
     assert_eq!(
         rows(m),
@@ -150,7 +150,7 @@ pub fn apply_matrix<F: PrimeField>(m: &Matrix<F>, v: &[F]) -> Vec<F> {
 }
 
 #[allow(clippy::needless_range_loop)]
-pub fn transpose<F: PrimeField>(matrix: &Matrix<F>) -> Matrix<F> {
+pub(crate) fn transpose<F: PrimeField>(matrix: &Matrix<F>) -> Matrix<F> {
     let size = rows(matrix);
     let mut new = Vec::with_capacity(size);
     for j in 0..size {
@@ -164,7 +164,7 @@ pub fn transpose<F: PrimeField>(matrix: &Matrix<F>) -> Matrix<F> {
 }
 
 #[allow(clippy::needless_range_loop)]
-pub fn make_identity<F: PrimeField>(size: usize) -> Matrix<F> {
+pub(crate) fn make_identity<F: PrimeField>(size: usize) -> Matrix<F> {
     let mut result = vec![vec![F::ZERO; size]; size];
     for i in 0..size {
         result[i][i] = F::ONE;
@@ -172,7 +172,7 @@ pub fn make_identity<F: PrimeField>(size: usize) -> Matrix<F> {
     result
 }
 
-pub fn kronecker_delta<F: PrimeField>(i: usize, j: usize) -> F {
+pub(crate) fn kronecker_delta<F: PrimeField>(i: usize, j: usize) -> F {
     if i == j {
         F::ONE
     } else {
@@ -180,7 +180,7 @@ pub fn kronecker_delta<F: PrimeField>(i: usize, j: usize) -> F {
     }
 }
 
-pub fn is_identity<F: PrimeField>(matrix: &Matrix<F>) -> bool {
+pub(crate) fn is_identity<F: PrimeField>(matrix: &Matrix<F>) -> bool {
     for i in 0..rows(matrix) {
         for j in 0..columns(matrix) {
             if matrix[i][j] != kronecker_delta(i, j) {
@@ -191,11 +191,11 @@ pub fn is_identity<F: PrimeField>(matrix: &Matrix<F>) -> bool {
     true
 }
 
-pub fn is_square<T>(matrix: &Matrix<T>) -> bool {
+pub(crate) fn is_square<T>(matrix: &Matrix<T>) -> bool {
     rows(matrix) == columns(matrix)
 }
 
-pub fn minor<F: PrimeField>(matrix: &Matrix<F>, i: usize, j: usize) -> Matrix<F> {
+pub(crate) fn minor<F: PrimeField>(matrix: &Matrix<F>, i: usize, j: usize) -> Matrix<F> {
     assert!(is_square(matrix));
     let size = rows(matrix);
     assert!(size > 0);
