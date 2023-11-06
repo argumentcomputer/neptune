@@ -1,4 +1,5 @@
-# Neptune ![crates.io](https://img.shields.io/crates/v/neptune.svg) [![CircleCI](https://circleci.com/gh/filecoin-project/neptune.svg?style=svg)](https://circleci.com/gh/filecoin-project/neptune)
+# Neptune ![crates.io](https://img.shields.io/crates/v/neptune.svg) ![neptune](https://github.com/lurk-lab/neptune/actions/workflows/rust.yml/badge.svg)[![dependency status](https://deps.rs/repo/github/lurk-lab/neptune/status.svg)](https://deps.rs/repo/github/lurk-lab/neptune)
+
 
 ## About
 Neptune is a Rust implementation of the [Poseidon hash function](https://www.poseidon-hash.info/) tuned for
