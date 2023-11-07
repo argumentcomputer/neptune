@@ -1,0 +1,69 @@
+name: Build and Test Dependents
+
+on:
+  merge_group:
+  push:
+    branches: [ dev ]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [ dev ]
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
+  RUST_BACKTRACE: short
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  check-arecibo-compiles:
+    runs-on: buildjet-4vcpu-ubuntu-2204
+    env:
+      RUSTFLAGS: -D warnings
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        path: ${{ github.workspace }}/neptune
+    - uses: actions/checkout@v4
+      with:
+        repository: lurk-lab/arecibo
+        path: ${{ github.workspace }}/arecibo
+        submodules: recursive
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: Patch Cargo.toml
+      working-directory: ${{ github.workspace }}/arecibo
+      run: |
+        echo "[patch.'https://github.com/lurk-lab/neptune']" >> Cargo.toml
+        echo "neptune = { path='../neptune' }" >> Cargo.toml
+    - name: Check Arecibo types don't break spectacularly
+      working-directory: ${{ github.workspace }}/arecibo
+      run: cargo check --all --tests --benches --examples
+
+  check-lurk-compiles:
+    runs-on: buildjet-4vcpu-ubuntu-2204
+    env:
+      RUSTFLAGS: -D warnings
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        path: ${{ github.workspace }}/neptune
+    - uses: actions/checkout@v4
+      with:
+        repository: lurk-lab/lurk-rs
+        path: ${{ github.workspace }}/lurk
+        submodules: recursive
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: Patch Cargo.toml
+      working-directory: ${{ github.workspace }}/lurk
+      run: |
+        echo "[patch.'https://github.com/lurk-lab/neptune']" >> Cargo.toml
+        echo "neptune = { path='../neptune' }" >> Cargo.toml
+    - name: Check Lurk-rs types don't break spectacularly
+      working-directory: ${{ github.workspace }}/lurk
+      run: cargo check --all --tests --benches --examples
