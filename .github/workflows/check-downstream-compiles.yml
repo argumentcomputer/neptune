@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   check-arecibo-compiles:
-    runs-on: buildjet-4vcpu-ubuntu-2204
+    runs-on: buildjet-8vcpu-ubuntu-2204
     env:
       RUSTFLAGS: -D warnings
     steps:
@@ -32,6 +32,7 @@ jobs:
       with:
         repository: lurk-lab/arecibo
         path: ${{ github.workspace }}/arecibo
+        ref: "dev"
         submodules: recursive
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2

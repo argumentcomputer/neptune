@@ -51,9 +51,9 @@ incremental = false
 codegen-units = 1
 
 [features]
-default = []
-cuda = ["ec-gpu-gen/cuda", "ec-gpu", "pasta_curves/gpu"]
-opencl = ["ec-gpu-gen/opencl", "ec-gpu", "pasta_curves/gpu"]
+default = ["bls", "pasta"]
+cuda = ["ec-gpu-gen/cuda", "ec-gpu"]
+opencl = ["ec-gpu-gen/opencl", "ec-gpu"]
 # The supported arities for Poseidon running on the GPU are specified at compile-time.
 arity2 = []
 arity4 = []
