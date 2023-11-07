@@ -527,12 +527,12 @@ mod tests {
             output
         };
         let cs_aux = cs.scalar_aux();
-        let wcs_aux = wcs.scalar_aux();
+        let wcs_aux = wcs.aux_assignment();
         let a = &cs_aux[300..320];
         let b = &wcs_aux[300..320];
         dbg!(cs_aux.len(), wcs_aux.len(), a, b);
 
-        assert_eq!(None, mismatch(&cs_aux, &wcs_aux));
+        assert_eq!(None, mismatch(&cs_aux, wcs_aux));
         assert!(cs.is_satisfied());
 
         let non_circuit_output = {
