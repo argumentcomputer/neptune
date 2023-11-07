@@ -171,10 +171,10 @@ pub(crate) fn full_round_dynamic<F, A>(
         // in order to have the same effect as adding the given constants *after* the next `product_mds`.
 
         // M^-1(S)
-        let inverted_vec = matrix::apply_matrix(&p.constants.mds_matrices.m_inv, &post_vec);
+        let inverted_vec = matrix::left_apply_matrix(&p.constants.mds_matrices.m_inv, &post_vec);
 
         // M(M^-1(S))
-        let original = matrix::apply_matrix(&p.constants.mds_matrices.m, &inverted_vec);
+        let original = matrix::left_apply_matrix(&p.constants.mds_matrices.m, &inverted_vec);
 
         // S = M(M^-1(S))
         assert_eq!(&post_vec, &original, "Oh no, the inversion trick failed.");

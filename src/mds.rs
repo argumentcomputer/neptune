@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::matrix;
 use crate::matrix::{
-    apply_matrix, invert, is_identity, is_invertible, is_square, mat_mul, minor, transpose, Matrix,
+    apply_matrix, invert, is_identity, is_invertible, is_square, left_apply_matrix, mat_mul, minor,
+    transpose, Matrix,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -127,7 +128,7 @@ pub(crate) fn factor_to_sparse_matrices<F: PrimeField>(
     (pre_sparse, all)
 }
 
-fn generate_mds<F: PrimeField>(t: usize) -> Matrix<F> {
+pub(crate) fn generate_mds<F: PrimeField>(t: usize) -> Matrix<F> {
     // Source: https://github.com/dusk-network/dusk-poseidon-merkle/commit/776c37734ea2e71bb608ce4bc58fdb5f208112a7#diff-2eee9b20fb23edcc0bf84b14167cbfdc
     // Generate x and y values deterministically for the cauchy matrix
     // where x[i] != y[i] to allow the values to be inverted
@@ -181,7 +182,7 @@ fn make_prime<F: PrimeField>(m: &Matrix<F>) -> Matrix<F> {
 
 fn make_double_prime<F: PrimeField>(m: &Matrix<F>, m_hat_inv: &Matrix<F>) -> Matrix<F> {
     let (v, w) = make_v_w(m);
-    let w_hat = apply_matrix(m_hat_inv, &w);
+    let w_hat = left_apply_matrix(m_hat_inv, &w);
 
     m.iter()
         .enumerate()

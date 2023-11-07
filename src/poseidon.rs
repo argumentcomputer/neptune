@@ -1,6 +1,9 @@
 use crate::hash_type::HashType;
-use crate::matrix::Matrix;
-use crate::mds::{create_mds_matrices, factor_to_sparse_matrixes, MdsMatrices, SparseMatrix};
+use crate::matrix::{apply_matrix, left_apply_matrix, transpose, Matrix};
+use crate::mds::{
+    create_mds_matrices, derive_mds_matrices, factor_to_sparse_matrixes, generate_mds, MdsMatrices,
+    SparseMatrix,
+};
 use crate::poseidon_alt::{hash_correct, hash_optimized_dynamic};
 use crate::preprocessing::compress_round_constants;
 use crate::{matrix, quintic_s_box, BatchHasher, Strength, DEFAULT_STRENGTH};
@@ -253,12 +256,35 @@ where
         assert!(hash_type.is_supported());
         let arity = A::to_usize();
         let width = arity + 1;
-
-        let mds_matrices = create_mds_matrices(width);
-
+        let mds = generate_mds(width);
         let (full_rounds, partial_rounds) = round_numbers(arity, &strength);
-        let half_full_rounds = full_rounds / 2;
         let round_constants = round_constants(arity, &strength);
+
+        // Now call new_from_parameters with all the necessary parameters.
+        Self::new_from_parameters(
+            width,
+            mds,
+            round_constants,
+            full_rounds,
+            partial_rounds,
+            hash_type,
+            strength,
+        )
+    }
+
+    /// Generates new instance of [`PoseidonConstants`] with matrix, constants and number of rounds.
+    /// The matrix does not have to be symmetric.
+    pub fn new_from_parameters(
+        width: usize,
+        m: Matrix<F>,
+        round_constants: Vec<F>,
+        full_rounds: usize,
+        partial_rounds: usize,
+        hash_type: HashType<F, A>,
+        strength: Strength,
+    ) -> Self {
+        let mds_matrices = derive_mds_matrices(m);
+        let half_full_rounds = full_rounds / 2;
         let compressed_round_constants = compress_round_constants(
             width,
             full_rounds,
@@ -269,7 +295,7 @@ where
         );
 
         let (pre_sparse_matrix, sparse_matrixes) =
-            factor_to_sparse_matrixes(&mds_matrices.m, partial_rounds);
+            factor_to_sparse_matrixes(&transpose(&mds_matrices.m), partial_rounds);
 
         // Ensure we have enough constants for the sbox rounds
         assert!(
@@ -818,7 +844,7 @@ where
     /// Set the provided elements with the result of the product between the elements and the constant
     /// MDS matrix.
     pub(crate) fn product_mds(&mut self) {
-        self.product_mds_with_matrix(&self.constants.mds_matrices.m);
+        self.product_mds_with_matrix_left(&self.constants.mds_matrices.m);
     }
 
     /// NOTE: This calculates a vector-matrix product (`elements * matrix`) rather than the
@@ -837,6 +863,14 @@ where
         }
 
         let _ = std::mem::replace(&mut self.elements, result);
+    }
+
+    pub(crate) fn product_mds_with_matrix_left(&mut self, matrix: &Matrix<F>) {
+        let result = left_apply_matrix(matrix, &self.elements);
+        let _ = std::mem::replace(
+            &mut self.elements,
+            GenericArray::<F, A::ConstantsSize>::generate(|i| result[i]),
+        );
     }
 
     // Sparse matrix in this context means one of the form, M''.
