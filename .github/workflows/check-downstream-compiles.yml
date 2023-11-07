@@ -1,7 +1,6 @@
 name: Build and Test Dependents
 
 on:
-  merge_group:
   push:
     branches: [ dev ]
   pull_request:
@@ -46,7 +45,7 @@ jobs:
       run: cargo check --all --tests --benches --examples
 
   check-lurk-compiles:
-    runs-on: buildjet-4vcpu-ubuntu-2204
+    runs-on: buildjet-8vcpu-ubuntu-2204
     env:
       RUSTFLAGS: -D warnings
     steps:
