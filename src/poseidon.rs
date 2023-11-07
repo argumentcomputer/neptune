@@ -1,7 +1,8 @@
 use crate::hash_type::HashType;
 use crate::matrix::{apply_matrix, left_apply_matrix, transpose, Matrix};
 use crate::mds::{
-    create_mds_matrices, derive_mds_matrices, factor_to_sparse_matrixes, MdsMatrices, SparseMatrix,
+    create_mds_matrices, derive_mds_matrices, factor_to_sparse_matrixes, generate_mds, MdsMatrices,
+    SparseMatrix,
 };
 use crate::poseidon_alt::{hash_correct, hash_optimized_dynamic};
 use crate::preprocessing::compress_round_constants;
@@ -255,49 +256,20 @@ where
         assert!(hash_type.is_supported());
         let arity = A::to_usize();
         let width = arity + 1;
-
-        let mds_matrices = create_mds_matrices(width);
-
+        let mds = generate_mds(width);
         let (full_rounds, partial_rounds) = round_numbers(arity, &strength);
-        let half_full_rounds = full_rounds / 2;
         let round_constants = round_constants(arity, &strength);
-        let compressed_round_constants = compress_round_constants(
+
+        // Now call new_from_parameters with all the necessary parameters.
+        Self::new_from_parameters(
             width,
+            mds,
+            round_constants,
             full_rounds,
-            partial_rounds,
-            &round_constants,
-            &mds_matrices,
-            partial_rounds,
-        );
-
-        let (pre_sparse_matrix, sparse_matrixes) =
-            factor_to_sparse_matrixes(mds_matrices.m.clone(), partial_rounds);
-
-        // Ensure we have enough constants for the sbox rounds
-        assert!(
-            width * (full_rounds + partial_rounds) <= round_constants.len(),
-            "Not enough round constants"
-        );
-
-        assert_eq!(
-            full_rounds * width + partial_rounds,
-            compressed_round_constants.len()
-        );
-
-        Self {
-            mds_matrices,
-            round_constants: Some(round_constants),
-            compressed_round_constants,
-            pre_sparse_matrix,
-            sparse_matrixes,
-            strength,
-            domain_tag: hash_type.domain_tag(),
-            full_rounds,
-            half_full_rounds,
             partial_rounds,
             hash_type,
-            _a: PhantomData::<A>,
-        }
+            strength,
+        )
     }
 
     /// Generates new instance of [`PoseidonConstants`] with matrix, constants and number of rounds.
@@ -309,6 +281,7 @@ where
         full_rounds: usize,
         partial_rounds: usize,
         hash_type: HashType<F, A>,
+        strength: Strength,
     ) -> Self {
         let mds_matrices = derive_mds_matrices(m);
         let half_full_rounds = full_rounds / 2;
@@ -341,8 +314,8 @@ where
             compressed_round_constants,
             pre_sparse_matrix,
             sparse_matrixes,
-            strength: Strength::Standard,
-            domain_tag: F::ZERO,
+            strength,
+            domain_tag: hash_type.domain_tag(),
             full_rounds,
             half_full_rounds,
             partial_rounds,
