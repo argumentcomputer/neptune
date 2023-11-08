@@ -8,7 +8,9 @@ use crate::poseidon_alt::{hash_correct, hash_optimized_dynamic};
 use crate::preprocessing::compress_round_constants;
 use crate::{matrix, quintic_s_box, BatchHasher, Strength, DEFAULT_STRENGTH};
 use crate::{round_constants, round_numbers, Error};
+#[cfg(feature = "abomonation")]
 use abomonation::Abomonation;
+#[cfg(feature = "abomonation")]
 use abomonation_derive::Abomonation;
 use ff::PrimeField;
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
@@ -83,21 +85,22 @@ where
 /// and [`Arity`] as [`Poseidon`] instance that consumes it.
 ///
 /// See original [Poseidon paper](https://eprint.iacr.org/2019/458.pdf) for more details.
-#[derive(Debug, Clone, PartialEq, Eq, Abomonation)]
-#[abomonation_bounds(where F::Repr: Abomonation)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "abomonation", derive(Abomonation))]
+#[cfg_attr(feature = "abomonation", abomonation_bounds(where F::Repr: Abomonation))]
 pub struct PoseidonConstants<F: PrimeField, A: Arity<F>> {
     pub mds_matrices: MdsMatrices<F>,
-    #[abomonate_with(Option<Vec<F::Repr>>)]
+    #[cfg_attr(feature = "abomonation", abomonate_with(Option<Vec<F::Repr>>))]
     pub round_constants: Option<Vec<F>>, // TODO: figure out how to automatically allocate `None`
-    #[abomonate_with(Vec<F::Repr>)]
+    #[cfg_attr(feature = "abomonation", abomonate_with(Vec<F::Repr>))]
     pub compressed_round_constants: Vec<F>,
-    #[abomonate_with(Matrix<F::Repr>)]
+    #[cfg_attr(feature = "abomonation", abomonate_with(Matrix<F::Repr>))]
     pub pre_sparse_matrix: Matrix<F>,
     pub sparse_matrixes: Vec<SparseMatrix<F>>,
     pub strength: Strength,
     /// The domain tag is the first element of a Poseidon permutation.
     /// This extra element is necessary for 128-bit security.
-    #[abomonate_with(F::Repr)]
+    #[cfg_attr(feature = "abomonation", abomonate_with(F::Repr))]
     pub domain_tag: F,
     pub full_rounds: usize,
     pub half_full_rounds: usize,
@@ -953,6 +956,7 @@ mod tests {
     use super::*;
     use crate::sponge::vanilla::SpongeTrait;
     use crate::*;
+    #[cfg(feature = "abomonation")]
     use abomonation::{decode, encode};
     use blstrs::Scalar as Fr;
     use ff::Field;
@@ -1313,6 +1317,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "abomonation")]
     #[test]
     fn roundtrip_abomonation() {
         let mut constants = PoseidonConstants::<Fr, U2>::new();
