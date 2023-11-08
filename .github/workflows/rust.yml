@@ -2,8 +2,6 @@ name: Rust
 
 on:
   merge_group:
-  push:
-    branches: [main, dev]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [main, dev]
