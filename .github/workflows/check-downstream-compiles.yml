@@ -1,8 +1,6 @@
 name: Build and Test Dependents
 
 on:
-  push:
-    branches: [ dev ]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [ dev ]
