@@ -71,15 +71,6 @@ pub struct SparseMatrix<F: PrimeField> {
 }
 
 impl<F: PrimeField> SparseMatrix<F> {
-    #[allow(clippy::needless_pass_by_value)]
-    #[deprecated(
-        since = "12.1.0",
-        note = "Please use `SparseMatrix::new_from_ref` instead."
-    )]
-    pub fn new(m_double_prime: Matrix<F>) -> Self {
-        Self::new_from_ref(&m_double_prime)
-    }
-
     pub fn new_from_ref(m_double_prime: &Matrix<F>) -> Self {
         assert!(Self::is_sparse_matrix(m_double_prime));
         let size = matrix::rows(m_double_prime);

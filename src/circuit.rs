@@ -539,34 +539,6 @@ pub fn mul_sum<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
     Ok(res)
 }
 
-/// Calculates a * (b + to_add) — and enforces that constraint.
-#[deprecated(since = "12.1.0", note = "use mul_sum instead")]
-pub fn mul_pre_sum<CS: ConstraintSystem<Scalar>, Scalar: PrimeField>(
-    mut cs: CS,
-    a: &AllocatedNum<Scalar>,
-    b: &AllocatedNum<Scalar>,
-    to_add: Scalar,
-    enforce: bool,
-) -> Result<AllocatedNum<Scalar>, SynthesisError> {
-    let res = AllocatedNum::alloc(cs.namespace(|| "mul_sum"), || {
-        let mut tmp = b.get_value().ok_or(SynthesisError::AssignmentMissing)?;
-        tmp.add_assign(&to_add);
-        tmp.mul_assign(&a.get_value().ok_or(SynthesisError::AssignmentMissing)?);
-
-        Ok(tmp)
-    })?;
-
-    if enforce {
-        cs.enforce(
-            || "mul sum constraint",
-            |lc| lc + b.get_variable() + (to_add, CS::one()),
-            |lc| lc + a.get_variable(),
-            |lc| lc + res.get_variable(),
-        );
-    }
-    Ok(res)
-}
-
 fn scalar_product_with_add<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     elts: &[Elt<Scalar>],
     scalars: &[Scalar],
