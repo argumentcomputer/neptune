@@ -8,6 +8,10 @@ use crate::poseidon_alt::{hash_correct, hash_optimized_dynamic};
 use crate::preprocessing::compress_round_constants;
 use crate::{matrix, quintic_s_box, BatchHasher, Strength, DEFAULT_STRENGTH};
 use crate::{round_constants, round_numbers, Error};
+#[cfg(feature = "abomonation")]
+use abomonation::Abomonation;
+#[cfg(feature = "abomonation")]
+use abomonation_derive::Abomonation;
 use ff::PrimeField;
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
 use serde::{Deserialize, Serialize};
@@ -82,19 +86,21 @@ where
 ///
 /// See original [Poseidon paper](https://eprint.iacr.org/2019/458.pdf) for more details.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PoseidonConstants<F, A>
-where
-    F: PrimeField,
-    A: Arity<F>,
-{
+#[cfg_attr(feature = "abomonation", derive(Abomonation))]
+#[cfg_attr(feature = "abomonation", abomonation_bounds(where F::Repr: Abomonation))]
+pub struct PoseidonConstants<F: PrimeField, A: Arity<F>> {
     pub mds_matrices: MdsMatrices<F>,
-    pub round_constants: Option<Vec<F>>,
+    #[cfg_attr(feature = "abomonation", abomonate_with(Option<Vec<F::Repr>>))]
+    pub round_constants: Option<Vec<F>>, // TODO: figure out how to automatically allocate `None`
+    #[cfg_attr(feature = "abomonation", abomonate_with(Vec<F::Repr>))]
     pub compressed_round_constants: Vec<F>,
+    #[cfg_attr(feature = "abomonation", abomonate_with(Matrix<F::Repr>))]
     pub pre_sparse_matrix: Matrix<F>,
     pub sparse_matrixes: Vec<SparseMatrix<F>>,
     pub strength: Strength,
     /// The domain tag is the first element of a Poseidon permutation.
     /// This extra element is necessary for 128-bit security.
+    #[cfg_attr(feature = "abomonation", abomonate_with(F::Repr))]
     pub domain_tag: F,
     pub full_rounds: usize,
     pub half_full_rounds: usize,
@@ -950,6 +956,8 @@ mod tests {
     use super::*;
     use crate::sponge::vanilla::SpongeTrait;
     use crate::*;
+    #[cfg(feature = "abomonation")]
+    use abomonation::{decode, encode};
     use blstrs::Scalar as Fr;
     use ff::Field;
     use generic_array::typenum;
@@ -1307,5 +1315,21 @@ mod tests {
             standard_constants.partial_rounds,
             default_constants.partial_rounds
         );
+    }
+
+    #[cfg(feature = "abomonation")]
+    #[test]
+    fn roundtrip_abomonation() {
+        let mut constants = PoseidonConstants::<Fr, U2>::new();
+        constants.round_constants = None;
+        let mut bytes = Vec::new();
+        unsafe { encode(&constants, &mut bytes).unwrap() };
+
+        if let Some((result, remaining)) =
+            unsafe { decode::<PoseidonConstants<Fr, U2>>(&mut bytes) }
+        {
+            assert!(result == &constants);
+            assert!(remaining.is_empty());
+        }
     }
 }

@@ -4,6 +4,8 @@
 pub use crate::poseidon::{Arity, Poseidon};
 use crate::round_constants::generate_constants;
 use crate::round_numbers::{round_numbers_base, round_numbers_strengthened};
+#[cfg(feature = "abomonation")]
+use abomonation_derive::Abomonation;
 #[cfg(test)]
 use blstrs::Scalar as Fr;
 pub use error::Error;
@@ -99,6 +101,7 @@ pub(crate) const TEST_SEED: [u8; 16] = [
 ];
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "abomonation", derive(Abomonation))]
 pub enum Strength {
     Standard,
     Strengthened,

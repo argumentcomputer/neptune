@@ -58,6 +58,8 @@ jobs:
       - name: Doctests
         run: |
           cargo test --doc
+      - name: Abomonation feature
+        run: cargo run --features "abomonation" --example poseidon_constants_serde
 
   clippy:
     runs-on: ubuntu-latest
