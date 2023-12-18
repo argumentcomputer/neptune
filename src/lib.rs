@@ -15,6 +15,9 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use trait_set::trait_set;
 
+// See https://www.lurklurk.org/effective-rust/re-export.html
+pub use generic_array;
+
 #[cfg(all(
     any(feature = "cuda", feature = "opencl"),
     not(any(
