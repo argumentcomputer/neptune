@@ -43,9 +43,32 @@ jobs:
       - name: Abomonation feature
         run: cargo run --features "abomonation" --example poseidon_constants_serde
 
-  # Wasm build, rustfmt, clippy, doctests, and MSRV
-  code-quality:
-    uses: lurk-lab/ci-workflows/.github/workflows/lints.yml@main
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      # See '.cargo/config' for list of enabled/disabled clippy lints
+      - name: rustfmt
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all --check
+      - name: cargo clippy
+        run: cargo xclippy -D warnings
+
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    - name: Install cargo-msrv
+      run: cargo install cargo-msrv
+    - name: Check Rust MSRV
+      run: cargo msrv verify
 
   # Check documentation links aren't broken
   link-checker:
