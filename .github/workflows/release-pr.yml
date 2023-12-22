@@ -18,7 +18,7 @@ jobs:
         package: [neptune]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@stable
         with:
             profile: minimal
       - name: Get current version
