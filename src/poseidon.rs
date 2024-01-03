@@ -20,9 +20,9 @@ use typenum::marker_traits::Unsigned;
 use typenum::*;
 
 /// Available arities for the Poseidon hasher.
-pub trait Arity<T>: ArrayLength<T> {
+pub trait Arity<T>: ArrayLength {
     /// Must be Arity + 1.
-    type ConstantsSize: ArrayLength<T>;
+    type ConstantsSize: ArrayLength;
 
     fn tag() -> T;
 }
