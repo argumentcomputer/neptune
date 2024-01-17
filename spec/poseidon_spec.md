@@ -179,7 +179,7 @@ $A \times \textbf{v} = \begin{bmatrix}
     \vdots \\
     A_{m - 1, \ast} \boldsymbol\cdot \textbf{v}
 \end{bmatrix}$
-Matrix-vector multiplication of a volumn vector $v \typecolon \mathbb{T}^{[m \times 1]}$ and matrix $A \typecolon \mathbb{T}^{[m \times n]}$, note that $\textbf{rows}(\textbf{v}) = \textbf{columns}(A)$ and $\textbf{rows}(A \times \textbf{v}) = \textbf{rows}(A)$. The product is a column vector whose length is equal to the number of rows of $A$. The $i^{th}$ element of the product vector is the dot product of the $i^{th}$ row of $A$ with $\textbf{v}$. Note that dot products use field multiplication.
+Matrix-vector multiplication of a volume vector $v \typecolon \mathbb{T}^{[m \times 1]}$ and matrix $A \typecolon \mathbb{T}^{[m \times n]}$, note that $\textbf{rows}(\textbf{v}) = \textbf{columns}(A)$ and $\textbf{rows}(A \times \textbf{v}) = \textbf{rows}(A)$. The product is a column vector whose length is equal to the number of rows of $A$. The $i^{th}$ element of the product vector is the dot product of the $i^{th}$ row of $A$ with $\textbf{v}$. Note that dot products use field multiplication.
 
 **Note:** $\textbf{v} \times A = (A \times \textbf{v})^T$ when $A$ is symmetric $A = A^T$ (the $i^{th}$ row of $A$ equals the $i^{th}$ column of $A$), i.e. the row vector-matrix product and matrix-column vector product contain the same elements when $A$ is symmetric.
 
