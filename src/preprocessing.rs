@@ -29,7 +29,7 @@ pub(crate) fn compress_round_constants<F: PrimeField>(
     let unpreprocessed = partial_rounds - partial_preprocessed;
 
     // Post S-box adds for the first set of full rounds should be 'inverted' from next round.
-    // The final round is skipped when fully preprocessing because that value must be obtained from the result of preprocesing the partial rounds.
+    // The final round is skipped when fully preprocessing because that value must be obtained from the result of preprocessing the partial rounds.
     let end = if unpreprocessed > 0 {
         half_full_rounds
     } else {
@@ -136,7 +136,7 @@ pub(crate) fn compress_round_constants<F: PrimeField>(
         // In order for the S-box result to be correct, it must have the same input as in the plain path.
         // That means its input (the first component of the state) must have been constructed by
         // adding the same single round constant in that position.
-        // NOTE: this asssertion uncovered a bug which was causing failure.
+        // NOTE: this assertion uncovered a bug which was causing failure.
         assert_eq!(
             &result_key[0], &initial_round_keys[0],
             "S-box inputs did not match."
