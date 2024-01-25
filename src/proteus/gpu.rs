@@ -6,7 +6,6 @@ use crate::{Arity, BatchHasher, NeptuneField, Strength, DEFAULT_STRENGTH};
 use ec_gpu_gen::rust_gpu_tools::{program_closures, Device, Program};
 use ff::{Field, PrimeField};
 use generic_array::{typenum, ArrayLength, GenericArray};
-use log::info;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use typenum::{U11, U2, U8};

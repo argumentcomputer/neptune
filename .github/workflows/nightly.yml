@@ -1,0 +1,18 @@
+# Nightly sanity checks
+name: nightly
+
+on:
+  workflow_dispatch: {}
+  # Once per day at 00:00 UTC
+  schedule:
+    - cron: "0 0 * * *"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  unused-dependencies:
+    uses: lurk-lab/ci-workflows/.github/workflows/unused-deps.yml@main
+
+  rust-version-check:
+    uses: lurk-lab/ci-workflows/.github/workflows/rust-version-check.yml@main
