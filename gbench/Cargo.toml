@@ -13,7 +13,7 @@ blstrs = { workspace = true, features = ["gpu"] }
 byteorder = { workspace = true }
 ec-gpu = { workspace = true }
 ec-gpu-gen = { workspace = true }
-env_logger = "0.10.0"
+env_logger = "0.11.0"
 ff = { workspace = true }
 generic-array = { workspace = true }
 log = { workspace = true }
