@@ -99,7 +99,7 @@ jobs:
 
     - name: Create issue from report
       if: env.status == 'false' && steps.last_issue.outputs.has-found == 'false'
-      uses: peter-evans/create-issue-from-file@v4
+      uses: peter-evans/create-issue-from-file@v5
       with:
         title: ${{ env.SCION }} needs to be rebased on ${{ env.ROOT }}
         content-filepath: ./_body.md
