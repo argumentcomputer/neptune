@@ -261,9 +261,9 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
 #[cfg(test)]
 mod test {
     use bellpepper::util_cs::test_shape_cs::TestShapeCS;
-    use bellpepper_core::ConstraintSystem;
     use bellpepper_core::num::AllocatedNum;
     use bellpepper_core::test_cs::TestConstraintSystem;
+    use bellpepper_core::ConstraintSystem;
     use blstrs::Scalar as Fr;
     use ff::{Field, PrimeFieldBits};
     use generic_array::typenum::U24;
@@ -335,28 +335,25 @@ mod test {
         {
             let constant: PoseidonConstants<Scalar, U24> = PoseidonConstants::new();
             let mut ns = cs.namespace(|| "ns");
-            let hash = {
-                let mut sponge = SpongeCircuit::new_with_constants(&constant, Simplex);
-                let acc = &mut ns;
-                let parameter = IOPattern(vec![
-                    SpongeOp::Absorb(elts.len() as u32),
-                    SpongeOp::Squeeze(1u32),
-                ]);
+            let mut sponge = SpongeCircuit::new_with_constants(&constant, Simplex);
+            let acc = &mut ns;
+            let parameter = IOPattern(vec![
+                SpongeOp::Absorb(elts.len() as u32),
+                SpongeOp::Squeeze(1u32),
+            ]);
 
-                sponge.start(parameter, None, acc);
-                SpongeAPI::absorb(
-                    &mut sponge,
-                    elts.len() as u32,
-                    &(0..elts.len())
-                        .map(|i| Elt::Allocated(elts[i].clone()))
-                        .collect::<Vec<Elt<Scalar>>>(),
-                    acc,
-                );
-                let output = SpongeAPI::squeeze(&mut sponge, 1, acc);
-                sponge.finish(acc).unwrap();
-                output
-            };
-            hash
+            sponge.start(parameter, None, acc);
+            SpongeAPI::absorb(
+                &mut sponge,
+                elts.len() as u32,
+                &(0..elts.len())
+                    .map(|i| Elt::Allocated(elts[i].clone()))
+                    .collect::<Vec<Elt<Scalar>>>(),
+                acc,
+            );
+            let output = SpongeAPI::squeeze(&mut sponge, 1, acc);
+            sponge.finish(acc).unwrap();
+            output
         }
 
         /*********************************
