@@ -261,9 +261,9 @@ impl<F: PrimeField, A: Arity<F>, S: InnerSpongeAPI<F, A>> SpongeAPI<F, A> for S 
 #[cfg(test)]
 mod test {
     use bellpepper::util_cs::test_shape_cs::TestShapeCS;
+    use bellpepper_core::ConstraintSystem;
     use bellpepper_core::num::AllocatedNum;
     use bellpepper_core::test_cs::TestConstraintSystem;
-    use bellpepper_core::ConstraintSystem;
     use blstrs::Scalar as Fr;
     use ff::{Field, PrimeFieldBits};
     use generic_array::typenum::U24;
@@ -370,6 +370,7 @@ mod test {
             })
             .collect::<Vec<_>>();
 
+        // Values are `None`, we should get a None back
         let hash = sponge_cycle(&mut cs, &elts);
         assert!(hash[0].val().is_none());
 
@@ -384,6 +385,7 @@ mod test {
             })
             .collect::<Vec<_>>();
 
+        // We have values, we expect one in return
         let hash = sponge_cycle(&mut cs, &elts);
         assert_eq!(
             "Scalar(0x4d1f7863ee494536a938bd87d761a30828eeeeebfbc160117135dc6766f6e16c)",
