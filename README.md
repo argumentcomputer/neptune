@@ -1,4 +1,4 @@
-# Neptune ![crates.io](https://img.shields.io/crates/v/neptune.svg) ![neptune](https://github.com/lurk-lab/neptune/actions/workflows/rust.yml/badge.svg)[![dependency status](https://deps.rs/repo/github/lurk-lab/neptune/status.svg)](https://deps.rs/repo/github/lurk-lab/neptune)
+# Neptune ![crates.io](https://img.shields.io/crates/v/neptune.svg) ![neptune](https://github.com/argumentcomputer/neptune/actions/workflows/rust.yml/badge.svg)[![dependency status](https://deps.rs/repo/github/argumentcomputer/neptune/status.svg)](https://deps.rs/repo/github/argumentcomputer/neptune)
 
 
 ## About
@@ -79,7 +79,7 @@ Benchmark Poseidon over a specific field (`bls`, `pallas`, or `vesta`) and preim
 
 ## Sponge API
 
-Neptune implements the [Secure Sponge API for Field Elements](https://hackmd.io/bHgsH6mMStCVibM_wYvb2w) and serves as its reference implementation. The [`SpongeAPI` trait](https://github.com/lurk-lab/neptune/blob/master/src/sponge/api.rs) defines the relevant API methods. See tests in source for simple examples of API usage [with circuits](https://github.com/lurk-lab/neptune/blob/master/src/sponge/circuit.rs) and [without circuits](https://github.com/lurk-lab/neptune/blob/master/src/sponge/vanilla.rs).
+Neptune implements the [Secure Sponge API for Field Elements](https://hackmd.io/bHgsH6mMStCVibM_wYvb2w) and serves as its reference implementation. The [`SpongeAPI` trait](https://github.com/argumentcomputer/neptune/blob/master/src/sponge/api.rs) defines the relevant API methods. See tests in source for simple examples of API usage [with circuits](https://github.com/argumentcomputer/neptune/blob/master/src/sponge/circuit.rs) and [without circuits](https://github.com/argumentcomputer/neptune/blob/master/src/sponge/vanilla.rs).
 
 ## History
 

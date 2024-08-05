@@ -5,7 +5,7 @@ version = "13.0.0"
 authors = ["porcuquine <porcuquine@gmail.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/lurk-lab/neptune"
+repository = "https://github.com/argumentcomputer/neptune"
 rust-version = "1.71.0"
 
 [dependencies]

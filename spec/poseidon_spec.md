@@ -339,7 +339,7 @@ while providing security against known attacks (statistical, interpolation, and 
 $\constb R_F, R_P = \texttt{calc_round_numbers}(p, M, t, \alpha)$
 The number of full and partial rounds, both are positive integers $R_F, R_P \typecolon \mathbb{Z}_{>0}$ and $R_F$ is even.
 
-$R_F$ and $R_P$ are calculated using either the Python script [`calc_round_numbers.py`](https://extgit.iaik.tugraz.at/krypto/hadeshash/-/blob/9d80ec0473ad7cde5a12f3aac46439ad0da68c0a/code/scripts/calc_round_numbers.py) or the [`neptune`](https://github.com/lurk-lab/neptune) Rust library, denoted $\texttt{calc_round_numbers}$. Both methods calculate the round numbers via brute-force; by iterating over all reasonable values for $R_F$ and $R_P$ and choosing the pair that satisfies the security inequalities (provided below) while minimizing the number of S-boxes.
+$R_F$ and $R_P$ are calculated using either the Python script [`calc_round_numbers.py`](https://extgit.iaik.tugraz.at/krypto/hadeshash/-/blob/9d80ec0473ad7cde5a12f3aac46439ad0da68c0a/code/scripts/calc_round_numbers.py) or the [`neptune`](https://github.com/argumentcomputer/neptune) Rust library, denoted $\texttt{calc_round_numbers}$. Both methods calculate the round numbers via brute-force; by iterating over all reasonable values for $R_F$ and $R_P$ and choosing the pair that satisfies the security inequalities (provided below) while minimizing the number of S-boxes.
 
 ### Security Inequalities
 
@@ -532,7 +532,7 @@ $\overline{\underline{\Function \textsf{poseidon}(\preimage \typecolon \Zp^{[t -
 
 ## Optimizations
 
-Filecoin's rust library [`neptune`](https://github.com/lurk-lab/neptune) implements the Poseidon hash function. The library differentiates between unoptimized and optimized Poseidon using the terms *correct* and *static* respectively.
+Filecoin's rust library [`neptune`](https://github.com/argumentcomputer/neptune) implements the Poseidon hash function. The library differentiates between unoptimized and optimized Poseidon using the terms *correct* and *static* respectively.
 
 The primary differences between the two versions are:
 * the unoptimized algorithm uses the round constants $\RC$, performs round constant addition before S-boxes, and uses the MDS matrix $\Mds$ for mixing
