@@ -27,7 +27,7 @@ jobs:
         path: ${{ github.workspace }}/neptune
     - uses: actions/checkout@v4
       with:
-        repository: lurk-lab/arecibo
+        repository: argumentcomputer/arecibo
         path: ${{ github.workspace }}/arecibo
         ref: "dev"
         submodules: recursive
@@ -36,7 +36,7 @@ jobs:
     - name: Patch Cargo.toml
       working-directory: ${{ github.workspace }}/arecibo
       run: |
-        echo "[patch.'https://github.com/lurk-lab/neptune']" >> Cargo.toml
+        echo "[patch.'https://github.com/argumentcomputer/neptune']" >> Cargo.toml
         echo "neptune = { path='../neptune' }" >> Cargo.toml
     - name: Check Arecibo types don't break spectacularly
       working-directory: ${{ github.workspace }}/arecibo
@@ -52,7 +52,7 @@ jobs:
         path: ${{ github.workspace }}/neptune
     - uses: actions/checkout@v4
       with:
-        repository: lurk-lab/lurk-rs
+        repository: argumentcomputer/lurk-rs
         path: ${{ github.workspace }}/lurk
         submodules: recursive
     - uses: dtolnay/rust-toolchain@stable
@@ -60,7 +60,7 @@ jobs:
     - name: Patch Cargo.toml
       working-directory: ${{ github.workspace }}/lurk
       run: |
-        echo "[patch.'https://github.com/lurk-lab/neptune']" >> Cargo.toml
+        echo "[patch.'https://github.com/argumentcomputer/neptune']" >> Cargo.toml
         echo "neptune = { path='../neptune' }" >> Cargo.toml
     - name: Check Lurk-rs types don't break spectacularly
       working-directory: ${{ github.workspace }}/lurk
