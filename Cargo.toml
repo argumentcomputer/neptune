@@ -9,17 +9,17 @@ repository = "https://github.com/argumentcomputer/neptune"
 rust-version = "1.71.0"
 
 [dependencies]
-bellpepper = { workspace = true }
-bellpepper-core = { workspace = true }
+bellpepper = { workspace = true, optional = true }
+bellpepper-core = { workspace = true, optional = true }
 blake2s_simd = { workspace = true }
 blstrs = { workspace = true, optional = true }
-byteorder = { workspace = true }
 ec-gpu = { workspace = true, optional = true }
 ec-gpu-gen = { workspace = true, optional = true }
-ff ={ workspace = true }
+libm = { workspace = true }
+ff = { workspace = true }
 generic-array = { workspace = true }
 pasta_curves = { workspace = true, features = ["serde"] }
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"], optional = true }
 trait-set = "0.3.0"
 abomonation = { version = "0.7.3", optional = true }
 abomonation_derive = { version = "0.1.0", package = "abomonation_derive_ng", optional = true }
@@ -57,7 +57,7 @@ incremental = false
 codegen-units = 1
 
 [features]
-default = ["bls", "pasta"]
+default = ["std", "bls", "pasta"]
 cuda = ["ec-gpu-gen/cuda", "ec-gpu"]
 opencl = ["ec-gpu-gen/opencl", "ec-gpu"]
 # The supported arities for Poseidon running on the GPU are specified at compile-time.
@@ -74,6 +74,7 @@ strengthened = []
 bls = ["blstrs/gpu"]
 pasta = ["pasta_curves/gpu"]
 portable = ["blstrs/portable"]
+std = ["dep:serde", "dep:bellpepper", "dep:bellpepper-core"]
 # Unsafe Abomonation-based serialization
 abomonation = ["dep:abomonation", "dep:abomonation_derive"]
 
@@ -90,6 +91,7 @@ bellpepper = { version = "0.4.0", default-features = false }
 blake2s_simd = "1.0.1"
 blstrs = { version = "0.7.0" }
 ff = "0.13.0"
+libm = "0.2.8"
 generic-array = "1.0"
 pasta_curves = { version = "0.5" }
 ec-gpu = { version = "0.2.0" }

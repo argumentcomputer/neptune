@@ -49,7 +49,7 @@ where
         let end = start + column_count;
 
         if end > self.leaf_count {
-            return Err(Error::Other("too many columns".to_string()));
+            return Err(Error::Other("too many columns"));
         }
 
         match self.column_batcher {

@@ -2,6 +2,7 @@
 #![allow(clippy::ptr_arg)]
 
 use ff::PrimeField;
+use crate::Vec;
 
 /// Matrix functions here are, at least for now, quick and dirty — intended only to support precomputation of poseidon optimization.
 
@@ -116,7 +117,7 @@ pub(crate) fn left_apply_matrix<F: PrimeField>(m: &Matrix<F>, v: &[F]) -> Vec<F>
         "Matrix can only be applied to vector of same size."
     );
 
-    let mut result = vec![F::ZERO; v.len()];
+    let mut result = alloc::vec![F::ZERO; v.len()];
 
     for (result, row) in result.iter_mut().zip(m.iter()) {
         for (mat_val, vec_val) in row.iter().zip(v) {
@@ -137,7 +138,7 @@ pub(crate) fn apply_matrix<F: PrimeField>(m: &Matrix<F>, v: &[F]) -> Vec<F> {
         "Matrix can only be applied to vector of same size."
     );
 
-    let mut result = vec![F::ZERO; v.len()];
+    let mut result = alloc::vec![F::ZERO; v.len()];
     for (j, val) in result.iter_mut().enumerate() {
         for (i, row) in m.iter().enumerate() {
             let mut tmp = row[j];
@@ -165,7 +166,7 @@ pub(crate) fn transpose<F: PrimeField>(matrix: &Matrix<F>) -> Matrix<F> {
 
 #[allow(clippy::needless_range_loop)]
 pub(crate) fn make_identity<F: PrimeField>(size: usize) -> Matrix<F> {
-    let mut result = vec![vec![F::ZERO; size]; size];
+    let mut result = alloc::vec![alloc::vec![F::ZERO; size]; size];
     for i in 0..size {
         result[i][i] = F::ONE;
     }

@@ -4,6 +4,7 @@
 use crate::poseidon::{Arity, Poseidon};
 use crate::{matrix, quintic_s_box};
 use ff::PrimeField;
+use crate::Vec;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Correct

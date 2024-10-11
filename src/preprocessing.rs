@@ -1,6 +1,7 @@
 use crate::matrix::{apply_matrix, left_apply_matrix, vec_add};
 use crate::mds::MdsMatrices;
 use crate::quintic_s_box;
+use crate::Vec;
 use ff::PrimeField;
 
 // - Compress constants by pushing them back through linear layers and through the identity components of partial layers.
@@ -108,7 +109,7 @@ pub(crate) fn compress_round_constants<F: PrimeField>(
         ////////////////////////////////////////////////////////////////////////////////
         // Shared between branches, arbitrary initial state representing the output of a previous round's S-Box layer.
         // X
-        let initial_state = vec![F::ONE; width];
+        let initial_state = alloc::vec![F::ONE; width];
 
         ////////////////////////////////////////////////////////////////////////////////
         // Compute one step with the given (unpreprocessed) constants.

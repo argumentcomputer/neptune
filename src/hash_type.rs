@@ -16,11 +16,13 @@ use abomonation::Abomonation;
 #[cfg(feature = "abomonation")]
 use abomonation_derive::Abomonation;
 use ff::PrimeField;
+#[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", serde(bound(serialize = "F: Serialize", deserialize = "F: Deserialize<'de>")))]
 #[cfg_attr(feature = "abomonation", derive(Abomonation))]
-#[serde(bound(serialize = "F: Serialize", deserialize = "F: Deserialize<'de>"))]
 #[cfg_attr(feature = "abomonation", abomonation_omit_bounds)]
 pub enum HashType<F: PrimeField, A: Arity<F>> {
     MerkleTree,
@@ -73,7 +75,8 @@ impl<F: PrimeField, A: Arity<F>> HashType<F, A> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "abomonation", derive(Abomonation))]
 #[cfg_attr(feature = "abomonation", abomonation_omit_bounds)]
 pub enum CType<F: PrimeField, A: Arity<F>> {
@@ -82,7 +85,7 @@ pub enum CType<F: PrimeField, A: Arity<F>> {
     // This is a bit of a hack, but since `serde(skip)` tags the last variant arm,
     // the generated code ends up being correct. But, in the future, do not
     // carelessly add new variants to this enum.
-    #[serde(skip)]
+    #[cfg_attr(feature = "std", serde(skip))]
     #[cfg_attr(feature = "abomonation", abomonation_skip)]
     _Phantom((F, A)),
 }

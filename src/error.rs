@@ -1,4 +1,5 @@
-use std::{error, fmt};
+use core::fmt;
+
 
 #[derive(Debug, Clone)]
 #[cfg(any(feature = "cuda", feature = "opencl"))]
@@ -47,10 +48,11 @@ pub enum Error {
     FullBuffer,
     /// Attempt to reference an index element that is out of bounds
     IndexOutOfBounds,
+    #[cfg(any(feature = "cuda", feature = "opencl"))]
     GpuError(String),
     #[cfg(any(feature = "cuda", feature = "opencl"))]
     ClError(ClError),
-    Other(String),
+    Other(&'static str),
 }
 
 #[cfg(any(feature = "cuda", feature = "opencl"))]
@@ -67,9 +69,10 @@ impl From<ec_gpu_gen::EcError> for Error {
     }
 }
 
-impl error::Error for Error {}
+#[cfg(feature = "std")]
+impl std::error::Error for Error {}
 
-impl fmt::Display for Error {
+impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
             Error::FullBuffer => write!(
@@ -77,6 +80,7 @@ impl fmt::Display for Error {
                 "The size of the buffer cannot be greater than the hash arity."
             ),
             Error::IndexOutOfBounds => write!(f, "The referenced index is outs of bounds."),
+            #[cfg(any(feature = "cuda", feature = "opencl"))]
             Error::GpuError(s) => write!(f, "GPU Error: {s}"),
             #[cfg(any(feature = "cuda", feature = "opencl"))]
             Error::ClError(e) => write!(f, "OpenCL Error: {e}"),

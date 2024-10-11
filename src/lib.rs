@@ -1,5 +1,9 @@
+#![cfg_attr(not(feature = "std"), no_std)]
 #![allow(dead_code)]
 #![allow(unused_imports)]
+
+extern crate alloc;
+pub use alloc::vec::Vec; 
 
 pub use crate::poseidon::{Arity, Poseidon};
 use crate::round_constants::generate_constants;
@@ -11,8 +15,8 @@ use blstrs::Scalar as Fr;
 pub use error::Error;
 use ff::PrimeField;
 use generic_array::GenericArray;
+#[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use trait_set::trait_set;
 
 // See https://www.lurklurk.org/effective-rust/re-export.html
@@ -45,8 +49,11 @@ compile_error!("The `strengthened` feature needs the `cuda` and/or `opencl` feat
 compile_error!("The `cuda` and `opencl` features need the `bls` and/or `pasta` feature to be set");
 
 /// Poseidon circuit
+#[cfg(feature = "std")]
 pub mod circuit;
+#[cfg(feature = "std")]
 pub mod circuit2;
+#[cfg(feature = "std")]
 pub mod circuit2_witness;
 pub mod error;
 mod matrix;
@@ -60,6 +67,7 @@ mod round_constants;
 mod round_numbers;
 
 /// Sponge
+#[cfg(any(test, feature = "std"))]
 pub mod sponge;
 
 /// Hash types and domain separation tags.
@@ -97,21 +105,23 @@ trait_set! {
    pub trait NeptuneField = PrimeField + ec_gpu::GpuName;
 }
 
+#[cfg(feature = "std")]
 mod serde_impl;
 
 pub(crate) const TEST_SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
 ];
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "abomonation", derive(Abomonation))]
 pub enum Strength {
     Standard,
     Strengthened,
 }
 
-impl fmt::Display for Strength {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl core::fmt::Display for Strength {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Standard => write!(f, "standard"),
             Self::Strengthened => write!(f, "strengthened"),
@@ -183,7 +193,7 @@ fn round_constants<F: PrimeField>(arity: usize, strength: &Strength) -> Vec<F> {
 
     let fr_num_bits = F::NUM_BITS;
     let field_size = {
-        assert!(fr_num_bits <= u32::from(std::u16::MAX));
+        assert!(fr_num_bits <= u32::from(core::u16::MAX));
         // It's safe to convert to u16 for compatibility with other types.
         fr_num_bits as u16
     };

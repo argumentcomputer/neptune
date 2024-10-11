@@ -37,7 +37,7 @@ pub(crate) fn round_numbers_strengthened(arity: usize) -> (usize, usize) {
     let (full_round, partial_rounds) = round_numbers_base(arity);
 
     // Increase by 25%, rounding up.
-    let strengthened_partial_rounds = f64::ceil(partial_rounds as f64 * 1.25) as usize;
+    let strengthened_partial_rounds = libm::ceil(partial_rounds as f64 * 1.25) as usize;
 
     (full_round, strengthened_partial_rounds)
 }
@@ -55,7 +55,7 @@ pub(crate) fn calc_round_numbers(t: usize, security_margin: bool) -> (usize, usi
             if round_numbers_are_secure(t, rf_test, rp_test) {
                 if security_margin {
                     rf_test += 2;
-                    rp_test = (1.075 * rp_test as f32).ceil() as usize;
+                    rp_test = libm::ceilf(1.075 * rp_test as f32) as usize;
                 }
                 let n_sboxes = n_sboxes(t, rf_test, rp_test);
                 if n_sboxes < n_sboxes_min || (n_sboxes == n_sboxes_min && rf_test < rf) {
@@ -79,12 +79,12 @@ fn round_numbers_are_secure(t: usize, rf: usize, rp: usize) -> bool {
     } else {
         10.0
     };
-    let rf_interp = 0.43 * m + t.log2() - rp;
+    let rf_interp = 0.43 * m + libm::log2f(t) - rp;
     let rf_grob_1 = 0.21 * n - rp;
     let rf_grob_2 = (0.14 * n - 1.0 - rp) / (t - 1.0);
     let rf_max = [rf_stat, rf_interp, rf_grob_1, rf_grob_2]
         .iter()
-        .map(|rf| rf.ceil() as usize)
+        .map(|rf| libm::ceilf(*rf) as usize)
         .max()
         .unwrap();
     rf >= rf_max
