@@ -6,20 +6,20 @@ use crate::mds::{
 };
 use crate::poseidon_alt::{hash_correct, hash_optimized_dynamic};
 use crate::preprocessing::compress_round_constants;
+use crate::Vec;
 use crate::{matrix, quintic_s_box, BatchHasher, Strength, DEFAULT_STRENGTH};
 use crate::{round_constants, round_numbers, Error};
 #[cfg(feature = "abomonation")]
 use abomonation::Abomonation;
 #[cfg(feature = "abomonation")]
 use abomonation_derive::Abomonation;
+use core::marker::PhantomData;
 use ff::PrimeField;
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
-use core::marker::PhantomData;
 use typenum::marker_traits::Unsigned;
 use typenum::*;
-use crate::Vec;
 
 /// Available arities for the Poseidon hasher.
 pub trait Arity<T>: ArrayLength {

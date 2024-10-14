@@ -3,7 +3,7 @@
 #![allow(unused_imports)]
 
 extern crate alloc;
-pub use alloc::vec::Vec; 
+pub use alloc::vec::Vec;
 
 pub use crate::poseidon::{Arity, Poseidon};
 use crate::round_constants::generate_constants;

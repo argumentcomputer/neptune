@@ -21,7 +21,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "std", serde(bound(serialize = "F: Serialize", deserialize = "F: Deserialize<'de>")))]
+#[cfg_attr(
+    feature = "std",
+    serde(bound(serialize = "F: Serialize", deserialize = "F: Deserialize<'de>"))
+)]
 #[cfg_attr(feature = "abomonation", derive(Abomonation))]
 #[cfg_attr(feature = "abomonation", abomonation_omit_bounds)]
 pub enum HashType<F: PrimeField, A: Arity<F>> {
