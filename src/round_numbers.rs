@@ -30,7 +30,7 @@ fn ceil_f32(x: f32) -> f32 {
     #[cfg(feature = "std")]
     return f32::ceil(x);
     #[cfg(not(feature = "std"))]
-    return libm::ceil(x);
+    return libm::ceilf(x);
 }
 
 #[inline(always)]
@@ -108,7 +108,7 @@ fn round_numbers_are_secure(t: usize, rf: usize, rp: usize) -> bool {
     let rf_grob_2 = (0.14 * n - 1.0 - rp) / (t - 1.0);
     let rf_max = [rf_stat, rf_interp, rf_grob_1, rf_grob_2]
         .iter()
-        .map(|rf| libm::ceilf(*rf) as usize)
+        .map(|rf| ceil_f32(*rf) as usize)
         .max()
         .unwrap();
     rf >= rf_max

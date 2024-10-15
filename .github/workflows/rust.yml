@@ -112,7 +112,7 @@ jobs:
       - run: nvcc --version
       - name: CUDA tests
         run: |
-          cargo nextest run --release --no-default-features --features cuda,pasta,bls,arity2,arity4,arity8,arity11,arity16,arity24,arity36
+          cargo nextest run --release --no-default-features --features std,cuda,pasta,bls,arity2,arity4,arity8,arity11,arity16,arity24,arity36
 
     # Runs the test suite on a self-hosted GPU machine with CUDA and OpenCL enabled (that is using the OpenCL backend for NVIDIA GPUs)
   test-opencl:
@@ -152,4 +152,4 @@ jobs:
       - run: clinfo
       - name: OpenCL tests
         run: |
-          cargo nextest run --release --all-features
+          cargo nextest run --release --no-default-features std,strengthened,abomonation,opencl,pasta,bls,arity2,arity4,arity8,arity11,arity16,arity24,arity36
