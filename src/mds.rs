@@ -6,6 +6,7 @@ use abomonation::Abomonation;
 #[cfg(feature = "abomonation")]
 use abomonation_derive::Abomonation;
 use ff::PrimeField;
+#[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
 
 use crate::matrix;
@@ -13,8 +14,10 @@ use crate::matrix::{
     apply_matrix, invert, is_identity, is_invertible, is_square, left_apply_matrix, mat_mul, minor,
     transpose, Matrix,
 };
+use crate::Vec;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "abomonation", derive(Abomonation))]
 #[cfg_attr(feature = "abomonation", abomonation_bounds(where F::Repr: Abomonation))]
 pub struct MdsMatrices<F: PrimeField> {
@@ -58,7 +61,8 @@ pub(crate) fn derive_mds_matrices<F: PrimeField>(m: Matrix<F>) -> MdsMatrices<F>
 /// This means its first row and column are each dense, and the interior matrix
 /// (minor to the element in both the row and column) is the identity.
 /// We will pluralize this compact structure `sparse_matrixes` to distinguish from `sparse_matrices` from which they are created.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "abomonation", derive(Abomonation))]
 #[cfg_attr(feature = "abomonation", abomonation_bounds(where F::Repr: Abomonation))]
 pub struct SparseMatrix<F: PrimeField> {
@@ -174,12 +178,12 @@ fn make_prime<F: PrimeField>(m: &Matrix<F>) -> Matrix<F> {
         .enumerate()
         .map(|(i, row)| match i {
             0 => {
-                let mut new_row = vec![F::ZERO; row.len()];
+                let mut new_row = alloc::vec![F::ZERO; row.len()];
                 new_row[0] = F::ONE;
                 new_row
             }
             _ => {
-                let mut new_row = vec![F::ZERO; row.len()];
+                let mut new_row = alloc::vec![F::ZERO; row.len()];
                 new_row[1..].copy_from_slice(&row[1..]);
                 new_row
             }
@@ -201,7 +205,7 @@ fn make_double_prime<F: PrimeField>(m: &Matrix<F>, m_hat_inv: &Matrix<F>) -> Mat
                 new_row
             }
             _ => {
-                let mut new_row = vec![F::ZERO; row.len()];
+                let mut new_row = alloc::vec![F::ZERO; row.len()];
                 new_row[0] = w_hat[i - 1];
                 new_row[i] = F::ONE;
                 new_row

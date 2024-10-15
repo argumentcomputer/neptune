@@ -41,7 +41,7 @@ where
         let end = start + batch_leaf_count;
 
         if end > self.leaf_count {
-            return Err(Error::Other("too many leaves".to_string()));
+            return Err(Error::Other("too many leaves"));
         }
 
         self.data[start..end].copy_from_slice(leaves);

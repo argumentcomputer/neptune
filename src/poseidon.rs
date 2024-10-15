@@ -6,16 +6,18 @@ use crate::mds::{
 };
 use crate::poseidon_alt::{hash_correct, hash_optimized_dynamic};
 use crate::preprocessing::compress_round_constants;
+use crate::Vec;
 use crate::{matrix, quintic_s_box, BatchHasher, Strength, DEFAULT_STRENGTH};
 use crate::{round_constants, round_numbers, Error};
 #[cfg(feature = "abomonation")]
 use abomonation::Abomonation;
 #[cfg(feature = "abomonation")]
 use abomonation_derive::Abomonation;
+use core::marker::PhantomData;
 use ff::PrimeField;
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
+#[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
 use typenum::marker_traits::Unsigned;
 use typenum::*;
 
@@ -868,12 +870,12 @@ where
             }
         }
 
-        let _ = std::mem::replace(&mut self.elements, result);
+        let _ = core::mem::replace(&mut self.elements, result);
     }
 
     pub(crate) fn product_mds_with_matrix_left(&mut self, matrix: &Matrix<F>) {
         let result = left_apply_matrix(matrix, &self.elements);
-        let _ = std::mem::replace(
+        let _ = core::mem::replace(
             &mut self.elements,
             GenericArray::<F, A::ConstantsSize>::generate(|i| result[i]),
         );
@@ -900,9 +902,10 @@ where
             val.add_assign(&tmp);
         }
 
-        let _ = std::mem::replace(&mut self.elements, result);
+        let _ = core::mem::replace(&mut self.elements, result);
     }
 
+    #[cfg(feature = "std")]
     pub(crate) fn debug(&self, msg: &str) {
         dbg!(msg, &self.constants_offset, &self.elements);
     }
