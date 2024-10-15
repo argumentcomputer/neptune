@@ -25,6 +25,30 @@ pub(crate) fn round_numbers_base(arity: usize) -> (usize, usize) {
     calc_round_numbers(t, true)
 }
 
+#[inline(always)]
+fn ceil_f32(x: f32) -> f32 {
+    #[cfg(feature = "std")]
+    return f32::ceil(x);
+    #[cfg(not(feature = "std"))]
+    return libm::ceil(x);
+}
+
+#[inline(always)]
+fn ceil_f64(x: f64) -> f64 {
+    #[cfg(feature = "std")]
+    return f64::ceil(x);
+    #[cfg(not(feature = "std"))]
+    return libm::ceil(x);
+}
+
+#[inline(always)]
+fn log2_f32(x: f32) -> f32 {
+    #[cfg(feature = "std")]
+    return f32::log2(x);
+    #[cfg(not(feature = "std"))]
+    return libm::log2f(x);
+}
+
 // In case of newly-discovered attacks, we may need stronger security.
 // This option exists so we can preemptively create circuits in order to switch
 // to them quickly if needed.
@@ -37,7 +61,7 @@ pub(crate) fn round_numbers_strengthened(arity: usize) -> (usize, usize) {
     let (full_round, partial_rounds) = round_numbers_base(arity);
 
     // Increase by 25%, rounding up.
-    let strengthened_partial_rounds = libm::ceil(partial_rounds as f64 * 1.25) as usize;
+    let strengthened_partial_rounds = ceil_f64(partial_rounds as f64 * 1.25) as usize;
 
     (full_round, strengthened_partial_rounds)
 }
@@ -55,7 +79,7 @@ pub(crate) fn calc_round_numbers(t: usize, security_margin: bool) -> (usize, usi
             if round_numbers_are_secure(t, rf_test, rp_test) {
                 if security_margin {
                     rf_test += 2;
-                    rp_test = libm::ceilf(1.075 * rp_test as f32) as usize;
+                    rp_test = ceil_f32(1.075 * rp_test as f32) as usize;
                 }
                 let n_sboxes = n_sboxes(t, rf_test, rp_test);
                 if n_sboxes < n_sboxes_min || (n_sboxes == n_sboxes_min && rf_test < rf) {
@@ -79,7 +103,7 @@ fn round_numbers_are_secure(t: usize, rf: usize, rp: usize) -> bool {
     } else {
         10.0
     };
-    let rf_interp = 0.43 * m + libm::log2f(t) - rp;
+    let rf_interp = 0.43 * m + log2_f32(t) - rp;
     let rf_grob_1 = 0.21 * n - rp;
     let rf_grob_2 = (0.14 * n - 1.0 - rp) / (t - 1.0);
     let rf_max = [rf_stat, rf_interp, rf_grob_1, rf_grob_2]
