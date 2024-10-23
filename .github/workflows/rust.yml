@@ -5,6 +5,8 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [main, dev]
+  push: 
+    branches: ci-gpu
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -83,7 +85,7 @@ jobs:
   # Runs the test suite on a self-hosted GPU machine with CUDA enabled
   test-cuda:
     name: Rust tests on CUDA
-    runs-on: self-hosted
+    runs-on: warp-custom-gpu-ci-t4
     env:
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITITES: compute,utility
@@ -117,7 +119,7 @@ jobs:
     # Runs the test suite on a self-hosted GPU machine with CUDA and OpenCL enabled (that is using the OpenCL backend for NVIDIA GPUs)
   test-opencl:
     name: Rust tests on OpenCL
-    runs-on: self-hosted
+    runs-on: warp-custom-gpu-ci-t4
     env:
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITITES: compute,utility
