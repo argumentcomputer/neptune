@@ -71,7 +71,7 @@ impl From<ec_gpu_gen::EcError> for Error {
 #[cfg(feature = "std")]
 impl std::error::Error for Error {}
 
-impl core::fmt::Display for Error {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
             Error::FullBuffer => write!(
