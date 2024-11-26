@@ -152,4 +152,4 @@ jobs:
       - run: clinfo
       - name: OpenCL tests
         run: |
-          cargo nextest run --release --no-default-features std,strengthened,abomonation,opencl,pasta,bls,arity2,arity4,arity8,arity11,arity16,arity24,arity36
+          cargo nextest run --release --no-default-features --features std,strengthened,abomonation,opencl,pasta,bls,arity2,arity4,arity8,arity11,arity16,arity24,arity36
