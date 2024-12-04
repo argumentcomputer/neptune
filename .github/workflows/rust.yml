@@ -5,6 +5,9 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [main, dev]
+  push:
+    branches:
+      - "ci-gpu"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -80,13 +83,11 @@ jobs:
   licenses-audits:
     uses: argumentcomputer/ci-workflows/.github/workflows/licenses-audits.yml@main
 
-  # Runs the test suite on a self-hosted GPU machine with CUDA enabled
+  # Runs the test suite on a GPU machine with CUDA enabled
   test-cuda:
     name: Rust tests on CUDA
-    runs-on: self-hosted
+    runs-on: gpu-ci-t4
     env:
-      NVIDIA_VISIBLE_DEVICES: all
-      NVIDIA_DRIVER_CAPABILITITES: compute,utility
       EC_GPU_FRAMEWORK: cuda
     steps:
       - uses: actions/checkout@v4
@@ -99,6 +100,20 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # Check we have access to the machine's Nvidia drivers
       - run: nvidia-smi
+      - name: Install CUDA
+        run: |
+          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+          sudo dpkg -i cuda-keyring_1.1-1_all.deb
+          sudo apt-get update
+          sudo apt-get -y install cuda-toolkit-12-4
+          echo "PATH=/usr/local/cuda/bin:$PATH" >> $GITHUB_ENV
+      # Check that CUDA is installed with a driver-compatible version
+      # This must also be compatible with the GPU architecture, see below comment
+      - run: nvcc --version
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
       # The `compute`/`sm` number corresponds to the Nvidia GPU architecture
       # In this case, the self-hosted machine uses the Ampere architecture, but we want this to be configurable
       # See https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/
@@ -107,20 +122,15 @@ jobs:
       - name: set env for EC_GPU
         run: echo 'EC_GPU_CUDA_NVCC_ARGS=--fatbin --gpu-architecture=sm_${{ env.CUDA_ARCH }} --generate-code=arch=compute_${{ env.CUDA_ARCH }},code=sm_${{ env.CUDA_ARCH }}' >> $GITHUB_ENV
       - run: echo "${{ env.EC_GPU_CUDA_NVCC_ARGS}}"
-      # Check that CUDA is installed with a driver-compatible version
-      # This must also be compatible with the GPU architecture, see above link
-      - run: nvcc --version
       - name: CUDA tests
         run: |
           cargo nextest run --release --no-default-features --features std,cuda,pasta,bls,arity2,arity4,arity8,arity11,arity16,arity24,arity36
 
-    # Runs the test suite on a self-hosted GPU machine with CUDA and OpenCL enabled (that is using the OpenCL backend for NVIDIA GPUs)
+  # Runs the test suite on a GPU machine with CUDA and OpenCL enabled (that is using the OpenCL backend for NVIDIA GPUs)
   test-opencl:
     name: Rust tests on OpenCL
-    runs-on: self-hosted
+    runs-on: gpu-ci-t4
     env:
-      NVIDIA_VISIBLE_DEVICES: all
-      NVIDIA_DRIVER_CAPABILITITES: compute,utility
       EC_GPU_FRAMEWORK: opencl
     steps:
       - uses: actions/checkout@v4
@@ -131,12 +141,24 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
-      - name: Install GPU deps
-        run: |
-          apt-get update
-          apt-get -y install ocl-icd-opencl-dev
       # Check we have access to the machine's Nvidia drivers
       - run: nvidia-smi
+      - name: Install CUDA
+        run: |
+          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+          sudo dpkg -i cuda-keyring_1.1-1_all.deb
+          sudo apt-get update
+          sudo apt-get -y install cuda-toolkit-12-4
+          echo "PATH=/usr/local/cuda/bin:$PATH" >> $GITHUB_ENV
+      # Check that CUDA is installed with a driver-compatible version
+      # This must also be compatible with the GPU architecture, see below comments
+      - run: nvcc --version
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install build-essential ocl-icd-opencl-dev clinfo
+      # Check that we can access the OpenCL headers
+      - run: clinfo
       # The `compute`/`sm` number corresponds to the Nvidia GPU architecture
       # In this case, the self-hosted machine uses the Ampere architecture, but we want this to be configurable
       # See https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/
@@ -145,11 +167,6 @@ jobs:
       - name: set env for EC_GPU
         run: echo 'EC_GPU_CUDA_NVCC_ARGS=--fatbin --gpu-architecture=sm_${{ env.CUDA_ARCH }} --generate-code=arch=compute_${{ env.CUDA_ARCH }},code=sm_${{ env.CUDA_ARCH }}' >> $GITHUB_ENV
       - run: echo "${{ env.EC_GPU_CUDA_NVCC_ARGS}}"
-      # Check that CUDA is installed with a driver-compatible version
-      # This must also be compatible with the GPU architecture, see above link
-      - run: nvcc --version
-      # Check that we can access the OpenCL headers
-      - run: clinfo
       - name: OpenCL tests
         run: |
           cargo nextest run --release --no-default-features --features std,strengthened,abomonation,opencl,pasta,bls,arity2,arity4,arity8,arity11,arity16,arity24,arity36
