@@ -1,3 +1,4 @@
+use crate::Vec;
 use ff::PrimeField;
 
 /// From the paper ():
@@ -38,7 +39,7 @@ pub(crate) fn generate_constants<F: PrimeField>(
     if n_bytes != 32 {
         unimplemented!("neptune currently supports 32-byte fields exclusively");
     }
-    assert_eq!((f32::from(field_size) / 8.0).ceil() as usize, n_bytes);
+    assert_eq!(field_size.div_ceil(8) as usize, n_bytes);
 
     let num_constants = (r_f + r_p) * t;
     let mut init_sequence: Vec<bool> = Vec::new();

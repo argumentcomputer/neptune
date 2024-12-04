@@ -2,6 +2,7 @@
 //! These are tested (in `poseidon::test`) to be equivalent to the 'static optimized' version
 //! used for actual hashing by the neptune library.
 use crate::poseidon::{Arity, Poseidon};
+use crate::Vec;
 use crate::{matrix, quintic_s_box};
 use ff::PrimeField;
 
